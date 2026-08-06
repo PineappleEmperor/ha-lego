@@ -1,0 +1,42 @@
+name: Check manifest version
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  version-gate:
+    name: Version bumped since the last release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Find the last published release
+        id: released
+        if: github.actor != 'dependabot[bot]'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The last *published* release, not the newest tag and not a draft.
+          VERSION=$(gh release list --limit 20 --json tagName,isDraft,isPrerelease \
+            --jq 'map(select(.isDraft == false)) | .[0].tagName // empty')
+          if [ -z "$VERSION" ]; then
+            VERSION="0.0.0"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Compare against manifest.json
+        if: github.actor != 'dependabot[bot]'
+        env:
+          RELEASED: ${{ steps.released.outputs.version }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: python3 scripts/manifest_gate.py --released "$RELEASED" --labels "$LABELS"

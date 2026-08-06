@@ -1,0 +1,90 @@
+set_collection:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: lego
+    set_number:
+      required: true
+      example: 10497-1
+      selector:
+        text:
+    owned:
+      selector:
+        boolean:
+    wanted:
+      selector:
+        boolean:
+    qty_owned:
+      selector:
+        number:
+          min: 0
+          max: 999
+          mode: box
+    rating:
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: slider
+    notes:
+      selector:
+        text:
+          multiline: true
+
+add_watch:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: lego
+    set_number:
+      required: true
+      example: 10497-1
+      selector:
+        text:
+
+remove_watch:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: lego
+    set_number:
+      required: true
+      example: 10497-1
+      selector:
+        text:
+
+search_sets:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: lego
+    query:
+      example: millennium falcon
+      selector:
+        text:
+    theme:
+      example: Technic
+      selector:
+        text:
+    year:
+      example: 2026
+      selector:
+        number:
+          min: 1949
+          max: 2100
+          mode: box
+    limit:
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+          mode: box

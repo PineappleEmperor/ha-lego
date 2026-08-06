@@ -1,0 +1,192 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Brickset",
+        "description": "This integration reads your LEGO collection from Brickset.com. Get a free API key at https://brickset.com/tools/webservices/v3, then sign in with your Brickset account. Your password is used once to obtain a token and is never stored.",
+        "data": {
+          "api_key": "Brickset API key",
+          "username": "Brickset username",
+          "password": "Brickset password"
+        },
+        "data_description": {
+          "api_key": "Issued from your Brickset account under Tools, Web services.",
+          "username": "The account whose owned and wanted sets should be tracked.",
+          "password": "Exchanged for a long-lived token; only the token is saved."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect to Brickset",
+        "description": "Brickset rejected the saved token for {username}. Confirm your API key and password to reconnect.",
+        "data": {
+          "api_key": "Brickset API key",
+          "password": "Brickset password"
+        }
+      },
+      "reconfigure": {
+        "title": "Change Brickset account",
+        "description": "Update the API key or switch to a different Brickset account.",
+        "data": {
+          "api_key": "Brickset API key",
+          "username": "Brickset username",
+          "password": "Brickset password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach Brickset. Check your internet connection and try again.",
+      "invalid_api_key": "Brickset rejected that API key.",
+      "invalid_auth": "Brickset rejected that username or password.",
+      "unknown": "Unexpected error talking to Brickset."
+    },
+    "abort": {
+      "already_configured": "That Brickset account is already set up.",
+      "account_mismatch": "That is a different Brickset account. Use a new entry instead of reconfiguring this one.",
+      "reauth_successful": "Reconnected to Brickset.",
+      "reconfigure_successful": "Brickset account updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "LEGO options",
+        "description": "Brickset allows 100 catalogue calls per API key per day. Your current settings use about {estimated_calls} of your {budget} call budget.",
+        "data": {
+          "region": "Pricing region",
+          "themes": "Themes to watch for new releases",
+          "watchlist": "Set numbers to track individually",
+          "collection_interval_hours": "Collection refresh interval",
+          "feeds_interval_hours": "New release refresh interval",
+          "daily_call_budget": "Daily call budget"
+        },
+        "data_description": {
+          "region": "Which LEGO.com market supplies recommended retail prices and retirement dates.",
+          "themes": "Each watched theme costs one API call per refresh.",
+          "watchlist": "Full set numbers including the variant, for example 10497-1.",
+          "collection_interval_hours": "How often owned and wanted sets are refreshed.",
+          "feeds_interval_hours": "How often watched themes are checked for new sets.",
+          "daily_call_budget": "Polling stops once this many calls have been made, leaving headroom for manual actions."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "sets_owned": { "name": "Sets owned" },
+      "sets_distinct": { "name": "Distinct sets owned" },
+      "pieces_owned": { "name": "Pieces owned" },
+      "minifigs_owned": { "name": "Minifigures owned" },
+      "sets_wanted": { "name": "Sets wanted" },
+      "collection_value": { "name": "Collection value" },
+      "api_calls_today": { "name": "Brickset calls today" },
+      "watched_set": { "name": "Set {set_number} retires in" },
+      "latest_theme_set": { "name": "Latest {theme} set" }
+    },
+    "calendar": {
+      "retirements": { "name": "Set retirements" },
+      "releases": { "name": "Set releases" },
+      "anniversaries": { "name": "Set anniversaries" }
+    }
+  },
+  "exceptions": {
+    "entry_not_found": {
+      "message": "No LEGO configuration entry with ID {entry_id}."
+    },
+    "entry_not_loaded": {
+      "message": "The LEGO entry {title} is not loaded."
+    },
+    "set_not_found": {
+      "message": "Brickset has no set numbered {set_number}."
+    },
+    "api_error": {
+      "message": "Brickset returned an error: {error}"
+    },
+    "auth_expired": {
+      "message": "Brickset rejected the saved token. Reconnect the integration."
+    },
+    "no_changes": {
+      "message": "Provide at least one field to change."
+    },
+    "search_needs_criteria": {
+      "message": "Provide a query, theme or year to search for."
+    }
+  },
+  "services": {
+    "set_collection": {
+      "name": "Update collection",
+      "description": "Marks a set as owned or wanted on Brickset, or updates its quantity, rating or notes.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Brickset account",
+          "description": "The LEGO configuration entry to act on."
+        },
+        "set_number": {
+          "name": "Set number",
+          "description": "Full set number including the variant, for example 10497-1."
+        },
+        "owned": { "name": "Owned", "description": "Whether you own the set." },
+        "wanted": { "name": "Wanted", "description": "Whether you want the set." },
+        "qty_owned": {
+          "name": "Quantity owned",
+          "description": "How many copies you own. Any value above zero also marks the set as owned."
+        },
+        "rating": {
+          "name": "Rating",
+          "description": "Your rating for the set, from 1 to 5."
+        },
+        "notes": {
+          "name": "Notes",
+          "description": "Your private notes about the set."
+        }
+      }
+    },
+    "add_watch": {
+      "name": "Watch set",
+      "description": "Adds a set to the watchlist, creating a sensor that counts down to its retirement.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Brickset account",
+          "description": "The LEGO configuration entry to act on."
+        },
+        "set_number": {
+          "name": "Set number",
+          "description": "Full set number including the variant, for example 10497-1."
+        }
+      }
+    },
+    "remove_watch": {
+      "name": "Stop watching set",
+      "description": "Removes a set from the watchlist.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Brickset account",
+          "description": "The LEGO configuration entry to act on."
+        },
+        "set_number": {
+          "name": "Set number",
+          "description": "Full set number including the variant, for example 10497-1."
+        }
+      }
+    },
+    "search_sets": {
+      "name": "Search sets",
+      "description": "Searches the Brickset catalogue and returns matching sets. Uses one of your daily API calls.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Brickset account",
+          "description": "The LEGO configuration entry to act on."
+        },
+        "query": {
+          "name": "Query",
+          "description": "Free text searched against set number, name, theme and subtheme."
+        },
+        "theme": { "name": "Theme", "description": "Restrict results to a theme." },
+        "year": { "name": "Year", "description": "Restrict results to a release year." },
+        "limit": {
+          "name": "Limit",
+          "description": "Maximum number of sets to return."
+        }
+      }
+    }
+  }
+}

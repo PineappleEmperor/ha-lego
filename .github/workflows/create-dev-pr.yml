@@ -1,0 +1,78 @@
+name: Create dev PR
+
+on:
+  push:
+    branches-ignore: [main]
+
+concurrency:
+  group: create-dev-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  draft-pr:
+    name: Open or update the draft PR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Collect commits ahead of main
+        id: commits
+        run: |
+          set -euo pipefail
+          COUNT=$(git rev-list --count origin/main..HEAD)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "Branch is not ahead of main; nothing to open."
+            exit 0
+          fi
+
+          # Pick the title by Conventional Commit precedence: feat, then fix,
+          # then the most recent subject. Commit subjects are untrusted input, so
+          # they are only ever moved through files and env vars, never inlined.
+          git log --format=%s origin/main..HEAD > /tmp/subjects.txt
+          TITLE=$(grep -m1 -E '^feat(\(|!|:)' /tmp/subjects.txt || true)
+          if [ -z "$TITLE" ]; then
+            TITLE=$(grep -m1 -E '^fix(\(|!|:)' /tmp/subjects.txt || true)
+          fi
+          if [ -z "$TITLE" ]; then
+            TITLE=$(head -n1 /tmp/subjects.txt)
+          fi
+          # Trim surrounding whitespace without xargs, which breaks on apostrophes.
+          TITLE=$(printf '%s' "$TITLE" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+          {
+            echo "title<<EOF"
+            printf '%s\n' "$TITLE"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Commits"
+            echo
+            git log --format='- %s' origin/main..HEAD
+          } > /tmp/pr-body.md
+
+      - name: Create or update the draft PR
+        if: steps.commits.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+          TITLE: ${{ steps.commits.outputs.title }}
+        run: |
+          set -euo pipefail
+          EXISTING=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$EXISTING" ]; then
+            gh pr create \
+              --draft \
+              --base main \
+              --head "$BRANCH" \
+              --title "$TITLE" \
+              --body-file /tmp/pr-body.md
+          else
+            gh pr edit "$EXISTING" --title "$TITLE" --body-file /tmp/pr-body.md
+          fi
