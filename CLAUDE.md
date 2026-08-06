@@ -1,4 +1,4 @@
-# lego-ha
+# ha-lego
 
 Home Assistant custom integration exposing a LEGO collection from the Brickset API v3.
 Domain: `lego`. Package: `custom_components/lego/`.

@@ -1,5 +1,5 @@
 [project]
-name = "lego-ha"
+name = "ha-lego"
 version = "0.1.0"
 description = "Home Assistant integration for your LEGO collection, backed by Brickset"
 readme = "README.md"

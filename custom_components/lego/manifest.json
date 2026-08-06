@@ -4,10 +4,10 @@
   "codeowners": ["@PineappleEmperor"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/PineappleEmperor/lego-ha",
+  "documentation": "https://github.com/PineappleEmperor/ha-lego",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/PineappleEmperor/lego-ha/issues",
+  "issue_tracker": "https://github.com/PineappleEmperor/ha-lego/issues",
   "requirements": [],
   "version": "0.1.0"
 }
