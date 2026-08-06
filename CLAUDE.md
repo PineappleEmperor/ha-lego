@@ -18,7 +18,11 @@ coordinator, services…), invoke the `ha-integration` skill. Re-invoke it after
   `estimated_daily_calls()` in `config_flow.py`.
 - **Passwords are never persisted.** The config flow exchanges them for a `userHash` and
   stores only that. Reauth re-runs `login`.
-- **No affiliate or referral links.** Set links must point at plain Brickset URLs.
+- **Never add our own affiliate or referral tags.** Links the integration builds
+  itself point at plain Brickset URLs. Links that arrive *inside* Brickset's own
+  feeds keep their tags — Brickset earns from the data this project depends on —
+  and any feature carrying them is opt-in and disclosed in the README. Sponsorship
+  links belong in the repository, never in anything rendered inside Home Assistant.
 - The integration is unofficial; keep the "not affiliated with the LEGO Group" and
   Brickset attribution notices in the README, config flow strings and entity
   attribution.
