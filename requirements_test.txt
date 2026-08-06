@@ -2,5 +2,5 @@ homeassistant==2026.5.1
 pytest-homeassistant-custom-component
 pytest-asyncio
 pytest-cov
-ruff==0.15.18
+ruff==0.16.1
 pyright==1.1.409
