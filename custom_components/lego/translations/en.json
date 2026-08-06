@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to Brickset",
-        "description": "This integration reads your LEGO collection from Brickset.com. Get a free API key at https://brickset.com/tools/webservices/v3, then sign in with your Brickset account. Your password is used once to obtain a token and is never stored.",
+        "description": "This integration reads your LEGO collection from Brickset.com. Get a free API key from your Brickset account under {api_key_path}, then sign in below. Your password is used once to obtain a token and is never stored.",
         "data": {
           "api_key": "Brickset API key",
           "username": "Brickset username",

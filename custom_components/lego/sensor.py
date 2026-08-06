@@ -25,7 +25,6 @@ from .models import CollectionSummary, LegoSet
 if TYPE_CHECKING:
     from . import LegoConfigEntry
 
-# All data arrives through the coordinators, so entities never poll individually.
 PARALLEL_UPDATES = 0
 
 
@@ -123,11 +122,7 @@ class LegoSummarySensor(LegoCollectionEntity, SensorEntity):
 
 
 class LegoValueSensor(LegoCollectionEntity, SensorEntity):
-    """Total LEGO.com RRP of the owned collection.
-
-    This is recommended retail price, not market value, and Brickset has no RRP
-    for many older sets, so sets_missing_price is exposed alongside it.
-    """
+    """Total LEGO.com RRP of the owned collection, not market value."""
 
     _attr_translation_key = "collection_value"
     _attr_device_class = SensorDeviceClass.MONETARY
@@ -224,11 +219,7 @@ def _set_attributes(lego_set: LegoSet, region: str) -> dict[str, Any]:
 
 
 class LegoWatchedSetSensor(LegoCollectionEntity, SensorEntity):
-    """Days until a watched set retires.
-
-    The state is a countdown so automations can act on "retiring within N days"
-    directly; the full set record is on the attributes.
-    """
+    """Days until a watched set retires, so automations can threshold on it."""
 
     _attr_translation_key = "watched_set"
     _attr_native_unit_of_measurement = UnitOfTime.DAYS

@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 
 PARALLEL_UPDATES = 0
 
-# How far ahead the `event` property looks when finding the next occurrence.
 LOOKAHEAD = timedelta(days=730)
 
 
@@ -164,11 +163,7 @@ class LegoAnniversaryCalendar(LegoCalendarBase):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_anniversaries"
 
     def _build_events(self, start: date, end: date) -> list[CalendarEvent]:
-        """Build an anniversary per owned set for each year in the range.
-
-        Sets without a published launch date fall back to 1 January of their
-        release year, which is how Brickset itself dates year-only records.
-        """
+        """Build an anniversary per owned set, per year in the range."""
         if self.coordinator.data is None:
             return []
         region = self.region

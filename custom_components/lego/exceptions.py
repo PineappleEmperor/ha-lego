@@ -20,8 +20,4 @@ class BricksetUserHashError(BricksetError):
 
 
 class BricksetQuotaError(BricksetError):
-    """Raised when the daily getSets allowance is spent.
-
-    Brickset raises this itself at 100 calls; the integration raises it earlier,
-    at the user's configured budget, so manual actions keep some headroom.
-    """
+    """Raised at the configured budget, below Brickset's own 100-call cutoff."""

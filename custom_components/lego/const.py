@@ -21,7 +21,6 @@ CONF_COLLECTION_INTERVAL: Final = "collection_interval_hours"
 CONF_FEEDS_INTERVAL: Final = "feeds_interval_hours"
 CONF_DAILY_CALL_BUDGET: Final = "daily_call_budget"
 
-# Brickset publishes LEGO.com retail prices for these markets only.
 REGIONS: Final = ["UK", "US", "CA", "DE"]
 REGION_CURRENCY: Final = {"UK": "GBP", "US": "USD", "CA": "CAD", "DE": "EUR"}
 
@@ -29,15 +28,13 @@ DEFAULT_REGION: Final = "UK"
 DEFAULT_COLLECTION_INTERVAL_HOURS: Final = 6
 DEFAULT_FEEDS_INTERVAL_HOURS: Final = 12
 
-# Brickset caps getSets at 100 calls per day per API key; no other method counts.
-# The default budget leaves headroom for manual refreshes and service calls.
+# Brickset caps getSets at 100 calls per key per day; no other method counts.
 BRICKSET_DAILY_CALL_LIMIT: Final = 100
 DEFAULT_DAILY_CALL_BUDGET: Final = 80
 
 MIN_INTERVAL_HOURS: Final = 1
 MAX_INTERVAL_HOURS: Final = 168
 
-# getSets accepts up to 500 records per page.
 PAGE_SIZE: Final = 500
 
 MIN_TIME_BETWEEN_QUOTA_CHECKS: Final = timedelta(minutes=30)

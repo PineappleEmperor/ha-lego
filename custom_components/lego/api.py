@@ -26,8 +26,7 @@ _LOGGER = logging.getLogger(__name__)
 API_BASE = URL("https://brickset.com/api/v3.asmx/")
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
 
-# Brickset returns status "error" with a human message; these fragments identify
-# the two failure modes that need different handling from a generic error.
+# Brickset signals every failure as status "error"; only the message distinguishes them.
 _INVALID_KEY_FRAGMENTS = ("invalid api key", "api key not valid", "invalid key")
 _INVALID_HASH_FRAGMENTS = ("invalid userhash", "invalid user hash", "not logged in")
 _QUOTA_FRAGMENTS = ("exceeded", "too many", "limit reached")
@@ -136,11 +135,7 @@ class BricksetClient:
         ]
 
     async def get_sets(self, params: dict[str, Any]) -> list[LegoSet]:
-        """Run a single getSets query.
-
-        This is the only method that counts against the daily allowance, so every
-        call is reserved against the quota manager first.
-        """
+        """Run a getSets query, the only method billed against the daily allowance."""
         if self._quota is not None:
             self._quota.reserve()
         result = await self._request(
@@ -154,11 +149,7 @@ class BricksetClient:
     async def get_all_sets(
         self, params: dict[str, Any], max_pages: int = 10
     ) -> list[LegoSet]:
-        """Run getSets across pages until the result set is exhausted.
-
-        Each page is a separate billed call, so max_pages bounds the worst case
-        for an unexpectedly large collection.
-        """
+        """Page through getSets; each page is billed, so max_pages caps the cost."""
         collected: list[LegoSet] = []
         for page in range(1, max_pages + 1):
             page_params = {**params, "pageSize": PAGE_SIZE, "pageNumber": page}

@@ -89,11 +89,7 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         self._last_quota_sync: datetime | None = None
 
     async def _sync_quota(self) -> None:
-        """Refresh the server-side call count.
-
-        getKeyUsageStats is not itself billed, but it is still a network round
-        trip, so it is rate limited independently of the poll interval.
-        """
+        """Refresh the unbilled server-side call count, rate limited separately."""
         now = dt_util.utcnow()
         if (
             self._last_quota_sync is not None
@@ -186,7 +182,6 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
         }
         missing = [number for number in self.watchlist if number not in known]
         if missing:
-            # One extra billed call covers every watched set not already fetched.
             for lego_set in await self.client.get_sets(
                 {"setNumber": ",".join(missing), "extendedData": 1}
             ):
@@ -278,10 +273,9 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
         return feeds
 
     def _fire_new_set_events(self, feeds: dict[str, list[LegoSet]]) -> None:
-        """Fire an event for sets that appeared since the previous poll.
+        """Fire an event per set added since the previous poll.
 
-        The first poll after startup establishes the baseline and fires nothing,
-        otherwise every restart would replay the whole year's releases.
+        The first poll only sets a baseline, or a restart would replay the year.
         """
         if self.data is None:
             return

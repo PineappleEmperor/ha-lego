@@ -85,11 +85,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> boo
 
 
 async def async_update_options(hass: HomeAssistant, entry: LegoConfigEntry) -> None:
-    """Reload the entry when options change.
-
-    Poll intervals, the pricing region and the watched theme list all feed into
-    coordinator construction, so a rebuild is simpler than patching in place.
-    """
+    """Reload the entry so the coordinators pick up the new options."""
     await hass.config_entries.async_reload(entry.entry_id)
 
 
@@ -98,11 +94,7 @@ async def async_remove_config_entry_device(
     entry: LegoConfigEntry,
     device_entry: DeviceEntry,
 ) -> bool:
-    """Refuse device removal.
-
-    Each entry owns exactly one service device; removing it while the entry is
-    loaded would leave orphaned entities, so the entry must be deleted instead.
-    """
+    """Refuse removal; the entry owns its only device, so delete the entry."""
     return False
 
 

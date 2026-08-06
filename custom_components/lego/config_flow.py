@@ -65,12 +65,7 @@ STEP_USER_SCHEMA = vol.Schema(
 
 
 def estimated_daily_calls(options: Mapping[str, Any]) -> int:
-    """Estimate billed getSets calls per day for a set of options.
-
-    The collection poll costs one call for owned sets, one for wanted, and one
-    more when the watchlist contains sets in neither list. Each watched theme
-    costs one call per feed poll.
-    """
+    """Estimate billed getSets calls per day for a set of options."""
     collection_hours = options.get(
         CONF_COLLECTION_INTERVAL, DEFAULT_COLLECTION_INTERVAL_HOURS
     )
@@ -138,7 +133,10 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
 
         return self.async_show_form(
-            step_id="user", data_schema=STEP_USER_SCHEMA, errors=errors
+            step_id="user",
+            data_schema=STEP_USER_SCHEMA,
+            description_placeholders={"api_key_path": "Tools -> Web services"},
+            errors=errors,
         )
 
     async def async_step_reauth(
@@ -329,11 +327,7 @@ class LegoOptionsFlow(OptionsFlow):
         )
 
     async def _async_theme_options(self) -> list[str]:
-        """Fetch the theme list for the picker.
-
-        getThemes is not billed against the daily allowance. If it fails, the
-        picker falls back to free text so options stay editable offline.
-        """
+        """Fetch the unbilled theme list, falling back to free text if it fails."""
         client = BricksetClient(
             async_get_clientsession(self.hass),
             self.config_entry.data[CONF_API_KEY],
