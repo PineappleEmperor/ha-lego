@@ -1,0 +1,9 @@
+{
+  "include": ["custom_components"],
+  "exclude": ["**/__pycache__", "**/node_modules"],
+  "typeCheckingMode": "standard",
+  "pythonVersion": "3.14",
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "reportIncompatibleVariableOverride": false
+}

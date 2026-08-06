@@ -1,0 +1,76 @@
+rules:
+  # Bronze
+  action-setup: done
+  appropriate-polling: done
+  brands: done
+  common-modules: done
+  config-flow-test-coverage: done
+  config-flow: done
+  dependency-transparency:
+    status: exempt
+    comment: No third-party requirements; the Brickset client ships in this repo.
+  docs-actions: done
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
+  entity-event-setup:
+    status: exempt
+    comment: Entities subscribe only through CoordinatorEntity; no external callbacks.
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry: done
+
+  # Silver
+  config-entry-unloading: done
+  log-when-unavailable: done
+  entity-unavailable: done
+  action-exceptions: done
+  reauthentication-flow: done
+  parallel-updates: done
+  test-coverage: done
+  integration-owner: done
+  docs-installation-parameters: done
+  docs-configuration-parameters: done
+
+  # Gold
+  entity-translations: done
+  entity-device-class: done
+  devices: done
+  entity-category: done
+  entity-disabled-by-default:
+    status: exempt
+    comment: Every entity is cheap and useful; none warrant being disabled by default.
+  discovery:
+    status: exempt
+    comment: A cloud account cannot be discovered on the network.
+  stale-devices:
+    status: exempt
+    comment: >-
+      One service device per config entry, removed with the entry;
+      async_remove_config_entry_device refuses manual removal.
+  diagnostics: done
+  exception-translations: done
+  icon-translations: done
+  reconfiguration-flow: done
+  dynamic-devices:
+    status: exempt
+    comment: One service device per config entry; sets are entities, not devices.
+  discovery-update-info:
+    status: exempt
+    comment: No discovery, and the cloud endpoint is a fixed hostname.
+  repair-issues: todo
+  docs-use-cases: done
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-data-update: done
+  docs-known-limitations: done
+  docs-troubleshooting: done
+  docs-examples: done
+
+  # Platinum
+  async-dependency: done
+  inject-websession: done
+  strict-typing: done
