@@ -1,0 +1,70 @@
+[project]
+name = "ha-lego"
+version = "0.2.0"
+description = "Home Assistant integration for your LEGO collection, backed by Brickset"
+readme = "README.md"
+requires-python = ">=3.14"
+license = { text = "MIT" }
+authors = [{ name = "PineappleEmperor" }]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+src = ["custom_components"]
+
+[tool.ruff.lint]
+select = [
+  "A",
+  "ASYNC",
+  "B",
+  "C4",
+  "D",
+  "E",
+  "F",
+  "G",
+  "I",
+  "ICN",
+  "INP",
+  "ISC",
+  "N",
+  "PGH",
+  "PIE",
+  "PL",
+  "PT",
+  "RET",
+  "RSE",
+  "RUF",
+  "SIM",
+  "SLF",
+  "T20",
+  "TID",
+  "TRY",
+  "UP",
+  "W",
+]
+ignore = [
+  "D203",
+  "D213",
+  "TRY003", # HA raises HomeAssistantError with inline messages by convention.
+  "PLR0913",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D100", "D103", "SLF001", "PLR2004", "INP001"]
+"scripts/*" = ["T20", "INP001"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["custom_components"]
+combine-as-imports = true
+split-on-trailing-comma = false
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.pylint.MAIN]
+py-version = "3.14"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

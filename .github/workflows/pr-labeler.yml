@@ -1,0 +1,22 @@
+name: PR labeler
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  autolabel:
+    name: Autolabel from the PR title
+    runs-on: ubuntu-latest
+    steps:
+      # The sole labeler in this repo. Do not add a second one in create-dev-pr
+      # or release_drafter, or labels flap between runs.
+      - uses: release-drafter/release-drafter/autolabeler@v7
+        with:
+          config-name: release-drafter.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,7 @@
+{
+  "name": "LEGO",
+  "content_in_root": false,
+  "zip_release": true,
+  "filename": "lego.zip",
+  "homeassistant": "2025.2.0"
+}

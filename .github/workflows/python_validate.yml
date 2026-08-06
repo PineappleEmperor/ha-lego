@@ -1,0 +1,40 @@
+name: Python
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  quality:
+    name: Lint, type check and test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Pinned to Home Assistant's current minimum Python.
+        python-version: ["3.14"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_test.txt
+
+      - name: Ruff lint
+        run: ruff check custom_components/ tests/
+
+      - name: Ruff format
+        run: ruff format --check custom_components/ tests/
+
+      - name: Pyright
+        run: pyright custom_components/
+
+      - name: Pytest
+        run: pytest --cov=custom_components/lego --cov-report=term-missing

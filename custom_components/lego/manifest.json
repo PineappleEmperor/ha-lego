@@ -1,0 +1,13 @@
+{
+  "domain": "lego",
+  "name": "LEGO",
+  "codeowners": ["@PineappleEmperor"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/PineappleEmperor/ha-lego",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/PineappleEmperor/ha-lego/issues",
+  "requirements": [],
+  "version": "0.2.0"
+}

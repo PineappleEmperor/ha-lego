@@ -1,0 +1,20 @@
+name: Release drafter
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  draft:
+    name: Draft the next release
+    runs-on: ubuntu-latest
+    steps:
+      # Notes only. Labelling lives in pr-labeler.yml.
+      - uses: release-drafter/release-drafter@v7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
