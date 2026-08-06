@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Draw the brand assets: an isometric 2x2 LEGO brick carrying the HA tree.
 
-Proportions come from a real 2x2 brick rather than from any drawing: a 16 mm
-footprint, 9.6 mm body, and 4.8 mm studs 1.8 mm tall at 8 mm pitch, all
-expressed as multiples of the plan square side. Run from the repo root:
+Proportions come from a real 2x2 brick rather than from any drawing: a 15.8 mm
+moulded footprint (two 8 mm pitches less the 0.2 mm clearance), a 9.6 mm body,
+and 4.8 mm studs 1.8 mm tall, all expressed as multiples of the plan square
+side. Run from the repo root:
 
     python3 scripts/generate_brand.py
 """
@@ -20,10 +21,12 @@ BRAND_DIR = Path("custom_components/lego/brand")
 
 ISO = 0.57735  # tan(30 degrees)
 
-# Real brick dimensions over the 16 mm footprint.
-BODY = 9.6 / 16
-STUD_R = 2.4 / 16
-STUD_RISE = 1.8 / 16
+# Real brick dimensions over the 15.8 mm moulded footprint.
+FOOTPRINT = 15.8
+BODY = 9.6 / FOOTPRINT
+# Studs are deliberately larger than the real 2.4 x 1.8 mm; see docs/brand.md.
+STUD_R = 2.65 / FOOTPRINT
+STUD_RISE = 1.5 / FOOTPRINT
 STUD_AT = (0.25, 0.75)
 
 TOP = "#18BCF2"

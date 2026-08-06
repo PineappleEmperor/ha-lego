@@ -36,6 +36,8 @@ coordinator, services…), invoke the `ha-integration` skill. Re-invoke it after
 | `sensor.py` / `calendar.py` | Entity platforms |
 | `services.py` | Actions, registered once in `async_setup` |
 
+Brand assets are generated, not hand-drawn — see `docs/brand.md` before touching them.
+
 ## Conventions
 
 - Conventional Commits; one version bump as the last commit before merge.

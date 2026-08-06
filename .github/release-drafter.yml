@@ -31,27 +31,38 @@ exclude-labels: [skip-changelog]
 # title is effectively commit-driven.
 autolabeler:
   - label: breaking
-    title: '/^\w+(\(.+\))?!:/'
+    title:
+      - '/^\w+(\(.+\))?!:/'
   - label: feature
-    title: '/^feat(\(.+\))?!?:/'
+    title:
+      - '/^feat(\(.+\))?!?:/'
   - label: fix
-    title: '/^fix(\(.+\))?!?:/'
+    title:
+      - '/^fix(\(.+\))?!?:/'
   - label: documentation
-    title: '/^docs(\(.+\))?!?:/'
+    title:
+      - '/^docs(\(.+\))?!?:/'
   - label: refactor
-    title: '/^refactor(\(.+\))?!?:/'
+    title:
+      - '/^refactor(\(.+\))?!?:/'
   - label: performance
-    title: '/^perf(\(.+\))?!?:/'
+    title:
+      - '/^perf(\(.+\))?!?:/'
   - label: test
-    title: '/^test(\(.+\))?!?:/'
+    title:
+      - '/^test(\(.+\))?!?:/'
   - label: ci
-    title: '/^ci(\(.+\))?!?:/'
+    title:
+      - '/^ci(\(.+\))?!?:/'
   - label: build
-    title: '/^build(\(.+\))?!?:/'
+    title:
+      - '/^build(\(.+\))?!?:/'
   - label: style
-    title: '/^style(\(.+\))?!?:/'
+    title:
+      - '/^style(\(.+\))?!?:/'
   - label: chore
-    title: '/^chore(\(.+\))?!?:/'
+    title:
+      - '/^chore(\(.+\))?!?:/'
 
 replacers:
   - search: '/\s*Co-authored-by:.*$/gm'
