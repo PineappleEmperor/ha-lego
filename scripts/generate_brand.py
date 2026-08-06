@@ -1,87 +1,51 @@
 #!/usr/bin/env python3
-"""Generate the HACS brand assets for the LEGO integration.
+"""Render the HACS brand assets from assets/brick.svg.
 
-Deliberately draws a generic studded brick with no wordmark, so nothing here
-imitates LEGO Group or Brickset branding. Run from the repo root:
+Run from the repo root:
 
     python3 scripts/generate_brand.py
 """
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+import cairosvg
+from PIL import Image
 
+SOURCE = Path("assets/brick.svg")
 BRAND_DIR = Path("custom_components/lego/brand")
 
-BODY = (206, 42, 42, 255)
-BODY_LIGHT = (232, 74, 74, 255)
-BODY_DARK = (150, 24, 24, 255)
-STUD_TOP = (240, 96, 96, 255)
+ICON_MARGIN = 0.06
+LOGO_MARGIN = 0.10
 
 
-def _brick(
-    draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], studs: int
-) -> None:
-    """Draw one studded brick inside a bounding box."""
-    left, top, right, bottom = box
-    width = right - left
-    height = bottom - top
-    stud_h = int(height * 0.18)
-    body_top = top + stud_h
-    radius = max(int(width * 0.04), 2)
-
-    stud_w = width / studs
-    stud_r = stud_w * 0.28
-    for index in range(studs):
-        centre = left + stud_w * (index + 0.5)
-        draw.ellipse(
-            (
-                centre - stud_r,
-                top,
-                centre + stud_r,
-                top + stud_h * 1.9,
-            ),
-            fill=STUD_TOP,
-        )
-
-    draw.rounded_rectangle((left, body_top, right, bottom), radius=radius, fill=BODY)
-    # Bevel: a light top edge and a dark bottom edge read as depth at small sizes.
-    draw.rounded_rectangle(
-        (left, body_top, right, body_top + int(height * 0.10)),
-        radius=radius,
-        fill=BODY_LIGHT,
+def _render(size: int) -> Image.Image:
+    """Rasterise the brick to a square RGBA image."""
+    png = cairosvg.svg2png(
+        url=str(SOURCE), output_width=size, output_height=size, background_color=None
     )
-    draw.rounded_rectangle(
-        (left, bottom - int(height * 0.10), right, bottom),
-        radius=radius,
-        fill=BODY_DARK,
-    )
+    assert png is not None
+    return Image.open(io.BytesIO(png)).convert("RGBA")
 
 
 def build_icon(size: int) -> Image.Image:
-    """Draw a single 2-stud brick filling a square canvas."""
-    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    margin = int(size * 0.12)
-    _brick(draw, (margin, int(size * 0.22), size - margin, size - margin), studs=2)
-    return image
+    """Draw the brick centred on a square canvas."""
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    inner = round(size * (1 - ICON_MARGIN * 2))
+    brick = _render(inner)
+    canvas.alpha_composite(brick, ((size - inner) // 2, (size - inner) // 2))
+    return canvas
 
 
 def build_logo(width: int, height: int) -> Image.Image:
-    """Draw three stacked bricks across a landscape canvas."""
-    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    pad = int(height * 0.12)
-    brick_h = int((height - pad * 2) * 0.42)
-    _brick(draw, (pad, pad, width - pad, pad + brick_h), studs=6)
-    _brick(
-        draw,
-        (int(width * 0.18), pad + brick_h + pad, int(width * 0.82), height - pad),
-        studs=4,
-    )
-    return image
+    """Draw the brick centred on a landscape canvas."""
+    canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    inner = round(height * (1 - LOGO_MARGIN * 2))
+    brick = _render(inner)
+    canvas.alpha_composite(brick, ((width - inner) // 2, (height - inner) // 2))
+    return canvas
 
 
 def main() -> None:

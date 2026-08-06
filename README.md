@@ -228,6 +228,10 @@ If installed via HACS, uninstall it there afterwards and restart.
 Set data, images and pricing © [Brickset.com](https://brickset.com) — please support them
 by visiting the set pages this integration links to.
 
+Brick icon by [Lluisa Iborra](https://thenounproject.com/browse/icons/term/lego-brick/)
+from the [Noun Project](https://thenounproject.com), used under
+[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) and recoloured.
+
 ## Licence
 
 MIT.
