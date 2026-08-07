@@ -46,6 +46,15 @@ def _as_float(value: Any) -> float | None:
         return None
 
 
+def _full_number(data: dict[str, Any]) -> str:
+    """Join Brickset's separate number and variant into "10497-1" form."""
+    number = str(data.get("number") or "").strip()
+    variant = _as_int(data.get("numberVariant"))
+    if not number or "-" in number or variant is None:
+        return number
+    return f"{number}-{variant}"
+
+
 @dataclass(slots=True)
 class RegionPricing:
     """LEGO.com availability and RRP for a single market."""
@@ -117,7 +126,7 @@ class LegoSet:
         lego_com = data.get("LEGOCom") or {}
         return cls(
             set_id=_as_int(data.get("setID")) or 0,
-            number=str(data.get("number") or ""),
+            number=_full_number(data),
             name=str(data.get("name") or ""),
             year=_as_int(data.get("year")),
             theme=data.get("theme") or "",
@@ -140,11 +149,6 @@ class LegoSet:
                 if isinstance(payload, dict)
             },
         )
-
-    @property
-    def full_number(self) -> str:
-        """Return the set number as Brickset displays it."""
-        return self.number
 
     def price(self, region: str) -> float | None:
         """Return the LEGO.com RRP for a region, if published."""

@@ -59,10 +59,11 @@ def make_set(
     if last_available is not None:
         uk["dateLastAvailable"] = last_available
 
+    base, _, variant = number.partition("-")
     return {
         "setID": set_id,
-        "number": number,
-        "numberVariant": 1,
+        "number": base,
+        "numberVariant": int(variant or 1),
         "name": name,
         "year": year,
         "theme": theme,
@@ -258,7 +259,11 @@ class BricksetServer:
         elif "setNumber" in params:
             requested = str(params["setNumber"]).split(",")
             pool = [*self.owned, *self.wanted, *self.theme_sets]
-            sets = [item for item in pool if item["number"] in requested]
+            sets = [
+                item
+                for item in pool
+                if f"{item['number']}-{item['numberVariant']}" in requested
+            ]
         elif "query" in params:
             needle = str(params["query"]).lower()
             pool = [*self.owned, *self.wanted, *self.theme_sets]

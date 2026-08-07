@@ -273,10 +273,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
         return feeds
 
     def _fire_new_set_events(self, feeds: dict[str, list[LegoSet]]) -> None:
-        """Fire an event per set added since the previous poll.
-
-        The first poll only sets a baseline, or a restart would replay the year.
-        """
+        """Fire an event per set new since the previous poll, baselining the first."""
         if self.data is None:
             return
         for theme, sets in feeds.items():
