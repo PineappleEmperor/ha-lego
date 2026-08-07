@@ -31,6 +31,16 @@
           "username": "Brickset username",
           "password": "Brickset password"
         }
+      },
+      "region": {
+        "title": "Pricing region",
+        "description": "Prices and availability dates come from one LEGO.com market. Home Assistant reports your country as {country}; change the market if you buy from a different store.",
+        "data": {
+          "region": "Pricing region"
+        },
+        "data_description": {
+          "region": "Which LEGO.com market supplies recommended retail prices and retirement dates."
+        }
       }
     },
     "error": {
@@ -72,20 +82,44 @@
   },
   "entity": {
     "sensor": {
-      "sets_owned": { "name": "Sets owned" },
-      "sets_distinct": { "name": "Distinct sets owned" },
-      "pieces_owned": { "name": "Pieces owned" },
-      "minifigs_owned": { "name": "Minifigures owned" },
-      "sets_wanted": { "name": "Sets wanted" },
-      "collection_value": { "name": "Collection value" },
-      "api_calls_today": { "name": "Brickset calls today" },
-      "watched_set": { "name": "Set {set_number} retires in" },
-      "latest_theme_set": { "name": "Latest {theme} set" }
+      "sets_owned": {
+        "name": "Sets owned"
+      },
+      "sets_distinct": {
+        "name": "Distinct sets owned"
+      },
+      "pieces_owned": {
+        "name": "Pieces owned"
+      },
+      "minifigs_owned": {
+        "name": "Minifigures owned"
+      },
+      "sets_wanted": {
+        "name": "Sets wanted"
+      },
+      "collection_value": {
+        "name": "Collection value"
+      },
+      "api_calls_today": {
+        "name": "Brickset calls today"
+      },
+      "watched_set": {
+        "name": "Set {set_number} retires in"
+      },
+      "latest_theme_set": {
+        "name": "Latest {theme} set"
+      }
     },
     "calendar": {
-      "retirements": { "name": "Set retirements" },
-      "releases": { "name": "Set releases" },
-      "anniversaries": { "name": "Set anniversaries" }
+      "retirements": {
+        "name": "Set retirements"
+      },
+      "releases": {
+        "name": "Set releases"
+      },
+      "anniversaries": {
+        "name": "Set anniversaries"
+      }
     }
   },
   "exceptions": {
@@ -124,8 +158,14 @@
           "name": "Set number",
           "description": "Full set number including the variant, for example 10497-1."
         },
-        "owned": { "name": "Owned", "description": "Whether you own the set." },
-        "wanted": { "name": "Wanted", "description": "Whether you want the set." },
+        "owned": {
+          "name": "Owned",
+          "description": "Whether you own the set."
+        },
+        "wanted": {
+          "name": "Wanted",
+          "description": "Whether you want the set."
+        },
         "qty_owned": {
           "name": "Quantity owned",
           "description": "How many copies you own. Any value above zero also marks the set as owned."
@@ -180,8 +220,14 @@
           "name": "Query",
           "description": "Free text searched against set number, name, theme and subtheme."
         },
-        "theme": { "name": "Theme", "description": "Restrict results to a theme." },
-        "year": { "name": "Year", "description": "Restrict results to a release year." },
+        "theme": {
+          "name": "Theme",
+          "description": "Restrict results to a theme."
+        },
+        "year": {
+          "name": "Year",
+          "description": "Restrict results to a release year."
+        },
         "limit": {
           "name": "Limit",
           "description": "Maximum number of sets to return."
