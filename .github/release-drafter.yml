@@ -1,76 +1,57 @@
-name-template: "v$RESOLVED_VERSION"
-tag-template: "v$RESOLVED_VERSION"
-
-categories:
-  - title: "Breaking changes"
-    labels: [breaking]
-  - title: "Features"
-    labels: [feature, enhancement]
-  - title: "Fixes"
-    labels: [fix, bugfix, bug]
-  - title: "Documentation"
-    labels: [documentation]
-  - title: "Maintenance"
-    labels: [chore, refactor, ci, build, test, style, performance]
-  - title: "Dependencies"
-    labels: [dependencies]
-
-version-resolver:
-  major:
-    labels: [breaking]
-  minor:
-    labels: [feature, enhancement]
-  patch:
-    labels: [fix, bugfix, bug, documentation, chore, refactor, ci, build, test, style, performance, dependencies]
-  default: patch
-
-exclude-labels: [skip-changelog]
-
-# Title-only rules. The autolabeler cannot see commit subjects, and create-dev-pr
-# already derives the PR title from the winning commit type, so labelling off the
-# title is effectively commit-driven.
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+# Sole labeler keyed on the PR TITLE only — create-dev-pr.yml sets the title to the
+# winning commit type, so this is effectively commit-driven. No branch rules (they
+# flapped when branch name disagreed with commits). Breaking `!` must precede `feature`.
 autolabeler:
-  - label: breaking
+  - label: "xfeat"
     title:
       - '/^\w+(\(.+\))?!:/'
-  - label: feature
+  - label: "chore"
     title:
-      - '/^feat(\(.+\))?!?:/'
-  - label: fix
+      - '/^(chore|docs|refactor|perf|test|build|ci|style)(\(.+\))?:/i'
+  - label: "fix"
     title:
-      - '/^fix(\(.+\))?!?:/'
-  - label: documentation
+      - '/^fix(\(.+\))?:/i'
+  - label: "feature"
     title:
-      - '/^docs(\(.+\))?!?:/'
-  - label: refactor
-    title:
-      - '/^refactor(\(.+\))?!?:/'
-  - label: performance
-    title:
-      - '/^perf(\(.+\))?!?:/'
-  - label: test
-    title:
-      - '/^test(\(.+\))?!?:/'
-  - label: ci
-    title:
-      - '/^ci(\(.+\))?!?:/'
-  - label: build
-    title:
-      - '/^build(\(.+\))?!?:/'
-  - label: style
-    title:
-      - '/^style(\(.+\))?!?:/'
-  - label: chore
-    title:
-      - '/^chore(\(.+\))?!?:/'
-
+      - '/^(feat|feature)(\(.+\))?:/i'
+categories:
+  - title: '🚨 Breaking Change'
+    labels: ['xfeat', 'xfeature', 'major']
+  - title: '🚀 Features'
+    labels: ['feat', 'feature', 'enhancement']
+  - title: '🔧 Fixes'
+    labels: ['fix', 'bugfix', 'bug']
+  - title: '🧰 Maintenance'
+    label: 'chore'
+change-template: |-
+  - $TITLE @$AUTHOR (#$NUMBER)
+  $BODY
+change-title-escapes: '\<*_&'
+# $BODY is global (no per-category change-template). Bounded replacers (no end-anchor,
+# so they can't bleed across concatenated PR bodies) scrub Dependabot fluff while
+# keeping human PRs' grouped mini-changelog.
 replacers:
-  - search: '/\s*Co-authored-by:.*$/gm'
-    replace: ""
-  - search: '/^- (chore\(deps\)|build\(deps\)): /gm'
-    replace: "- "
-
+  - search: '/<details>[\s\S]*?<\/details>\s*/g'
+    replace: ''
+  - search: '/\[!\[Dependabot compatibility score\][^\n]*\n?/g'
+    replace: ''
+  - search: '/Dependabot will resolve[^\n]*\n?/g'
+    replace: ''
+  - search: '/\[\/\/\]: # \(dependabot-start\)[\s\S]*?\[\/\/\]: # \(dependabot-end\)\s*/g'
+    replace: ''
+  - search: '/<br\s*\/?>\s*/g'
+    replace: ''
+version-resolver:
+  major:
+    labels: ['major', 'xfeature', 'xfeat']
+  minor:
+    labels: ['feat', 'feature', 'minor']
+  patch:
+    labels: ['patch', 'fix', 'chore', 'bugfix', 'bug']
+  default: patch
 template: |
-  $CHANGES
+  ## Changes
 
-  **Full changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+  $CHANGES

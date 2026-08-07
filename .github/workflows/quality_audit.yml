@@ -1,16 +1,13 @@
-name: Quality audit
+name: Skill Audit
 
 on:
   push:
     branches: [main]
   pull_request:
-  workflow_dispatch:
 
 jobs:
   audit:
-    name: Skill conformance
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Run the audit
-        run: bash scripts/skill_audit.sh
+      - run: bash scripts/skill_audit.sh

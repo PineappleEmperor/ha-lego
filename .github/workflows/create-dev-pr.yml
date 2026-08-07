@@ -1,78 +1,121 @@
-name: Create dev PR
+name: Create/Update Dev PR
 
 on:
   push:
-    branches-ignore: [main]
-
-concurrency:
-  group: create-dev-pr-${{ github.ref }}
-  cancel-in-progress: true
+    branches-ignore:
+      - main
 
 permissions:
   contents: read
   pull-requests: write
 
+concurrency:
+  group: dev-pr-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  draft-pr:
-    name: Open or update the draft PR
+  create-or-update-pr:
     runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.pr.outputs.pr_number }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Collect commits ahead of main
+      - name: Generate PR body and title type from commits
         id: commits
         run: |
-          set -euo pipefail
-          COUNT=$(git rev-list --count origin/main..HEAD)
-          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
-          if [ "$COUNT" -eq 0 ]; then
-            echo "Branch is not ahead of main; nothing to open."
-            exit 0
-          fi
+          AHEAD=$(git rev-list --count origin/main..HEAD)
+          echo "ahead=$AHEAD" >> $GITHUB_OUTPUT
 
-          # Pick the title by Conventional Commit precedence: feat, then fix,
-          # then the most recent subject. Commit subjects are untrusted input, so
-          # they are only ever moved through files and env vars, never inlined.
-          git log --format=%s origin/main..HEAD > /tmp/subjects.txt
-          TITLE=$(grep -m1 -E '^feat(\(|!|:)' /tmp/subjects.txt || true)
+          SUBJECTS=$(git log origin/main..HEAD --pretty=format:"%s" --reverse)
+
+          # Group the body by commit type so release-drafter's $BODY reads as a
+          # sorted mini-changelog under the PR's category (bold emoji sub-heads).
+          classify() {
+            printf '%s' "$1" | grep -qiE '^[a-z]+(\([^)]*\))?!:' && { echo breaking; return; }
+            printf '%s' "$1" | grep -qiE '^feat(\([^)]*\))?:'    && { echo feat; return; }
+            printf '%s' "$1" | grep -qiE '^fix(\([^)]*\))?:'     && { echo fix; return; }
+            printf '%s' "$1" | grep -qiE '^(chore|docs|refactor|perf|test|build|ci|style)(\([^)]*\))?:' && { echo maint; return; }
+            echo other
+          }
+          desc() { printf '%s' "$1" | sed -E 's/^[a-zA-Z]+(\([^)]*\))?!?:[[:space:]]*//'; }
+
+          # The manifest/plugin version-bump commit is release plumbing, not a changelog
+          # entry. Skip it: as a lone 'chore' it would otherwise spawn a 🧰 Maintenance
+          # section and, by adding a second commit type, trip the >1-type sub-head guard.
+          is_version_bump() {
+            printf '%s' "$1" | grep -qiE '^[a-z]+(\([^)]*\))?:[[:space:]]*bump\b.*(\bversion\b|\bmanifest\b|\bto v?[0-9]+\.[0-9]+)'
+          }
+
+          BREAKING=""; FEAT=""; FIX=""; MAINT=""; OTHER=""
+          while IFS= read -r s; do
+            [ -z "$s" ] && continue
+            is_version_bump "$s" && continue
+            d=$(desc "$s")
+            case "$(classify "$s")" in
+              breaking) BREAKING="${BREAKING}  - ${d}"$'\n' ;;
+              feat)     FEAT="${FEAT}  - ${d}"$'\n' ;;
+              fix)      FIX="${FIX}  - ${d}"$'\n' ;;
+              maint)    MAINT="${MAINT}  - ${d}"$'\n' ;;
+              *)        OTHER="${OTHER}  - ${d}"$'\n' ;;
+            esac
+          done <<< "$SUBJECTS"
+
+          # Emit the emoji sub-heads ONLY when the PR spans >1 commit type. release-drafter
+          # already files the PR under one category heading (🚀/🔧/🧰…), so for a single-type
+          # PR (every Dependabot chore, most human PRs) a matching sub-head just duplicates it.
+          groups=0
+          for g in "$BREAKING" "$FEAT" "$FIX" "$MAINT" "$OTHER"; do
+            [ -n "$g" ] && groups=$((groups + 1))
+          done
+          BODY=""
+          if [ "$groups" -le 1 ]; then
+            BODY="${BREAKING}${FEAT}${FIX}${MAINT}${OTHER}"
+          else
+            [ -n "$BREAKING" ] && BODY="${BODY}  **🚨 Breaking**"$'\n'"${BREAKING}"
+            [ -n "$FEAT" ]     && BODY="${BODY}  **🚀 Features**"$'\n'"${FEAT}"
+            [ -n "$FIX" ]      && BODY="${BODY}  **🔧 Fixes**"$'\n'"${FIX}"
+            [ -n "$MAINT" ]    && BODY="${BODY}  **🧰 Maintenance**"$'\n'"${MAINT}"
+            [ -n "$OTHER" ]    && BODY="${BODY}  **📦 Other**"$'\n'"${OTHER}"
+          fi
+          [ -z "$BODY" ] && BODY="  - (no commits ahead of main)"
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          printf '%s' "$BODY" >> $GITHUB_OUTPUT
+          printf '\n' >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          TITLE=$(echo "$SUBJECTS" | grep -iE "^feat(\(.+\))?!?:" | tail -1)
           if [ -z "$TITLE" ]; then
-            TITLE=$(grep -m1 -E '^fix(\(|!|:)' /tmp/subjects.txt || true)
+            TITLE=$(echo "$SUBJECTS" | grep -iE "^fix(\(.+\))?!?:" | tail -1)
           fi
           if [ -z "$TITLE" ]; then
-            TITLE=$(head -n1 /tmp/subjects.txt)
+            TITLE=$(echo "$SUBJECTS" | tail -1)
           fi
-          # Trim surrounding whitespace without xargs, which breaks on apostrophes.
+          # Trim surrounding whitespace (quote-safe; xargs chokes on apostrophes in subjects).
           TITLE=$(printf '%s' "$TITLE" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
-          {
-            echo "title<<EOF"
-            printf '%s\n' "$TITLE"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
 
-          {
-            echo "## Commits"
-            echo
-            git log --format='- %s' origin/main..HEAD
-          } > /tmp/pr-body.md
-
-      - name: Create or update the draft PR
-        if: steps.commits.outputs.count != '0'
+      - name: Create or update draft PR
+        id: pr
+        if: steps.commits.outputs.ahead != '0'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.ref_name }}
+          BODY: ${{ steps.commits.outputs.body }}
           TITLE: ${{ steps.commits.outputs.title }}
         run: |
-          set -euo pipefail
-          EXISTING=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
-          if [ -z "$EXISTING" ]; then
+          PR_NUMBER=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number')
+          if [ -z "$PR_NUMBER" ]; then
             gh pr create \
               --draft \
-              --base main \
-              --head "$BRANCH" \
               --title "$TITLE" \
-              --body-file /tmp/pr-body.md
+              --body "$BODY" \
+              --base main \
+              --head "$BRANCH"
+            PR_NUMBER=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number')
           else
-            gh pr edit "$EXISTING" --title "$TITLE" --body-file /tmp/pr-body.md
+            gh pr edit "$PR_NUMBER" --title "$TITLE" --body "$BODY"
           fi
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
