@@ -34,8 +34,7 @@ anniversaries.
 | Source | What it provides |
 |--------|------------------|
 | Brickset API v3 | Owned/wanted collection, set catalogue, LEGO.com RRP and availability dates, collection writes |
-
-Rebrickable support is planned as a separate config entry under this same integration.
+| Rebrickable set list | The public CSV of every LEGO set, used as a local index so searching and checking a set number costs no Brickset calls |
 
 ## Installation
 
@@ -81,6 +80,8 @@ Reachable via **Configure** on the integration entry.
 | Collection refresh interval | 6 h | How often owned and wanted sets are re-fetched. |
 | New release refresh interval | 12 h | How often watched themes are checked. |
 | Daily call budget | 80 | Polling stops at this many calls, leaving headroom for manual actions. |
+| Keep a local set index | on | Downloads Rebrickable's set list weekly. Costs no Brickset calls and makes set lookups free. |
+| Include set names in the index | on | Needed to search by name. Roughly 1.8 MB on disk instead of 450 KB. |
 
 ## Data updates
 
@@ -93,6 +94,10 @@ integration polls on two schedules and self-limits:
 - `getKeyUsageStats` (unbilled) is polled at most every 30 minutes to reconcile the local
   tally with Brickset's own count, which also catches calls made by other tools sharing
   the key.
+
+The local set index refreshes weekly from Rebrickable's public CSV, which is not a
+Brickset endpoint and costs nothing from the daily allowance. It seeds in the background
+after setup, so a first start does not wait on the download.
 
 The options dialog shows the estimated calls/day for your current settings. When the
 budget is spent, polling pauses and entities keep serving the last successful poll rather
@@ -119,7 +124,22 @@ remaining headroom.
 | `lego.set_collection` | Marks a set owned/wanted, or updates quantity, rating or notes. |
 | `lego.add_watch` | Adds a set to the watchlist. |
 | `lego.remove_watch` | Removes a set from the watchlist. |
-| `lego.search_sets` | Searches the catalogue and returns matches (response action). Costs one API call. |
+| `lego.search_sets` | Searches Brickset and returns matches (response action). Costs one API call. |
+
+`lego.set_collection` spends a call only for a set no poll has returned; the local index
+remembers the Brickset ID of everything already seen.
+
+### Searching without spending a call
+
+Dashboards can search the local index over the websocket API, which never reaches
+Brickset:
+
+```json
+{"type": "lego/search", "config_entry_id": "<entry id>", "query": "galaxy", "limit": 10}
+```
+
+Each result carries `set_number`, `name`, `year`, `theme` and `owned`. Use
+`lego.search_sets` instead when you need Brickset's own record — prices, dates, images.
 
 ## Events
 
@@ -219,6 +239,9 @@ script:
   Brickset are not included.
 - Brickset user hashes are long-lived but not permanent; a password change invalidates
   them and triggers the reauth flow.
+- **The local index is Rebrickable's, not Brickset's.** The two agree on about 91% of set
+  numbers. A number the index has not heard of is still sent to Brickset, so divergence
+  only costs a saving — it never rejects a real set.
 
 ## Troubleshooting
 
@@ -230,6 +253,8 @@ script:
 | Repeated reauth prompts | Your Brickset password changed, invalidating the token. Complete the reauth once. |
 | Value sensor looks far too low | Check `sets_missing_price`; most pre-2010 sets have no published RRP. |
 | Calendars are empty | Your region has no published dates for those sets. Try switching the pricing region in options. |
+| `lego/search` returns "The set catalogue is not available" | The local index is turned off in options, or its first download has not finished. It retries on the next restart. |
+| Searching by name finds nothing | "Include set names in the index" is off; only exact set numbers match. |
 
 Enable debug logging with:
 
@@ -256,6 +281,9 @@ nothing in the integration asks you for anything.
 
 Set data, images and pricing © [Brickset.com](https://brickset.com) — please support them
 by visiting the set pages this integration links to.
+
+The local set index is built from [Rebrickable](https://rebrickable.com)'s public
+downloads, used with their permission to use the files for any purpose.
 
 ## Licence
 

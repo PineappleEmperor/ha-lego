@@ -67,7 +67,9 @@
           "watchlist": "Set numbers to track individually",
           "collection_interval_hours": "Collection refresh interval",
           "feeds_interval_hours": "New release refresh interval",
-          "daily_call_budget": "Daily call budget"
+          "daily_call_budget": "Daily call budget",
+          "catalogue": "Keep a local set index",
+          "catalogue_rich": "Include set names in the index"
         },
         "data_description": {
           "region": "Which LEGO.com market supplies recommended retail prices and retirement dates.",
@@ -75,7 +77,9 @@
           "watchlist": "Full set numbers including the variant, for example 10497-1.",
           "collection_interval_hours": "How often owned and wanted sets are refreshed.",
           "feeds_interval_hours": "How often watched themes are checked for new sets.",
-          "daily_call_budget": "Polling stops once this many calls have been made, leaving headroom for manual actions."
+          "daily_call_budget": "Polling stops once this many calls have been made, leaving headroom for manual actions.",
+          "catalogue": "Downloads the public LEGO set list weekly so searching and checking a set number costs no Brickset calls. Uses no part of your daily allowance.",
+          "catalogue_rich": "Names make the index searchable, at roughly 1.8 MB instead of 450 KB. Turn off on a storage-constrained machine, and search falls back to set numbers only."
         }
       }
     }

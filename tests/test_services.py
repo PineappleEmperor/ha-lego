@@ -16,7 +16,16 @@ from custom_components.lego.const import (
     SERVICE_SET_COLLECTION,
 )
 
-from .conftest import BricksetServer, setup_integration
+from .conftest import BricksetServer, make_set, setup_integration
+
+
+def _lookups(brickset: BricksetServer, since: int) -> list[str]:
+    """Return the set numbers looked up by name since a given call count."""
+    return [
+        call["setNumber"]
+        for call in brickset.get_sets_calls[since:]
+        if "setNumber" in call
+    ]
 
 
 async def test_set_collection(
@@ -43,11 +52,12 @@ async def test_set_collection(
     ]
 
 
-async def test_set_collection_looks_up_an_unknown_set(
+async def test_set_collection_reuses_a_harvested_id(
     hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
 ) -> None:
-    """A set outside the collection is resolved with one extra lookup."""
+    """A set seen in a theme feed is written without spending another call."""
     await setup_integration(hass, mock_config_entry)
+    before = len(brickset.get_sets_calls)
 
     await hass.services.async_call(
         DOMAIN,
@@ -61,6 +71,30 @@ async def test_set_collection_looks_up_an_unknown_set(
     )
 
     assert brickset.set_collection_calls[0]["setID"] == "5"
+    assert _lookups(brickset, before) == []
+
+
+async def test_set_collection_looks_up_an_unseen_set(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """A set never returned by a poll costs one lookup to resolve."""
+    brickset.theme_sets.append(make_set(7, "21034-1", "London", theme="Architecture"))
+    await setup_integration(hass, mock_config_entry)
+    before = len(brickset.get_sets_calls)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_COLLECTION,
+        {
+            "config_entry_id": mock_config_entry.entry_id,
+            "set_number": "21034-1",
+            "wanted": True,
+        },
+        blocking=True,
+    )
+
+    assert brickset.set_collection_calls[0]["setID"] == "7"
+    assert _lookups(brickset, before) == ["21034-1"]
 
 
 async def test_set_collection_unknown_set_raises(

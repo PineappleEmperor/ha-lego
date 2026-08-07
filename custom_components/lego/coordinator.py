@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .api import BricksetClient
+from .catalogue import SetCatalogue
 from .const import (
     CONF_COLLECTION_INTERVAL,
     CONF_FEEDS_INTERVAL,
@@ -71,6 +72,7 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         config_entry: LegoConfigEntry,
         client: BricksetClient,
         quota: QuotaManager,
+        catalogue: SetCatalogue | None,
         name: str,
         update_interval: timedelta,
     ) -> None:
@@ -85,6 +87,7 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         )
         self.client = client
         self.quota = quota
+        self.catalogue = catalogue
         self._quota_warned = False
         self._last_quota_sync: datetime | None = None
 
@@ -152,6 +155,7 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
         config_entry: LegoConfigEntry,
         client: BricksetClient,
         quota: QuotaManager,
+        catalogue: SetCatalogue | None = None,
     ) -> None:
         """Initialise the collection coordinator."""
         hours = config_entry.options.get(
@@ -162,6 +166,7 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
             config_entry,
             client,
             quota,
+            catalogue,
             name=f"{DOMAIN} collection",
             update_interval=timedelta(hours=hours),
         )
@@ -186,6 +191,10 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
                 {"setNumber": ",".join(missing), "extendedData": 1}
             ):
                 watched[lego_set.number] = lego_set
+
+        if self.catalogue is not None:
+            self.catalogue.remember([*owned, *wanted, *watched.values()])
+            await self.catalogue.async_save_if_dirty()
 
         data = CollectionData(
             owned=owned,
@@ -236,6 +245,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
         config_entry: LegoConfigEntry,
         client: BricksetClient,
         quota: QuotaManager,
+        catalogue: SetCatalogue | None = None,
     ) -> None:
         """Initialise the feeds coordinator."""
         hours = config_entry.options.get(
@@ -246,6 +256,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
             config_entry,
             client,
             quota,
+            catalogue,
             name=f"{DOMAIN} feeds",
             update_interval=timedelta(hours=hours),
         )
@@ -269,6 +280,9 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
                 }
             )
             feeds[theme] = sets
+        if self.catalogue is not None:
+            self.catalogue.remember([s for sets in feeds.values() for s in sets])
+            await self.catalogue.async_save_if_dirty()
         self._fire_new_set_events(feeds)
         return feeds
 

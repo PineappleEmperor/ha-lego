@@ -52,3 +52,19 @@ async def test_diagnostics_include_quota_and_coordinator_state(
 
     assert diagnostics["coordinators"]["feeds"]["themes"] == {"Technic": 2}
     assert diagnostics["summary"]["pieces_owned"] == 7122
+
+
+async def test_diagnostics_report_the_catalogue(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """Diagnostics show whether the local index seeded and what it learned."""
+    await setup_integration(hass, mock_config_entry)
+    await hass.async_block_till_done()
+
+    catalogue = (await async_get_config_entry_diagnostics(hass, mock_config_entry))[
+        "catalogue"
+    ]
+
+    assert catalogue["sets"] == 2
+    assert catalogue["known_brickset_ids"] == 6
+    assert catalogue["stale"] is False

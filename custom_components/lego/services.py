@@ -117,6 +117,11 @@ async def _async_resolve_set(entry: LegoConfigEntry, number: str) -> LegoSet:
     if known is not None and (lego_set := known.all_sets.get(number)) is not None:
         return lego_set
 
+    catalogue = entry.runtime_data.catalogue
+    if catalogue is not None and (set_id := catalogue.set_id(number)) is not None:
+        listed = catalogue.entry(number)
+        return LegoSet(set_id=set_id, number=number, name=listed.name if listed else "")
+
     try:
         matches = await entry.runtime_data.client.get_sets({"setNumber": number})
     except BricksetError as err:

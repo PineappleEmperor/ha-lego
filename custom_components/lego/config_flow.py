@@ -12,6 +12,7 @@ from homeassistant.const import CONF_API_KEY, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -26,6 +27,8 @@ import voluptuous as vol
 
 from .api import BricksetClient
 from .const import (
+    CONF_CATALOGUE,
+    CONF_CATALOGUE_RICH,
     CONF_COLLECTION_INTERVAL,
     CONF_DAILY_CALL_BUDGET,
     CONF_FEEDS_INTERVAL,
@@ -34,6 +37,8 @@ from .const import (
     CONF_USER_HASH,
     CONF_WATCHLIST,
     COUNTRY_TO_REGION,
+    DEFAULT_CATALOGUE,
+    DEFAULT_CATALOGUE_RICH,
     DEFAULT_COLLECTION_INTERVAL_HOURS,
     DEFAULT_DAILY_CALL_BUDGET,
     DEFAULT_FEEDS_INTERVAL_HOURS,
@@ -277,6 +282,8 @@ class LegoOptionsFlow(OptionsFlow):
                 CONF_COLLECTION_INTERVAL: int(user_input[CONF_COLLECTION_INTERVAL]),
                 CONF_FEEDS_INTERVAL: int(user_input[CONF_FEEDS_INTERVAL]),
                 CONF_DAILY_CALL_BUDGET: int(user_input[CONF_DAILY_CALL_BUDGET]),
+                CONF_CATALOGUE: user_input[CONF_CATALOGUE],
+                CONF_CATALOGUE_RICH: user_input[CONF_CATALOGUE_RICH],
             }
             return self.async_create_entry(data=options)
 
@@ -335,6 +342,14 @@ class LegoOptionsFlow(OptionsFlow):
                         unit_of_measurement="h",
                     )
                 ),
+                vol.Required(
+                    CONF_CATALOGUE,
+                    default=options.get(CONF_CATALOGUE, DEFAULT_CATALOGUE),
+                ): BooleanSelector(),
+                vol.Required(
+                    CONF_CATALOGUE_RICH,
+                    default=options.get(CONF_CATALOGUE_RICH, DEFAULT_CATALOGUE_RICH),
+                ): BooleanSelector(),
                 vol.Required(
                     CONF_DAILY_CALL_BUDGET,
                     default=options.get(

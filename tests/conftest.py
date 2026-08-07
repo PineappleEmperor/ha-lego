@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import gzip
 import json
 from typing import Any
 from unittest.mock import patch
@@ -26,6 +27,20 @@ from custom_components.lego.const import (
 )
 
 pytest_plugins = "pytest_homeassistant_custom_component"
+
+SETS_CSV_URL = "https://cdn.rebrickable.com/media/downloads/sets.csv.gz"
+THEMES_CSV_URL = "https://cdn.rebrickable.com/media/downloads/themes.csv.gz"
+
+# id,name,parent_id — 100 is a real theme, 500 is Gear and must be filtered out.
+THEMES_CSV = (
+    "id,name,parent_id\n100,Icons,\n101,Technic,\n500,Gear,\n501,Key Chain,500\n"
+)
+SETS_CSV = (
+    "set_num,name,year,theme_id,num_parts,img_url\n"
+    "10497-1,Galaxy Explorer,2022,100,1254,https://img/10497-1.jpg\n"
+    "42200-1,New Technic Thing,2026,101,900,https://img/42200-1.jpg\n"
+    "99999-1,Brick Keyring,2019,501,1,https://img/99999-1.jpg\n"
+)
 
 API_BASE = "https://brickset.com/api/v3.asmx"
 
@@ -170,6 +185,13 @@ class BricksetServer:
         self.hash_valid = True
         # When set, every getSets call fails with this message.
         self.get_sets_error: str | None = None
+
+        mocker.get(
+            SETS_CSV_URL,
+            content=gzip.compress(SETS_CSV.encode()),
+            headers={"ETag": '"seed-1"'},
+        )
+        mocker.get(THEMES_CSV_URL, content=gzip.compress(THEMES_CSV.encode()))
 
         for method, handler in (
             ("checkKey", self._check_key),

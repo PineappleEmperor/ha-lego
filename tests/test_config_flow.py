@@ -292,6 +292,8 @@ async def test_options_flow(
             CONF_COLLECTION_INTERVAL: 8,
             CONF_FEEDS_INTERVAL: 24,
             CONF_DAILY_CALL_BUDGET: 50,
+            "catalogue": True,
+            "catalogue_rich": True,
         },
     )
     await hass.async_block_till_done()

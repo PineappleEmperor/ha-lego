@@ -1,4 +1,4 @@
-# Set catalogue (proposal)
+# Set catalogue
 
 A local index of every LEGO set, so that naming a set costs nothing.
 
@@ -63,6 +63,19 @@ knows.
 The catalogue holds set identity only. Owned, wanted, quantity and rating stay with
 the coordinator, refreshed from Brickset.
 
+### Rebrickable carries no Brickset set ID
+
+Writes go to `setCollection`, which takes a Brickset `setID` — an integer that exists
+nowhere in Rebrickable's data. So the CSV alone cannot make a write free; it can only
+answer *does this number exist* and *what is it called*.
+
+The IDs come from records already fetched for another reason. Every collection and
+feed poll returns hundreds of sets carrying both the number and the `setID`, so the
+catalogue harvests the pairing from each poll and keeps it beside the index. Costs no
+calls, and makes a repeat write on any set the account has seen free.
+
+A number never returned by a poll still costs one lookup, exactly as before.
+
 ### A miss must never reject
 
 The two failure directions are not equal:
@@ -102,20 +115,23 @@ worth building and the existing per-lookup cost stands.
 ## Storage
 
 Held in a `homeassistant.helpers.storage.Store`, loaded into memory at startup.
+The harvested Brickset IDs are stored alongside, and survive a change of mode.
 
-| Mode | Cached | On disk | Enables |
-|------|--------|---------|---------|
-| Rich (default) | number, ID, name, year, theme, image | ~1.8 MB | search by name, autocomplete, thumbnails |
-| Slim | number only | ~450 KB | exact-number validation |
+| Mode | Cached | Enables |
+|------|--------|---------|
+| Rich (default) | number, name, year, root theme | search by name, autocomplete |
+| Slim | number only | exact-number validation |
 
 Slim is not simply smaller: without names there is nothing to search, so
-autocomplete degrades to exact set numbers. The setup option should say that rather
-than describing it as a storage choice.
+autocomplete degrades to exact set numbers. The setup option says that rather than
+describing it as a storage choice. Changing mode discards the index and re-seeds,
+because the rows themselves differ.
 
 ## Refresh
 
-Weekly, with a conditional `GET` (`If-Modified-Since` / `ETag`) so an unchanged file
-costs a round trip and no download.
+Weekly, with a conditional `GET` (`ETag`) so an unchanged file costs a round trip
+and no download. Seeding happens in a background task, so a first setup does not
+wait on half a megabyte.
 
 Failure is non-fatal at every step: a failed download keeps the previous catalogue,
 and an absent catalogue falls back to live lookups, which is exactly today's
@@ -124,28 +140,31 @@ behaviour. The catalogue is an optimisation, never a dependency.
 ## Search
 
 A websocket command (`lego/search`) queries the in-memory index and returns matches
-with number, name, year, theme and image. No entity is involved: 27,941 sets cannot
-live in the state machine, and a `select` entity with that many options would wreck
-the recorder.
+with number, name, year, theme and whether the account already owns it. Numbers
+starting with the query rank above names containing it. No entity is involved:
+27,941 sets cannot live in the state machine, and a `select` entity with that many
+options would wreck the recorder.
 
-This is what any dashboard autocomplete would call.
+This is what any dashboard autocomplete calls.
 
 ## Effect on the daily budget
 
 | Action | Now | With catalogue |
 |--------|-----|----------------|
-| Add a set not already in your collection | 1 call | 0 |
-| `lego.search_sets` | 1 call | 0 |
-| Reject a malformed or unknown number | 1 call | 0 |
+| Write to a set any poll has returned | 1 call | 0 |
+| Write to a set never seen | 1 call | 1 call |
+| Reject a number that is not a set | 1 call | 0 |
 | Autocomplete while typing | impossible | 0 |
 | Collection and theme polling | unchanged | unchanged |
 
-Polling remains the only thing that spends quota.
+Polling remains the only thing that reliably spends quota.
 
-## Open questions
+## Decisions
 
-- Should the catalogue be shared across config entries? It is account-independent,
-  so one copy would do, but `Store` is naturally per-entry.
-- Is a weekly refresh right, or should it follow the feeds interval?
-- Do we need `themes.csv.gz` at all, given Brickset supplies theme names for the
-  sets we actually track?
+- **One store per entry.** The index is account-independent, so a shared copy would
+  save disk, but the harvested Brickset IDs are not — they come from that account's
+  polls. Splitting the two stores buys little and costs a migration.
+- **Weekly, not the feeds interval.** New sets appear in Rebrickable in batches, and
+  a miss only forfeits a saving.
+- **`themes.csv.gz` is needed.** Brickset names themes for the sets already tracked;
+  the exclusion of `Gear` and `Books` applies to every other row, which is the point.
