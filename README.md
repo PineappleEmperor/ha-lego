@@ -223,6 +223,12 @@ its device and all its entities. Nothing is written to Brickset on removal; sets
 marked owned or wanted through the integration stay marked on your Brickset account.
 If installed via HACS, uninstall it there afterwards and restart.
 
+## Support
+
+If this saves you some time, you can
+[buy me a coffee](https://buymeacoffee.com/PineappleEmperor). Entirely optional;
+nothing in the integration asks you for anything.
+
 ## Credits
 
 Set data, images and pricing © [Brickset.com](https://brickset.com) — please support them
