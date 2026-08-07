@@ -44,10 +44,57 @@ async def test_new_set_event(
     await hass.async_block_till_done()
 
     assert len(events) == 1
-    assert events[0].data["set_number"] == "42222-1"
-    assert events[0].data["theme"] == "Technic"
-    assert events[0].data["name"] == "Brand New Technic"
-    assert events[0].data["entry_id"] == mock_config_entry.entry_id
+    data = events[0].data
+    assert data["set_number"] == "42222-1"
+    assert data["theme"] == "Technic"
+    assert data["name"] == "Brand New Technic"
+    assert data["entry_id"] == mock_config_entry.entry_id
+    assert data["release_date"] == "2024-01-01"
+    assert data["retirement_date"] == "2099-12-31"
+    assert data["retail_price"] == 99.99
+    assert data["released"] is True
+    assert data["region"] == "UK"
+
+
+async def test_new_set_event_without_a_release_date(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """An announced set with no published dates reports None, not a crash."""
+    events: list[Event] = []
+
+    @callback
+    def record(event: Event) -> None:
+        events.append(event)
+
+    hass.bus.async_listen(EVENT_NEW_SET, record)
+    await setup_integration(hass, mock_config_entry)
+
+    brickset.theme_sets.insert(
+        0,
+        make_set(
+            78,
+            "42333-1",
+            "Announced Technic",
+            theme="Technic",
+            year=2026,
+            price=None,
+            first_available=None,
+            last_available=None,
+        ),
+    )
+
+    freezer.tick(timedelta(hours=13))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert len(events) == 1
+    data = events[0].data
+    assert data["release_date"] is None
+    assert data["retirement_date"] is None
+    assert data["retail_price"] is None
 
 
 async def test_wanted_set_change_event(
