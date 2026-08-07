@@ -39,8 +39,8 @@ def fetch_rebrickable() -> dict[str, dict[str, str]]:
     return {row["set_num"]: row for row in rows}
 
 
-def get_sets(api_key: str, params: dict[str, object]) -> list[dict]:
-    """Call getSets. This is the billed method."""
+def get_sets(api_key: str, params: dict[str, object]) -> tuple[int, list[dict]]:
+    """Call getSets, returning Brickset's match count and the records."""
     body = urllib.parse.urlencode(
         {"apiKey": api_key, "userHash": "", "params": json.dumps(params)}
     ).encode()
@@ -49,7 +49,7 @@ def get_sets(api_key: str, params: dict[str, object]) -> list[dict]:
         payload = json.loads(response.read().decode("utf-8"))
     if payload.get("status") != "success":
         sys.exit(f"Brickset error: {payload.get('message')}")
-    return payload.get("sets") or []
+    return int(payload.get("matches") or 0), payload.get("sets") or []
 
 
 def main() -> None:
@@ -71,15 +71,23 @@ def main() -> None:
     random.seed(args.seed)
     sample = random.sample(numbered, min(SAMPLE, len(numbered)))
     print(f"1. Does Brickset know Rebrickable's sets?  (sample of {len(sample)})")
-    matches = get_sets(api_key, {"setNumber": ",".join(sample)})
-    found = {s["number"] for s in matches}
+    reported, records = get_sets(
+        api_key, {"setNumber": ",".join(sample), "pageSize": SAMPLE}
+    )
+    found = {s["number"] for s in records}
+    if reported > len(records):
+        print(
+            f"  NOTE: Brickset reports {reported} matches but returned "
+            f"{len(records)} records; the response is truncated"
+        )
     hit = sum(1 for n in sample if n.split("-")[0] in found or n in found)
+    print(f"  Brickset returned {len(records)} records for {len(sample)} numbers")
     pct = hit / len(sample) * 100
     print(f"  {hit}/{len(sample)} present in Brickset  ({pct:.1f}%)")
     print("  misses here cost one wasted call each, same as today\n")
 
     print(f"2. Does Rebrickable know Brickset's sets?  (year {args.year})")
-    year_sets = get_sets(api_key, {"year": args.year, "pageSize": SAMPLE})
+    _, year_sets = get_sets(api_key, {"year": args.year, "pageSize": SAMPLE})
     numbers = [s["number"] for s in year_sets]
     known = sum(1 for n in numbers if n in rebrickable or f"{n}-1" in rebrickable)
     if numbers:
