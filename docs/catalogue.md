@@ -62,6 +62,12 @@ The saving is only worth the machinery if the datasets agree, and that is measur
 for two billed calls, because `getSets` accepts a comma-delimited `setNumber` list of
 up to 500:
 
+Run it with the key in the environment, never as an argument:
+
+```bash
+BRICKSET_API_KEY=... python3 scripts/compare_catalogues.py --year 2024
+```
+
 1. **Brickset knows Rebrickable's sets?** Sample 500 random `set_num` values from the
    CSV, request them in one `getSets` call, count how many return. Estimates the
    false-positive rate.

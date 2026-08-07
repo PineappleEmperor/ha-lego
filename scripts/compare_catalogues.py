@@ -4,7 +4,10 @@
 Spends two billed getSets calls, because setNumber accepts a comma-delimited list
 of up to 500. Run before deciding whether a local catalogue is worth building:
 
-    python3 scripts/compare_catalogues.py --api-key KEY --year 2024
+    BRICKSET_API_KEY=... python3 scripts/compare_catalogues.py --year 2024
+
+The key comes from the environment rather than an argument so it stays out of
+shell history and process listings.
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ import csv
 import gzip
 import io
 import json
+import os
 import random
 import re
 import sys
@@ -51,10 +55,13 @@ def get_sets(api_key: str, params: dict[str, object]) -> list[dict]:
 def main() -> None:
     """Run both directions of the comparison."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--api-key", required=True)
     parser.add_argument("--year", type=int, default=2024)
     parser.add_argument("--seed", type=int, default=1)
     args = parser.parse_args()
+
+    api_key = os.environ.get("BRICKSET_API_KEY", "").strip()
+    if not api_key:
+        sys.exit("Set BRICKSET_API_KEY in the environment before running this.")
 
     print("Downloading Rebrickable set list...")
     rebrickable = fetch_rebrickable()
@@ -64,7 +71,7 @@ def main() -> None:
     random.seed(args.seed)
     sample = random.sample(numbered, min(SAMPLE, len(numbered)))
     print(f"1. Does Brickset know Rebrickable's sets?  (sample of {len(sample)})")
-    matches = get_sets(args.api_key, {"setNumber": ",".join(sample)})
+    matches = get_sets(api_key, {"setNumber": ",".join(sample)})
     found = {s["number"] for s in matches}
     hit = sum(1 for n in sample if n.split("-")[0] in found or n in found)
     pct = hit / len(sample) * 100
@@ -72,7 +79,7 @@ def main() -> None:
     print("  misses here cost one wasted call each, same as today\n")
 
     print(f"2. Does Rebrickable know Brickset's sets?  (year {args.year})")
-    year_sets = get_sets(args.api_key, {"year": args.year, "pageSize": SAMPLE})
+    year_sets = get_sets(api_key, {"year": args.year, "pageSize": SAMPLE})
     numbers = [s["number"] for s in year_sets]
     known = sum(1 for n in numbers if n in rebrickable or f"{n}-1" in rebrickable)
     if numbers:
