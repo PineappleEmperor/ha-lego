@@ -25,6 +25,11 @@ REGIONS: Final = ["UK", "US", "CA", "DE"]
 REGION_CURRENCY: Final = {"UK": "GBP", "US": "USD", "CA": "CAD", "DE": "EUR"}
 
 DEFAULT_REGION: Final = "UK"
+
+# Brickset publishes LEGO.com pricing for four markets; every other country has
+# to be asked rather than guessed.
+COUNTRY_TO_REGION: Final = {"GB": "UK", "US": "US", "CA": "CA", "DE": "DE"}
+
 DEFAULT_COLLECTION_INTERVAL_HOURS: Final = 6
 DEFAULT_FEEDS_INTERVAL_HOURS: Final = 12
 

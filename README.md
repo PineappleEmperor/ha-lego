@@ -56,6 +56,10 @@ directory and restart.
    [brickset.com/tools/webservices/v3](https://brickset.com/tools/webservices/v3).
 2. **Settings → Devices & services → Add integration → LEGO**.
 3. Enter your API key, Brickset username and Brickset password.
+4. Choose the pricing region. It is preselected from Home Assistant's country
+   when that country is one LEGO.com prices separately (`GB`, `US`, `CA`, `DE`),
+   but you can pick any of the four — tracking a store you actually buy from
+   matters more than where you live. Changeable later under **Configure**.
 
 ### Setup parameters
 
@@ -71,7 +75,7 @@ Reachable via **Configure** on the integration entry.
 
 | Option | Default | Notes |
 |--------|---------|-------|
-| Pricing region | `UK` | Which LEGO.com market supplies RRP and availability dates (`UK`, `US`, `CA`, `DE`). |
+| Pricing region | from HA's country | Which LEGO.com market supplies RRP and availability dates (`UK`, `US`, `CA`, `DE`). |
 | Themes to watch | none | Each watched theme costs one API call per feed refresh. |
 | Watchlist | none | Full set numbers, e.g. `10497-1`. Each gets a retirement-countdown sensor. |
 | Collection refresh interval | 6 h | How often owned and wanted sets are re-fetched. |

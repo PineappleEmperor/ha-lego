@@ -33,6 +33,7 @@ USER_INPUT = {
 
 async def test_user_flow(hass: HomeAssistant, brickset: BricksetServer) -> None:
     """A valid key and login create an entry that stores only the token."""
+    hass.config.country = "GB"
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
@@ -41,6 +42,11 @@ async def test_user_flow(hass: HomeAssistant, brickset: BricksetServer) -> None:
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], USER_INPUT
+    )
+
+    assert result["step_id"] == "region"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_REGION: "UK"}
     )
     await hass.async_block_till_done()
 
@@ -52,6 +58,71 @@ async def test_user_flow(hass: HomeAssistant, brickset: BricksetServer) -> None:
         CONF_USER_HASH: USER_HASH,
     }
     assert CONF_PASSWORD not in result["data"]
+    assert result["options"][CONF_REGION] == "UK"
+
+
+async def test_user_flow_asks_for_region_when_country_is_unmapped(
+    hass: HomeAssistant, brickset: BricksetServer
+) -> None:
+    """LEGO.com prices four markets, so any other country has to be asked."""
+    hass.config.country = "FR"
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "region"
+    assert result["description_placeholders"]["country"] == "FR"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_REGION: "DE"}
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["options"][CONF_REGION] == "DE"
+
+
+async def test_region_step_is_seeded_from_the_country(
+    hass: HomeAssistant, brickset: BricksetServer
+) -> None:
+    """A mapped country preselects its market, leaving it changeable."""
+    hass.config.country = "CA"
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+
+    assert result["step_id"] == "region"
+    assert result["data_schema"]({})[CONF_REGION] == "CA"
+
+
+async def test_region_can_be_overridden_at_setup(
+    hass: HomeAssistant, brickset: BricksetServer
+) -> None:
+    """Buying from another country's store is common, so the seed is a default."""
+    hass.config.country = "GB"
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_REGION: "US"}
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["options"][CONF_REGION] == "US"
 
 
 @pytest.mark.parametrize(
@@ -69,6 +140,7 @@ async def test_user_flow_errors(
     expected: str,
 ) -> None:
     """Rejected credentials show an error and let the user retry."""
+    hass.config.country = "GB"
     brickset.key_valid = key_valid
     brickset.credentials_valid = credentials_valid
 
@@ -88,7 +160,7 @@ async def test_user_flow_errors(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], USER_INPUT
     )
-    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["step_id"] == "region"
 
 
 async def test_user_flow_cannot_connect(

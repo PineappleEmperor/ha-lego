@@ -33,6 +33,7 @@ from .const import (
     CONF_THEMES,
     CONF_USER_HASH,
     CONF_WATCHLIST,
+    COUNTRY_TO_REGION,
     DEFAULT_COLLECTION_INTERVAL_HOURS,
     DEFAULT_DAILY_CALL_BUDGET,
     DEFAULT_FEEDS_INTERVAL_HOURS,
@@ -90,6 +91,10 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    def __init__(self) -> None:
+        """Initialise the flow."""
+        self._entry_data: dict[str, Any] = {}
+
     async def _async_try_credentials(
         self, user_input: dict[str, Any], errors: dict[str, str]
     ) -> str | None:
@@ -122,21 +127,49 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
             if user_hash is not None:
                 await self.async_set_unique_id(user_input[CONF_USERNAME].lower())
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(
-                    title=user_input[CONF_USERNAME],
-                    data={
-                        CONF_API_KEY: user_input[CONF_API_KEY],
-                        CONF_USERNAME: user_input[CONF_USERNAME],
-                        CONF_USER_HASH: user_hash,
-                    },
-                    options={CONF_REGION: DEFAULT_REGION},
-                )
+                self._entry_data = {
+                    CONF_API_KEY: user_input[CONF_API_KEY],
+                    CONF_USERNAME: user_input[CONF_USERNAME],
+                    CONF_USER_HASH: user_hash,
+                }
+                return await self.async_step_region()
 
         return self.async_show_form(
             step_id="user",
             data_schema=STEP_USER_SCHEMA,
             description_placeholders={"api_key_path": "Tools -> Web services"},
             errors=errors,
+        )
+
+    def _create(self, region: str) -> ConfigFlowResult:
+        """Finish the flow with a pricing region."""
+        return self.async_create_entry(
+            title=self._entry_data[CONF_USERNAME],
+            data=self._entry_data,
+            options={CONF_REGION: region},
+        )
+
+    async def async_step_region(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose the market to price against, seeded from the country."""
+        if user_input is not None:
+            return self._create(user_input[CONF_REGION])
+
+        country = self.hass.config.country or ""
+        suggested = COUNTRY_TO_REGION.get(country)
+        selector = SelectSelector(
+            SelectSelectorConfig(options=REGIONS, mode=SelectSelectorMode.DROPDOWN)
+        )
+        key = (
+            vol.Required(CONF_REGION, default=suggested)
+            if suggested
+            else vol.Required(CONF_REGION)
+        )
+        return self.async_show_form(
+            step_id="region",
+            data_schema=vol.Schema({key: selector}),
+            description_placeholders={"country": country or "not set"},
         )
 
     async def async_step_reauth(
