@@ -28,6 +28,26 @@ the README credits them regardless.
 The `/downloads/` page sits behind Cloudflare and refuses non-browser clients, but
 the CDN paths themselves serve fine.
 
+## Gear and books are not sets
+
+Rebrickable numbers keyrings, lunchboxes, pencil cases and storybooks exactly
+like sets, and files them under top-level `Gear` and `Books` themes. Measured
+2026-08-07:
+
+| | Count |
+|---|---|
+| `NNNN-N` entries | 25,359 |
+| under `Gear` or `Books` | 6,376 (25.1%) |
+| remaining | 18,983 |
+
+They are the bulk of the 18% of Rebrickable numbers Brickset does not carry,
+because Brickset catalogues sets rather than merchandise. Excluding both themes
+at seed time keeps the catalogue a quarter smaller and stops autofill offering a
+keyring when someone types a number.
+
+Filter on the theme, not on part count: 1,685 legitimate sets have a single part
+(a minifigure, a promotional brick), and dropping those would lose real records.
+
 ## What it is not
 
 The catalogue is Rebrickable's, and the integration's data is Brickset's. They
