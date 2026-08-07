@@ -1,42 +1,47 @@
-name: Check manifest version
+name: Check Manifest Version
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, labeled, unlabeled]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches-ignore:
+      - main
 
 permissions:
   contents: read
   pull-requests: read
 
 jobs:
-  version-gate:
-    name: Version bumped since the last release
+  check_version:
+    name: Manifest version bumped vs last release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-
-      - uses: actions/setup-python@v6
         with:
-          python-version: "3.14"
+          fetch-depth: 0
 
-      - name: Find the last published release
-        id: released
-        if: github.actor != 'dependabot[bot]'
+      - name: Gather versions and labels
+        id: gather
+        if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
-          set -euo pipefail
-          # The last *published* release, not the newest tag and not a draft.
-          VERSION=$(gh release list --limit 20 --json tagName,isDraft,isPrerelease \
-            --jq 'map(select(.isDraft == false)) | .[0].tagName // empty')
-          if [ -z "$VERSION" ]; then
-            VERSION="0.0.0"
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          MANIFEST=$(ls custom_components/*/manifest.json | head -1)
+          echo "pr_version=$(jq -r '.version' "$MANIFEST")" >> "$GITHUB_OUTPUT"
+          TAG=$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName')
+          echo "last_release=${TAG#v}" >> "$GITHUB_OUTPUT"
+          git fetch origin "$BASE_REF" --depth=1 -q || true
+          echo "main_version=$(git show "origin/$BASE_REF:$MANIFEST" 2>/dev/null | jq -r '.version' || echo '')" >> "$GITHUB_OUTPUT"
+          echo "labels=$(gh pr view ${{ github.event.pull_request.number }} --json labels -q '[.labels[].name]|join(",")')" >> "$GITHUB_OUTPUT"
 
-      - name: Compare against manifest.json
-        if: github.actor != 'dependabot[bot]'
-        env:
-          RELEASED: ${{ steps.released.outputs.version }}
-          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-        run: python3 scripts/manifest_gate.py --released "$RELEASED" --labels "$LABELS"
+      # All decision logic lives in scripts/manifest_gate.py (unit-tested in
+      # tests/test_manifest_gate.py) so the gate can't silently regress again.
+      - name: Version gate
+        if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
+        run: |
+          python3 scripts/manifest_gate.py \
+            --last-release "${{ steps.gather.outputs.last_release }}" \
+            --main-version "${{ steps.gather.outputs.main_version }}" \
+            --pr-version "${{ steps.gather.outputs.pr_version }}" \
+            --labels "${{ steps.gather.outputs.labels }}"

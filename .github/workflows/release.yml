@@ -8,21 +8,18 @@ permissions:
   contents: write
 
 jobs:
-  zip:
-    name: Attach lego.zip to the release
+  build:
+    name: Create Release Asset
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - name: Build the ZIP
-        # hacs.json sets zip_release, so HACS downloads this asset instead of the
-        # tag archive. The integration files must sit at the ZIP root.
+      - name: Create ZIP file
         run: |
-          set -euo pipefail
           cd custom_components/lego
-          zip -r ../../lego.zip . -x '*.pyc' -x '__pycache__/*'
+          zip -r "$GITHUB_WORKSPACE/lego.zip" . -x '*/__pycache__/*' '*.pyc'
 
-      - name: Attach it to the release
-        uses: softprops/action-gh-release@v3
-        with:
-          files: lego.zip
+      - name: Upload release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" "$GITHUB_WORKSPACE/lego.zip" --clobber

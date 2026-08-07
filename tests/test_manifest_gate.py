@@ -1,82 +1,50 @@
-"""Tests for the CI version gate."""
-
+"""Unit tests for the manifest version gate decision logic."""
 from __future__ import annotations
 
-import json
+import importlib.util
 from pathlib import Path
-import sys
 
-import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-
-from manifest_gate import (
-    VersionError,
-    actual_bump,
-    check,
-    expected_bump,
-    manifest_version,
-    parse_version,
+_SPEC = importlib.util.spec_from_file_location(
+    "manifest_gate", Path(__file__).parents[1] / "scripts" / "manifest_gate.py"
 )
+assert _SPEC and _SPEC.loader
+manifest_gate = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(manifest_gate)
+evaluate = manifest_gate.evaluate
 
 
-def test_parse_version() -> None:
-    assert parse_version("v1.2.3") == (1, 2, 3, None)
-    assert parse_version("1.2.3-beta.1") == (1, 2, 3, "beta.1")
-    with pytest.raises(VersionError):
-        parse_version("not-a-version")
+def ok(*args, **kwargs) -> bool:
+    return evaluate(*args, **kwargs)[0]
 
 
-@pytest.mark.parametrize(
-    ("labels", "expected"),
-    [
-        ({"breaking"}, "major"),
-        ({"feature"}, "minor"),
-        ({"enhancement", "documentation"}, "minor"),
-        ({"fix"}, "patch"),
-        (set(), "patch"),
-    ],
-)
-def test_expected_bump(labels: set[str], expected: str) -> None:
-    assert expected_bump(labels) == expected
+def test_unchanged_vs_last_release_fails() -> None:
+    assert not ok("1.1.0", "1.1.0", "1.1.0", ["fix"])
 
+def test_feature_minor_bump_passes() -> None:
+    assert ok("1.1.0", "1.1.0", "1.2.0", ["feature"])
 
-@pytest.mark.parametrize(
-    ("released", "candidate", "expected"),
-    [
-        ("1.0.0", "2.0.0", "major"),
-        ("1.0.0", "1.1.0", "minor"),
-        ("1.0.0", "1.0.1", "patch"),
-        ("1.0.0", "1.0.0", "none"),
-        ("1.2.0", "1.1.9", "none"),
-    ],
-)
-def test_actual_bump(released: str, candidate: str, expected: str) -> None:
-    assert actual_bump(released, candidate) == expected
+def test_feature_only_patch_under_bumps() -> None:
+    assert not ok("1.1.0", "1.1.0", "1.1.1", ["feature"])
 
+def test_chore_rides_in_cycle_minor() -> None:  # the shipped regression
+    assert ok("1.1.0", "1.2.0", "1.2.0", ["chore"])
 
-def test_check_requires_a_bump() -> None:
-    error = check("0.1.0", "0.1.0", set())
-    assert error is not None
-    assert "already released" in error
+def test_chore_overbump_beyond_cycle_fails() -> None:
+    assert not ok("1.1.0", "1.2.0", "2.0.0", ["chore"])
 
+def test_breaking_major_passes() -> None:
+    assert ok("1.1.0", "1.2.0", "2.0.0", ["xfeat"])
 
-def test_check_rejects_too_small_a_bump() -> None:
-    error = check("0.1.0", "0.1.1", {"feature"})
-    assert error is not None
-    assert "minor bump" in error
+def test_prerelease_only_needs_to_differ() -> None:
+    assert ok("1.1.0", "1.1.0", "2.0.0rc1", ["feature"])
+    assert not ok("2.0.0rc1", "2.0.0rc1", "2.0.0rc1", ["feature"])
 
+def test_final_graduates_prerelease() -> None:  # 2.0.0rc19 -> 2.0.0, even feature-labelled
+    assert ok("2.0.0rc19", "2.0.0rc20", "2.0.0", ["feature"])
+    assert not ok("2.0.0", "2.0.0", "2.0.0", ["feature"])  # already final -> still must bump
 
-def test_check_allows_a_larger_bump_than_required() -> None:
-    assert check("0.1.0", "1.0.0", {"fix"}) is None
+def test_dependabot_exempt() -> None:
+    assert ok("1.1.0", "1.1.0", "1.1.0", [], dependabot=True)
 
-
-def test_check_accepts_a_matching_bump() -> None:
-    assert check("0.1.0", "0.2.0", {"feature"}) is None
-    assert check("v0.1.0", "0.1.1", {"fix"}) is None
-
-
-def test_manifest_version_matches_the_packaged_manifest() -> None:
-    """The gate reads the same file hassfest and HACS read."""
-    path = Path("custom_components/lego/manifest.json")
-    assert manifest_version(path) == json.loads(path.read_text())["version"]
+def test_no_managed_label_passes_when_changed() -> None:
+    assert ok("1.1.0", "1.1.0", "1.1.5", [])

@@ -12,6 +12,9 @@ target-version = "py314"
 line-length = 88
 src = ["custom_components"]
 
+[tool.ruff.format]
+exclude = ["scripts/manifest_gate.py", "tests/test_manifest_gate.py"]
+
 [tool.ruff.lint]
 select = [
   "A",
@@ -52,6 +55,10 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["D100", "D103", "SLF001", "PLR2004", "INP001"]
 "scripts/*" = ["T20", "INP001"]
+# Copied verbatim from the ha-integration skill's templates; keep them pristine
+# so they can be diffed against the canonical copies.
+"scripts/manifest_gate.py" = ["T20", "INP001", "D103", "E501", "PLR0911"]
+"tests/test_manifest_gate.py" = ["D100", "D103", "E501", "PT018", "INP001"]
 
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
