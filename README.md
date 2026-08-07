@@ -127,6 +127,25 @@ remaining headroom.
 The first poll after a restart establishes the baseline and fires nothing, so a restart
 does not replay the year's releases.
 
+`lego_new_set` carries the set's details so an automation needs no further API call:
+`set_number`, `name`, `theme`, `year`, `pieces`, `minifigs`, `image_url`,
+`brickset_url`, `released`, `release_date`, `retirement_date`, `retail_price` and
+`region`.
+
+A just-announced set usually has no dates yet — LEGO publishes them later, and they are
+per-region — so `release_date`, `retirement_date` and `retail_price` are frequently
+`null`. Guard on `released` or test the field before formatting it:
+
+```yaml
+message: >-
+  {{ trigger.event.data.name }}
+  {% if trigger.event.data.release_date %}
+    is out on {{ trigger.event.data.release_date }}
+  {% else %}
+    has been announced, no release date yet
+  {% endif %}
+```
+
 ## Examples
 
 Notify when a set on the wishlist is about to retire:

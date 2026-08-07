@@ -133,6 +133,11 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         self._quota_warned = False
         return data
 
+    @property
+    def region(self) -> str:
+        """Return the pricing region chosen at setup."""
+        return self.config_entry.options.get(CONF_REGION, DEFAULT_REGION)
+
     async def _fetch(self) -> DataT:
         """Fetch this coordinator's data."""
         raise NotImplementedError
@@ -160,11 +165,6 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
             name=f"{DOMAIN} collection",
             update_interval=timedelta(hours=hours),
         )
-
-    @property
-    def region(self) -> str:
-        """Return the pricing region chosen at setup."""
-        return self.config_entry.options.get(CONF_REGION, DEFAULT_REGION)
 
     @property
     def watchlist(self) -> list[str]:
@@ -276,11 +276,14 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
         """Fire an event per set new since the previous poll, baselining the first."""
         if self.data is None:
             return
+        region = self.region
         for theme, sets in feeds.items():
             seen = {lego_set.number for lego_set in self.data.get(theme, [])}
             for lego_set in sets:
                 if lego_set.number in seen:
                     continue
+                launch = lego_set.release_date(region)
+                exit_date = lego_set.retirement_date(region)
                 self.hass.bus.async_fire(
                     EVENT_NEW_SET,
                     {
@@ -293,5 +296,10 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
                         "minifigs": lego_set.minifigs,
                         "image_url": lego_set.image_url,
                         "brickset_url": lego_set.brickset_url,
+                        "released": lego_set.released,
+                        "release_date": launch.isoformat() if launch else None,
+                        "retirement_date": exit_date.isoformat() if exit_date else None,
+                        "retail_price": lego_set.price(region),
+                        "region": region,
                     },
                 )
