@@ -59,10 +59,7 @@ class QuotaManager:
             self._calls_today = 0
 
     def sync(self, usage: dict[date, int]) -> None:
-        """Reconcile with Brickset's count; the higher figure wins.
-
-        Other clients may share the key, so the server can know of more calls.
-        """
+        """Reconcile with Brickset's count, higher if another client shares the key."""
         self._roll_day()
         self._server_usage = usage
         reported = usage.get(self._day)

@@ -26,6 +26,36 @@ def test_parses_a_full_record() -> None:
     assert lego_set.brickset_url == "https://brickset.com/sets/10497-1"
 
 
+def test_number_is_combined_with_its_variant() -> None:
+    """Brickset splits number and variant; everything else wants them joined."""
+    lego_set = LegoSet.from_api(
+        {"setID": 1, "number": "10497", "numberVariant": 1, "name": "Galaxy Explorer"}
+    )
+
+    assert lego_set.number == "10497-1"
+
+
+def test_number_variant_other_than_one() -> None:
+    """A re-release keeps its own variant rather than being forced to -1."""
+    lego_set = LegoSet.from_api({"setID": 2, "number": "6876", "numberVariant": 2})
+
+    assert lego_set.number == "6876-2"
+
+
+def test_already_combined_number_is_left_alone() -> None:
+    """A number that arrives combined is not given a second suffix."""
+    lego_set = LegoSet.from_api({"setID": 3, "number": "10497-1", "numberVariant": 1})
+
+    assert lego_set.number == "10497-1"
+
+
+def test_number_without_a_variant() -> None:
+    """A record with no variant field keeps the number as given."""
+    lego_set = LegoSet.from_api({"setID": 4, "number": "10497"})
+
+    assert lego_set.number == "10497"
+
+
 def test_missing_fields_do_not_raise() -> None:
     """Sparse records parse to None rather than blowing up the coordinator."""
     lego_set = LegoSet.from_api({"setID": 9, "number": "1234-1", "name": "Sparse"})
