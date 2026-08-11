@@ -220,6 +220,18 @@ jobs:
     if: github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     steps:
+      # The classifier lives in scripts/commit_summary.py, unit-tested in
+      # tests/test_commit_summary.py. It was inline here once; an inline heredoc
+      # cannot be tested, and a silently-wrong classifier corrupts release notes
+      # without ever failing a build. It did: a version-bump filter ending in
+      # `to v?\d+\.\d+` ate every semver dependency bump.
+      # Checkout runs first because it cleans the workspace, which would delete
+      # subjects.txt if that were written before it.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
       - name: Fetch commit subjects
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -229,16 +241,6 @@ jobs:
           gh api --paginate "repos/$GH_REPO/pulls/$PR/commits" \
             --jq '.[].commit.message | split("\n")[0]' > subjects.txt
           wc -l < subjects.txt
-
-      # The classifier lives in scripts/commit_summary.py, unit-tested in
-      # tests/test_commit_summary.py. It was inline here once; an inline heredoc
-      # cannot be tested, and a silently-wrong classifier corrupts release notes
-      # without ever failing a build. It did: a version-bump filter ending in
-      # `to v?\d+\.\d+` ate every semver dependency bump.
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          persist-credentials: false
 
       - name: Build the grouped summary
         run: python3 scripts/commit_summary.py --subjects subjects.txt > summary.md
