@@ -120,6 +120,19 @@ if [ -f .github/workflows/pr-checks.yml ]; then
   fi
   # Untrusted strings (PR title, the PR's own manifest version) must reach run: via
   # env, never `${{ }}` interpolation.
+  # actions/checkout CLEARS the workspace, so a job that checks out after writing
+  # a file there loses it. That shipped: the commit-summary job fetched subjects
+  # into subjects.txt, then checked out, then read a file that no longer existed.
+  python3 - "$P" <<'PYCO' || FAIL "pr-checks.yml: actions/checkout must be the FIRST step of its job (it clears the workspace)"
+import sys, yaml
+w = yaml.safe_load(open(sys.argv[1]))
+bad = [j for j, jd in w["jobs"].items()
+       if any("actions/checkout" in str(s.get("uses", "")) for s in jd["steps"])
+       and "actions/checkout" not in str(jd["steps"][0].get("uses", ""))]
+for j in bad:
+    print(f"    job '{j}' checks out after another step has run")
+sys.exit(1 if bad else 0)
+PYCO
   python3 - "$P" <<'PYCHK' || FAIL "pr-checks.yml interpolates \${{ }} inside a run: block (use env:)"
 import sys, re, yaml
 w = yaml.safe_load(open(sys.argv[1]))
@@ -130,6 +143,42 @@ for b in bad:
     print(f"    {b}")
 sys.exit(1 if bad else 0)
 PYCHK
+fi
+
+# --- No HACS/hassfest check may be ignored ---
+# `ignore:` disqualifies the repo from the HACS default store; it exists for
+# debugging only. Empirically load-bearing: in eval scenario 01, BOTH control
+# runs (skill withheld) reached for `ignore: brands` to make a failing check pass
+# on day one, each rationalising it as temporary. Neither would have shipped to
+# the default store. The rule was documented from the start and ungated until now.
+for w in hacs_validate hassfest_validate; do
+  f=".github/workflows/$w.yml"
+  [ -f "$f" ] || continue
+  grep -nE '^[[:space:]]*ignore:' "$f" \
+    && FAIL "$w.yml sets ignore: — ignoring any check disqualifies the repo from the HACS default store"
+done
+
+# --- Exactly ONE labeler ---
+# pr-checks.yml's `label` job is it. A second labeler (classically a
+# release-drafter autolabeler job on pull_request) makes labels flap AND breaks
+# pr-checks' `needs: label` ordering: title-check waits for the first labeler
+# while the second is still applying labels. This drifted into the skill's own
+# repo and went unnoticed until a manual template diff.
+if [ -f .github/workflows/release_drafter.yml ]; then
+  python3 - .github/workflows/release_drafter.yml <<'PYRD' || FAIL "release_drafter.yml must be push-only with no autolabeler job (pr-checks.yml is the sole labeler)"
+import sys, yaml
+w = yaml.safe_load(open(sys.argv[1]))
+triggers = set((w.get(True) or w.get("on") or {}))
+bad = []
+if triggers - {"push", "workflow_dispatch"}:
+    bad.append(f"triggers {sorted(triggers)} (expected push only)")
+for name, jd in w.get("jobs", {}).items():
+    if "label" in name.lower():
+        bad.append(f"job '{name}' looks like a second labeler")
+for b in bad:
+    print(f"    {b}")
+sys.exit(1 if bad else 0)
+PYRD
 fi
 
 # No workflow may open PRs. create-dev-pr.yml is the superseded auto-opener: it cannot
@@ -155,10 +204,163 @@ if [ -n "$CC" ]; then
     || WARN "no 'from __future__ import annotations' in __init__.py"
 
   # --- quality_scale + manifest honesty ---
-  [ -f "${CC}quality_scale.yaml" ] || FAIL "missing quality_scale.yaml"
+  if [ -f "${CC}quality_scale.yaml" ]; then
+    # Existence proved nothing: a file containing one rule passed a real audit
+    # while ~51 canonical rules were absent and that one rule was an unproven
+    # `done`. Snapshot of the canonical set — keep in lockstep with the rule
+    # lists in SKILL.md (see its Freshness table).
+    python3 - "${CC}quality_scale.yaml" <<'PYQS' || FAIL "quality_scale.yaml does not enumerate the canonical rule set"
+import sys, yaml
+CANON = {
+ "action-setup","appropriate-polling","brands","common-modules","config-flow-test-coverage",
+ "config-flow","dependency-transparency","docs-actions","docs-high-level-description",
+ "docs-installation-instructions","docs-removal-instructions","entity-event-setup",
+ "entity-unique-id","has-entity-name","runtime-data","test-before-configure",
+ "test-before-setup","unique-config-entry","config-entry-unloading","log-when-unavailable",
+ "entity-unavailable","action-exceptions","reauthentication-flow","parallel-updates",
+ "test-coverage","integration-owner","docs-installation-parameters",
+ "docs-configuration-parameters","entity-translations","entity-device-class","devices",
+ "entity-category","entity-disabled-by-default","discovery","stale-devices","diagnostics",
+ "exception-translations","icon-translations","reconfiguration-flow","dynamic-devices",
+ "discovery-update-info","repair-issues","docs-use-cases","docs-supported-devices",
+ "docs-supported-functions","docs-data-update","docs-known-limitations","docs-troubleshooting",
+ "docs-examples","async-dependency","inject-websession","strict-typing",
+}
+rules = (yaml.safe_load(open(sys.argv[1])) or {}).get("rules") or {}
+missing = sorted(CANON - set(rules))
+if missing:
+    print(f"    {len(missing)} canonical rules absent, e.g. {missing[:6]}")
+sys.exit(1 if missing else 0)
+PYQS
+  else
+    FAIL "missing quality_scale.yaml"
+  fi
   M="${CC}manifest.json"
   grep -q '"integration_type"' "$M" 2>/dev/null || FAIL "manifest.json missing integration_type"
   grep -q '"issue_tracker"'    "$M" 2>/dev/null || FAIL "manifest.json missing issue_tracker (HACS requires it)"
+  # A manifest that claims config_flow without the module fails setup at runtime.
+  if grep -q '"config_flow"[[:space:]]*:[[:space:]]*true' "$M" 2>/dev/null; then
+    [ -f "${CC}config_flow.py" ] || FAIL "manifest declares config_flow: true but ${CC}config_flow.py is missing"
+  fi
+  [ -f CLAUDE.md ]         || FAIL "missing CLAUDE.md (the skill's per-repo enforcement — without it no future session is told to re-invoke)"
+  [ -f README.md ]         || FAIL "missing README.md (HACS 'information' and 'images' checks both need it)"
+  [ -f pyrightconfig.json ] || WARN "missing pyrightconfig.json"
+fi
+
+# --- Coverage gaps closed 2026-08-11 -----------------------------------------
+# Every check above was added reactively, one per bug. A cross-reference of the
+# skill's stated rules against this script found five that were documented and
+# never enforced; three had already been violated in the skill's own repo. These
+# are those five.
+
+# 1. Autolabeler rules must be TITLE-only. A `branch:` rule flaps whenever the
+#    branch name disagrees with the commits (branch `chore/…`, commits `feat:`).
+if [ -f .github/release-drafter.yml ]; then
+  python3 - .github/release-drafter.yml <<'PYAL' || FAIL "release-drafter.yml autolabeler has non-title rules (title-only, or labels flap)"
+import sys, yaml
+cfg = yaml.safe_load(open(sys.argv[1])) or {}
+bad = [r.get("label") for r in cfg.get("autolabeler", []) if set(r) - {"label", "title"}]
+for b in bad:
+    print(f"    rule '{b}' matches on something other than the title")
+sys.exit(1 if bad else 0)
+PYAL
+fi
+
+# 2. Docstrings are ONE line. Named as a highest-cost trap in the reminder hook
+#    and never mechanically checked until now.
+if [ -n "$CC" ]; then
+  python3 - "$CC" <<'PYDS' || FAIL "multi-line docstring in custom_components/ (the skill requires single-line)"
+import ast, pathlib, sys
+bad = []
+for f in pathlib.Path(sys.argv[1]).rglob("*.py"):
+    try:
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+    except SyntaxError:
+        continue
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        doc = ast.get_docstring(node, clean=False)
+        if doc and "\n" in doc.strip():
+            name = getattr(node, "name", "<module>")
+            print(f"    {f}:{getattr(node, 'lineno', 1)} {name}")
+            bad.append(name)
+sys.exit(1 if bad else 0)
+PYDS
+fi
+
+# 3. The commit-msg hook must be present AND enabled. Shipping it is not enough:
+#    a harness can inject AI-attribution trailers on every commit, and prose
+#    alone loses that fight (which is why the hook exists).
+if [ -f .githooks/commit-msg ]; then
+  [ -x .githooks/commit-msg ] || FAIL ".githooks/commit-msg is not executable (chmod +x)"
+  if git rev-parse --git-dir >/dev/null 2>&1; then
+    [ "$(git config core.hooksPath 2>/dev/null)" = ".githooks" ] \
+      || WARN "core.hooksPath is not .githooks — run: git config core.hooksPath .githooks"
+  fi
+else
+  WARN "no .githooks/commit-msg (terse-subject + AI-trailer rejection)"
+fi
+
+# 4. Brand assets: exact square sizes, and the @2x variants. A present icon.png
+#    with no icon@2x.png is the classic "icon shows only sometimes" bug — a
+#    HiDPI client requests @2x, 404s, and falls back inconsistently.
+if [ -n "$CC" ]; then
+  [ -d "${CC}brand" ] || FAIL "missing ${CC}brand/ (HACS check-brands fails without icon.png)"
+  python3 - "${CC}brand" <<'PYBR' || FAIL "brand assets missing or wrongly sized"
+import pathlib, struct, sys
+
+def size(p):
+    b = p.read_bytes()
+    if b[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    return struct.unpack(">II", b[16:24])
+
+brand = pathlib.Path(sys.argv[1])
+want = {"icon.png": (256, 256), "icon@2x.png": (512, 512)}
+bad = False
+for name, exp in want.items():
+    f = brand / name
+    if not f.exists():
+        print(f"    missing {f}"); bad = True; continue
+    got = size(f)
+    if got != exp:
+        print(f"    {f} is {got}, expected {exp}"); bad = True
+for name in ("logo.png", "logo@2x.png"):
+    if not (brand / name).exists():
+        print(f"    missing {brand / name}"); bad = True
+sys.exit(1 if bad else 0)
+PYBR
+fi
+
+# 5. Self-diff, when this IS the skill repo. A consuming repo has no templates/
+#    to compare against, but the skill repo carries them — and a second labeler
+#    drifted into its own .github/ and survived months of prose review because
+#    nothing ever ran this diff.
+TMPL=$(ls -d plugins/*/skills/*/templates 2>/dev/null | head -1)
+if [ -n "$TMPL" ] && [ -d "$TMPL/.github" ]; then
+  # SEMANTIC comparison, not `diff`: block-vs-flow YAML sequences and quoted keys
+  # are not drift, and a check that cries wolf over formatting gets ignored. Parsed
+  # structures must match; comments are reported separately as a warning, because a
+  # stale comment is how the corrected autolabeler vocabulary failed to propagate.
+  python3 - "$TMPL/.github" .github <<'PYSD' || FAIL "this repo's .github/ diverges from its own templates/ (see Mode 4 sanctioned adaptations)"
+import pathlib, sys, yaml
+
+tmpl, repo = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+# Files this repo legitimately adapts; every other difference is drift.
+SANCTIONED = {"release_drafter.yml"}   # reads a plugin manifest, not an HA one
+bad = False
+for tf in sorted(tmpl.rglob("*.yml")):
+    rel = tf.relative_to(tmpl)
+    if rel.name in SANCTIONED:
+        continue
+    rf = repo / rel
+    if not rf.exists():
+        print(f"    missing: .github/{rel}"); bad = True; continue
+    if yaml.safe_load(tf.read_text()) != yaml.safe_load(rf.read_text()):
+        print(f"    diverges: .github/{rel}"); bad = True
+sys.exit(1 if bad else 0)
+PYSD
 fi
 
 [ "$fail" = 0 ] && { echo "✅ skill audit passed"; exit 0; } || { echo "skill audit FAILED"; exit 1; }
