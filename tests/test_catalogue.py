@@ -11,7 +11,11 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
-from custom_components.lego.const import CONF_CATALOGUE, CONF_CATALOGUE_RICH
+from custom_components.lego.const import (
+    CONF_CATALOGUE,
+    CONF_CATALOGUE_INTERVAL,
+    CONF_CATALOGUE_RICH,
+)
 
 from .conftest import SETS_CSV_URL, BricksetServer, setup_integration
 
@@ -141,4 +145,25 @@ async def test_refresh_is_skipped_while_fresh(
     assert catalogue.stale is False
 
     freezer.tick(timedelta(days=8))
+    assert catalogue.stale is True
+
+
+async def test_refresh_interval_is_configurable(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A shorter interval makes the index stale sooner than the weekly default."""
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        options={**mock_config_entry.options, CONF_CATALOGUE_INTERVAL: 2},
+    )
+    catalogue = await _seed(hass, mock_config_entry)
+
+    freezer.tick(timedelta(days=1))
+    assert catalogue.stale is False
+
+    freezer.tick(timedelta(days=1))
     assert catalogue.stale is True

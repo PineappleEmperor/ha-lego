@@ -16,10 +16,12 @@ from .api import BricksetClient
 from .catalogue import SetCatalogue
 from .const import (
     CONF_CATALOGUE,
+    CONF_CATALOGUE_INTERVAL,
     CONF_CATALOGUE_RICH,
     CONF_DAILY_CALL_BUDGET,
     CONF_USER_HASH,
     DEFAULT_CATALOGUE,
+    DEFAULT_CATALOGUE_INTERVAL_DAYS,
     DEFAULT_CATALOGUE_RICH,
     DEFAULT_DAILY_CALL_BUDGET,
     DOMAIN,
@@ -70,7 +72,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
     catalogue: SetCatalogue | None = None
     if entry.options.get(CONF_CATALOGUE, DEFAULT_CATALOGUE):
         rich = entry.options.get(CONF_CATALOGUE_RICH, DEFAULT_CATALOGUE_RICH)
-        catalogue = SetCatalogue(hass, async_get_clientsession(hass))
+        catalogue = SetCatalogue(
+            hass,
+            async_get_clientsession(hass),
+            entry.options.get(CONF_CATALOGUE_INTERVAL, DEFAULT_CATALOGUE_INTERVAL_DAYS),
+        )
         await catalogue.async_load(rich=rich)
 
     collection = LegoCollectionCoordinator(hass, entry, client, quota, catalogue)

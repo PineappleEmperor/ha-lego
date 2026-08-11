@@ -17,7 +17,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    CATALOGUE_REFRESH_DAYS,
+    DEFAULT_CATALOGUE_INTERVAL_DAYS,
     EXCLUDED_ROOT_THEMES,
     SETS_CSV_URL,
     STORAGE_KEY,
@@ -91,10 +91,16 @@ def _parse(sets_csv: bytes, themes_csv: bytes, rich: bool) -> dict[str, list[Any
 class SetCatalogue:
     """Rebrickable's set list plus the Brickset IDs seen so far."""
 
-    def __init__(self, hass: HomeAssistant, session: aiohttp.ClientSession) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        session: aiohttp.ClientSession,
+        interval_days: int = DEFAULT_CATALOGUE_INTERVAL_DAYS,
+    ) -> None:
         """Initialise an empty catalogue."""
         self._hass = hass
         self._session = session
+        self._interval = timedelta(days=interval_days)
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self._sets: dict[str, list[Any]] = {}
         self._ids: dict[str, int] = {}
@@ -155,8 +161,7 @@ class SetCatalogue:
         """Whether the index is missing or older than the refresh interval."""
         if not self._sets or self._fetched is None:
             return True
-        age = dt_util.now().date() - self._fetched
-        return age >= timedelta(days=CATALOGUE_REFRESH_DAYS)
+        return dt_util.now().date() - self._fetched >= self._interval
 
     async def async_refresh(self, *, rich: bool) -> bool:
         """Download the set list, returning whether the index changed."""

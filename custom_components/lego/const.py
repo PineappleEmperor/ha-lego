@@ -22,6 +22,7 @@ CONF_FEEDS_INTERVAL: Final = "feeds_interval_hours"
 CONF_DAILY_CALL_BUDGET: Final = "daily_call_budget"
 CONF_CATALOGUE: Final = "catalogue"
 CONF_CATALOGUE_RICH: Final = "catalogue_rich"
+CONF_CATALOGUE_INTERVAL: Final = "catalogue_interval"
 
 REGIONS: Final = ["UK", "US", "CA", "DE"]
 REGION_CURRENCY: Final = {"UK": "GBP", "US": "USD", "CA": "CAD", "DE": "EUR"}
@@ -51,9 +52,11 @@ THEMES_CSV_URL: Final = "https://cdn.rebrickable.com/media/downloads/themes.csv.
 # exactly like sets; Brickset does not carry most of them.
 EXCLUDED_ROOT_THEMES: Final = frozenset({"Gear", "Books"})
 
-CATALOGUE_REFRESH_DAYS: Final = 7
 DEFAULT_CATALOGUE: Final = True
 DEFAULT_CATALOGUE_RICH: Final = True
+DEFAULT_CATALOGUE_INTERVAL_DAYS: Final = 7
+MIN_CATALOGUE_INTERVAL_DAYS: Final = 1
+MAX_CATALOGUE_INTERVAL_DAYS: Final = 90
 
 STORAGE_KEY: Final = "lego_catalogue"
 STORAGE_VERSION: Final = 1

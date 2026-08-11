@@ -294,12 +294,14 @@ async def test_options_flow(
             CONF_DAILY_CALL_BUDGET: 50,
             "catalogue": True,
             "catalogue_rich": True,
+            "catalogue_interval": 14,
         },
     )
     await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert mock_config_entry.options[CONF_REGION] == "US"
+    assert mock_config_entry.options["catalogue_interval"] == 14
     # Blank watchlist entries are dropped rather than creating an empty sensor.
     assert mock_config_entry.options[CONF_WATCHLIST] == ["10305-1"]
 

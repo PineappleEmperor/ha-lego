@@ -129,9 +129,40 @@ because the rows themselves differ.
 
 ## Refresh
 
-Weekly, with a conditional `GET` (`ETag`) so an unchanged file costs a round trip
-and no download. Seeding happens in a background task, so a first setup does not
-wait on half a megabyte.
+Weekly by default, configurable from 1 to 90 days. Seeding happens in a background
+task, so a first setup does not wait on half a megabyte.
+
+Measured 2026-08-11:
+
+| | |
+|---|---|
+| `Last-Modified` | rebuilt nightly |
+| Growth | +24 rows over 5 days, so roughly 5 sets a day |
+| `ETag` | `"6a79f7df-7cdb4"` — nginx `hex(mtime)-hex(size)` |
+| Conditional `GET` | returns `304` when the file has not been rebuilt |
+
+The `ETag` is derived from the modification time, not the content, so it changes
+on every nightly rebuild whether or not any set changed. A conditional `GET` still
+costs nothing when they skip a night, but it cannot be relied on to avoid the
+download. Weekly is therefore ~511 KB a week; daily would be seven times that, to
+save at most a handful of billed lookups.
+
+### There is no delta to fetch
+
+Three separate reasons, all measured:
+
+| | |
+|---|---|
+| Range requests | Supported — `Accept-Ranges: bytes`, a `206` confirmed |
+| gzip structure | **Single member.** One deflate stream, so a byte suffix cannot be decompressed without the preceding 2.7 MB |
+| Row order | Roughly lexicographic by `set_num`, not append-ordered — new sets are inserted throughout, so there is no contiguous "new" region to fetch |
+
+Rebrickable publishes full snapshots only; there is no incremental feed. Their REST
+API can filter by year, but it needs a per-user key, which is the registration this
+whole approach exists to avoid.
+
+So a refresh is a full download or nothing. That is the reason the interval is a
+user option rather than something clever.
 
 Failure is non-fatal at every step: a failed download keeps the previous catalogue,
 and an absent catalogue falls back to live lookups, which is exactly today's

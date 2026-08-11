@@ -80,8 +80,9 @@ Reachable via **Configure** on the integration entry.
 | Collection refresh interval | 6 h | How often owned and wanted sets are re-fetched. |
 | New release refresh interval | 12 h | How often watched themes are checked. |
 | Daily call budget | 80 | Polling stops at this many calls, leaving headroom for manual actions. |
-| Keep a local set index | on | Downloads Rebrickable's set list weekly. Costs no Brickset calls and makes set lookups free. |
+| Keep a local set index | on | Downloads Rebrickable's set list. Costs no Brickset calls and makes set lookups free. |
 | Include set names in the index | on | Needed to search by name. Roughly 1.8 MB on disk instead of 450 KB. |
+| Set index refresh interval | 7 days | How often the list is re-downloaded (1–90 days). A set missing from the index still works; it just costs one lookup. |
 
 ## Data updates
 
@@ -95,9 +96,11 @@ integration polls on two schedules and self-limits:
   tally with Brickset's own count, which also catches calls made by other tools sharing
   the key.
 
-The local set index refreshes weekly from Rebrickable's public CSV, which is not a
-Brickset endpoint and costs nothing from the daily allowance. It seeds in the background
-after setup, so a first start does not wait on the download.
+The local set index refreshes every 7 days by default from Rebrickable's public CSV,
+which is not a Brickset endpoint and costs nothing from the daily allowance. It seeds in
+the background after setup, so a first start does not wait on the download. The interval
+is configurable; Rebrickable publishes whole snapshots rather than deltas, so a refresh
+is always a full 511 KB download.
 
 The options dialog shows the estimated calls/day for your current settings. When the
 budget is spent, polling pauses and entities keep serving the last successful poll rather
