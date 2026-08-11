@@ -20,6 +20,9 @@ CONF_WATCHLIST: Final = "watchlist"
 CONF_COLLECTION_INTERVAL: Final = "collection_interval_hours"
 CONF_FEEDS_INTERVAL: Final = "feeds_interval_hours"
 CONF_DAILY_CALL_BUDGET: Final = "daily_call_budget"
+CONF_CATALOGUE: Final = "catalogue"
+CONF_CATALOGUE_RICH: Final = "catalogue_rich"
+CONF_CATALOGUE_INTERVAL: Final = "catalogue_interval"
 
 REGIONS: Final = ["UK", "US", "CA", "DE"]
 REGION_CURRENCY: Final = {"UK": "GBP", "US": "USD", "CA": "CAD", "DE": "EUR"}
@@ -42,6 +45,22 @@ MAX_INTERVAL_HOURS: Final = 168
 
 PAGE_SIZE: Final = 500
 
+SETS_CSV_URL: Final = "https://cdn.rebrickable.com/media/downloads/sets.csv.gz"
+THEMES_CSV_URL: Final = "https://cdn.rebrickable.com/media/downloads/themes.csv.gz"
+
+# Rebrickable files keyrings, lunchboxes and storybooks under these, numbered
+# exactly like sets; Brickset does not carry most of them.
+EXCLUDED_ROOT_THEMES: Final = frozenset({"Gear", "Books"})
+
+DEFAULT_CATALOGUE: Final = True
+DEFAULT_CATALOGUE_RICH: Final = True
+DEFAULT_CATALOGUE_INTERVAL_DAYS: Final = 7
+MIN_CATALOGUE_INTERVAL_DAYS: Final = 1
+MAX_CATALOGUE_INTERVAL_DAYS: Final = 90
+
+STORAGE_KEY: Final = "lego_catalogue"
+STORAGE_VERSION: Final = 1
+
 MIN_TIME_BETWEEN_QUOTA_CHECKS: Final = timedelta(minutes=30)
 
 EVENT_NEW_SET: Final = f"{DOMAIN}_new_set"
@@ -51,6 +70,7 @@ SERVICE_SET_COLLECTION: Final = "set_collection"
 SERVICE_ADD_WATCH: Final = "add_watch"
 SERVICE_REMOVE_WATCH: Final = "remove_watch"
 SERVICE_SEARCH_SETS: Final = "search_sets"
+SERVICE_REFRESH_CATALOGUE: Final = "refresh_catalogue"
 
 ATTR_CONFIG_ENTRY_ID: Final = "config_entry_id"
 ATTR_SET_NUMBER: Final = "set_number"

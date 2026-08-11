@@ -11,14 +11,24 @@ why it stays the primary source rather than a mirror.
 
 Billed: 100 `getSets` calls per key per day. Nothing else counts.
 
-## Rebrickable — planned
+## Rebrickable — partly in use
 
-Two jobs, one API key plus a user token:
+Two jobs, and they turned out to need very different things.
 
-- The **set catalogue** as a nightly CSV, free of any API call, so resolving a
-  set number costs nothing. See [catalogue.md](catalogue.md).
-- **MOCs buildable from parts you own**, and designers to follow. No other
-  source knows this; it needs a part inventory, not a set list.
+**The set catalogue — done, and keyless.** A nightly CSV from the CDN, no API
+key, no registration, no billed call. Shipped in 0.4.0 as the local index. See
+[catalogue.md](catalogue.md). The original plan assumed this needed the API; it
+does not, which is why it could ship without asking the user for anything.
+
+**MOCs buildable from parts you own — still planned, and does need a key.** Plus
+designers to follow. No other source knows this, and the CSV cannot answer it: it
+needs a part inventory, not a set list. That means an API key *and* a per-user
+token, so it belongs in its own config entry rather than being bolted onto the
+Brickset one.
+
+The split matters. Everything shipped so far asks the user for Brickset
+credentials only; MOC support is the first thing that would ask for a second
+account, and should stay optional on that basis.
 
 ## BrickLink — ruled out, 2026-08-07
 

@@ -24,6 +24,7 @@ async def async_get_config_entry_diagnostics(
     collection = runtime.collection
     feeds = runtime.feeds
     quota = runtime.quota
+    catalogue = runtime.catalogue
     data = collection.data
 
     return {
@@ -65,6 +66,16 @@ async def async_get_config_entry_diagnostics(
                 },
             },
         },
+        "catalogue": (
+            {
+                "sets": catalogue.size,
+                "known_brickset_ids": catalogue.known_ids,
+                "fetched": catalogue.fetched.isoformat() if catalogue.fetched else None,
+                "stale": catalogue.stale,
+            }
+            if catalogue
+            else None
+        ),
         "summary": (
             {
                 "sets_owned": data.summary.sets_owned,
