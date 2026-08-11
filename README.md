@@ -84,6 +84,7 @@ Reachable via **Configure** on the integration entry.
 | Collection refresh interval | 6 h | How often owned and wanted sets are re-fetched. |
 | New release refresh interval | 12 h | How often watched themes are checked. |
 | Daily call budget | 80 | Polling stops at this many calls, leaving headroom for manual actions. |
+| Show the LEGO panel in the sidebar | on | A page for browsing your collection, your wishlist and new releases in the themes you follow. |
 | Keep a local set index | on | Downloads Rebrickable's set list. Costs no Brickset calls and makes set lookups free. |
 | Include set names in the index | on | Needed to search by name. Roughly 1.8 MB on disk instead of 450 KB. |
 | Set index refresh interval | 7 days | How often the list is re-downloaded (1–90 days). A set missing from the index still works; it just costs one lookup. |
@@ -136,6 +137,19 @@ remaining headroom.
 
 `lego.set_collection` spends a call only for a set no poll has returned; the local index
 remembers the Brickset ID of everything already seen.
+
+## The panel
+
+A **LEGO** entry appears in the sidebar unless you turn it off in options. It has two views:
+
+- **Home** — new releases in the themes you follow, your wishlist with release and
+  retirement dates, and your collection totals. Each row has a drag handle; the order is
+  remembered per Home Assistant user.
+- **Collection** — the full grid, with a search box that covers both your own sets and the
+  whole catalogue, so the same box that finds what you own also finds what you don't.
+
+Every card can mark a set owned or not owned. The panel reads only websocket commands, so
+browsing and searching cost no Brickset calls; only the ownership toggle writes.
 
 ### Searching without spending a call
 

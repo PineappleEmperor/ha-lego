@@ -13,3 +13,6 @@ htmlcov/
 .vscode/
 *.log
 device_map.md
+
+# Frontend build
+node_modules/
