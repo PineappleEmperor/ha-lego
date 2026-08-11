@@ -149,6 +149,12 @@
     },
     "search_needs_criteria": {
       "message": "Provide a query, theme or year to search for."
+    },
+    "catalogue_disabled": {
+      "message": "The local set index is turned off for this account. Turn it on in the integration options first."
+    },
+    "catalogue_unavailable": {
+      "message": "Could not download the set list. Check Home Assistant's internet access and try again."
     }
   },
   "services": {
@@ -237,6 +243,16 @@
         "limit": {
           "name": "Limit",
           "description": "Maximum number of sets to return."
+        }
+      }
+    },
+    "refresh_catalogue": {
+      "name": "Refresh set index",
+      "description": "Re-downloads the local LEGO set list now, rather than waiting for the next scheduled refresh. Uses no Brickset API calls.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Which Brickset account to refresh the index for."
         }
       }
     }

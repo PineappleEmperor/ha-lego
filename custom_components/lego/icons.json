@@ -21,6 +21,7 @@
     "set_collection": { "service": "mdi:playlist-edit" },
     "add_watch": { "service": "mdi:eye-plus" },
     "remove_watch": { "service": "mdi:eye-remove" },
-    "search_sets": { "service": "mdi:magnify" }
+    "search_sets": { "service": "mdi:magnify" },
+    "refresh_catalogue": { "service": "mdi:database-refresh" }
   }
 }

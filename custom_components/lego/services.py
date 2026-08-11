@@ -28,9 +28,12 @@ from .const import (
     ATTR_THEME,
     ATTR_WANTED,
     ATTR_YEAR,
+    CONF_CATALOGUE_RICH,
     CONF_WATCHLIST,
+    DEFAULT_CATALOGUE_RICH,
     DOMAIN,
     SERVICE_ADD_WATCH,
+    SERVICE_REFRESH_CATALOGUE,
     SERVICE_REMOVE_WATCH,
     SERVICE_SEARCH_SETS,
     SERVICE_SET_COLLECTION,
@@ -138,6 +141,29 @@ async def _async_resolve_set(entry: LegoConfigEntry, number: str) -> LegoSet:
             translation_placeholders={"set_number": number},
         )
     return matches[0]
+
+
+async def async_refresh_catalogue(call: ServiceCall) -> ServiceResponse:
+    """Re-download the local set index, ignoring how recently it was fetched."""
+    entry = _get_entry(call.hass, call)
+    catalogue = entry.runtime_data.catalogue
+    if catalogue is None:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="catalogue_disabled"
+        )
+
+    rich = entry.options.get(CONF_CATALOGUE_RICH, DEFAULT_CATALOGUE_RICH)
+    updated = await catalogue.async_refresh(rich=rich)
+    if not updated and not catalogue.loaded:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="catalogue_unavailable"
+        )
+
+    return {
+        "updated": updated,
+        "sets": catalogue.size,
+        "fetched": catalogue.fetched.isoformat() if catalogue.fetched else None,
+    }
 
 
 def _updated_watchlist(
@@ -249,4 +275,11 @@ def async_setup_services(hass: HomeAssistant) -> None:
         async_search_sets,
         SEARCH_SCHEMA,
         supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_REFRESH_CATALOGUE,
+        async_refresh_catalogue,
+        vol.Schema(ENTRY_SCHEMA),
+        supports_response=SupportsResponse.OPTIONAL,
     )

@@ -162,7 +162,27 @@ API can filter by year, but it needs a per-user key, which is the registration t
 whole approach exists to avoid.
 
 So a refresh is a full download or nothing. That is the reason the interval is a
-user option rather than something clever.
+user option, and why `lego.refresh_catalogue` exists — when a set is missing and
+you would rather not wait for the schedule, the honest answer is to fetch the file
+again.
+
+### A Rebrickable API key would not fix this
+
+Checked against their OpenAPI spec, 2026-08-11. `/api/v3/lego/sets/` accepts
+`page`, `page_size`, `theme_id`, `min_year`, `max_year`, `min_parts`, `max_parts`,
+`ordering` and `search`. There is **no** modified-since filter, so a key buys no
+delta endpoint.
+
+`min_year` does allow a cheap top-up — 1,227 sets dated 2026 and 3 dated 2027, so
+the current and next year is 4.4% of the catalogue in two requests at
+`page_size=1000`. But it misses retroactive edits to older records, and the rate
+limit is one request a second, so anything broader is slower than fetching the
+whole file.
+
+Not worth taking. The index currently asks the user for no account at all, and a
+key requirement is a poor trade for ~470 KB a week. If the planned MOC entry lands
+and a key exists anyway, a `min_year` top-up could be added opportunistically —
+never as a requirement. See [sources.md](sources.md).
 
 Failure is non-fatal at every step: a failed download keeps the previous catalogue,
 and an absent catalogue falls back to live lookups, which is exactly today's

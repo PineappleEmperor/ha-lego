@@ -132,6 +132,7 @@ remaining headroom.
 | `lego.add_watch` | Adds a set to the watchlist. |
 | `lego.remove_watch` | Removes a set from the watchlist. |
 | `lego.search_sets` | Searches Brickset and returns matches (response action). Costs one API call. |
+| `lego.refresh_catalogue` | Re-downloads the local set index now, whatever the interval says. Costs no API calls. |
 
 `lego.set_collection` spends a call only for a set no poll has returned; the local index
 remembers the Brickset ID of everything already seen.

@@ -8,15 +8,78 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.lego.const import (
+    CONF_CATALOGUE,
     CONF_WATCHLIST,
     DOMAIN,
     SERVICE_ADD_WATCH,
+    SERVICE_REFRESH_CATALOGUE,
     SERVICE_REMOVE_WATCH,
     SERVICE_SEARCH_SETS,
     SERVICE_SET_COLLECTION,
 )
 
 from .conftest import BricksetServer, make_set, setup_integration
+
+
+async def test_refresh_catalogue(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """A manual refresh re-downloads the index without spending a Brickset call."""
+    await setup_integration(hass, mock_config_entry)
+    await hass.async_block_till_done()
+    before = len(brickset.get_sets_calls)
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_REFRESH_CATALOGUE,
+        {"config_entry_id": mock_config_entry.entry_id},
+        blocking=True,
+        return_response=True,
+    )
+
+    assert response == {"updated": True, "sets": 2, "fetched": "2026-08-11"}
+    assert len(brickset.get_sets_calls) == before
+
+
+async def test_refresh_catalogue_ignores_the_interval(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """Asking by hand refreshes a fresh index, which is the point of asking."""
+    await setup_integration(hass, mock_config_entry)
+    await hass.async_block_till_done()
+    assert mock_config_entry.runtime_data.catalogue.stale is False
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_REFRESH_CATALOGUE,
+        {"config_entry_id": mock_config_entry.entry_id},
+        blocking=True,
+        return_response=True,
+    )
+
+    assert response["updated"] is True
+
+
+async def test_refresh_catalogue_needs_the_index_enabled(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """Refreshing an index the user turned off is a validation error, not a crash."""
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry, options={**mock_config_entry.options, CONF_CATALOGUE: False}
+    )
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_REFRESH_CATALOGUE,
+            {"config_entry_id": mock_config_entry.entry_id},
+            blocking=True,
+        )
+
+    assert err.value.translation_key == "catalogue_disabled"
 
 
 def _lookups(brickset: BricksetServer, since: int) -> list[str]:

@@ -70,6 +70,7 @@ SERVICE_SET_COLLECTION: Final = "set_collection"
 SERVICE_ADD_WATCH: Final = "add_watch"
 SERVICE_REMOVE_WATCH: Final = "remove_watch"
 SERVICE_SEARCH_SETS: Final = "search_sets"
+SERVICE_REFRESH_CATALOGUE: Final = "refresh_catalogue"
 
 ATTR_CONFIG_ENTRY_ID: Final = "config_entry_id"
 ATTR_SET_NUMBER: Final = "set_number"
