@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, CONF_USERNAME, Platform
@@ -10,6 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceEntry
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 
 from .api import BricksetClient
@@ -32,6 +34,9 @@ from .services import async_setup_services
 from .websocket import async_setup_websocket
 
 PLATFORMS: list[Platform] = [Platform.CALENDAR, Platform.SENSOR]
+
+# How often staleness is reconsidered, not how often the index is downloaded.
+CATALOGUE_CHECK_INTERVAL = timedelta(hours=6)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -94,14 +99,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
         catalogue=catalogue,
     )
 
-    # Seeding downloads half a megabyte, which setup must not wait on.
-    if catalogue is not None and catalogue.stale:
+    if catalogue is not None:
+        rich = entry.options.get(CONF_CATALOGUE_RICH, DEFAULT_CATALOGUE_RICH)
+
+        async def async_refresh_catalogue_if_stale(
+            _now: datetime | None = None,
+        ) -> None:
+            """Re-seed once the configured interval has elapsed."""
+            if catalogue.stale:
+                await catalogue.async_refresh(rich=rich)
+
+        # Seeding downloads half a megabyte, which setup must not wait on.
         entry.async_create_background_task(
-            hass,
-            catalogue.async_refresh(
-                rich=entry.options.get(CONF_CATALOGUE_RICH, DEFAULT_CATALOGUE_RICH)
-            ),
-            "lego_catalogue_refresh",
+            hass, async_refresh_catalogue_if_stale(), "lego_catalogue_refresh"
+        )
+        # An interval measured in days needs a tick; setup alone would only
+        # refresh on restart.
+        entry.async_on_unload(
+            async_track_time_interval(
+                hass, async_refresh_catalogue_if_stale, CATALOGUE_CHECK_INTERVAL
+            )
         )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

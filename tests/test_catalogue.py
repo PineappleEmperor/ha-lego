@@ -8,7 +8,10 @@ import aiohttp
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.lego.const import (
@@ -18,6 +21,11 @@ from custom_components.lego.const import (
 )
 
 from .conftest import SETS_CSV_URL, BricksetServer, setup_integration
+
+
+def _csv_requests(aioclient_mock: AiohttpClientMocker) -> int:
+    """Count how many times the Rebrickable set list has been fetched."""
+    return sum(1 for call in aioclient_mock.mock_calls if str(call[1]) == SETS_CSV_URL)
 
 
 async def _seed(hass: HomeAssistant, entry: MockConfigEntry):
@@ -146,6 +154,25 @@ async def test_refresh_is_skipped_while_fresh(
 
     freezer.tick(timedelta(days=8))
     assert catalogue.stale is True
+
+
+async def test_the_index_refreshes_without_a_restart(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """An interval in days needs a tick; setup alone would only refresh on restart."""
+    catalogue = await _seed(hass, mock_config_entry)
+    downloads = _csv_requests(aioclient_mock)
+
+    freezer.tick(timedelta(days=8))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert _csv_requests(aioclient_mock) > downloads
+    assert catalogue.stale is False
 
 
 async def test_refresh_interval_is_configurable(

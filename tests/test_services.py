@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.lego.const import (
     CONF_CATALOGUE,
@@ -18,7 +20,7 @@ from custom_components.lego.const import (
     SERVICE_SET_COLLECTION,
 )
 
-from .conftest import BricksetServer, make_set, setup_integration
+from .conftest import SETS_CSV_URL, BricksetServer, make_set, setup_integration
 
 
 async def test_refresh_catalogue(
@@ -80,6 +82,28 @@ async def test_refresh_catalogue_needs_the_index_enabled(
         )
 
     assert err.value.translation_key == "catalogue_disabled"
+
+
+async def test_refresh_catalogue_reports_a_failed_download(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """An unreachable CDN with nothing cached is an error the user can act on."""
+    aioclient_mock.get(SETS_CSV_URL, exc=aiohttp.ClientError("boom"))
+    BricksetServer(aioclient_mock)
+    await setup_integration(hass, mock_config_entry)
+    await hass.async_block_till_done()
+
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_REFRESH_CATALOGUE,
+            {"config_entry_id": mock_config_entry.entry_id},
+            blocking=True,
+        )
+
+    assert err.value.translation_key == "catalogue_unavailable"
 
 
 def _lookups(brickset: BricksetServer, since: int) -> list[str]:
