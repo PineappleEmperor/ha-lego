@@ -304,12 +304,6 @@ class BricksetServer:
         return self._ok({})
 
 
-@pytest.fixture(autouse=True)
-def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
-    """Load custom_components in every test."""
-    return
-
-
 @pytest.fixture
 def brickset(aioclient_mock: AiohttpClientMocker) -> BricksetServer:
     """Return the fake Brickset API."""

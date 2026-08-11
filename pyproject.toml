@@ -13,7 +13,13 @@ line-length = 88
 src = ["custom_components"]
 
 [tool.ruff.format]
-exclude = ["scripts/manifest_gate.py", "tests/test_manifest_gate.py"]
+exclude = [
+  "conftest.py",
+  "scripts/commit_summary.py",
+  "scripts/manifest_gate.py",
+  "tests/test_commit_summary.py",
+  "tests/test_manifest_gate.py",
+]
 
 [tool.ruff.lint]
 select = [
@@ -59,6 +65,13 @@ ignore = [
 # so they can be diffed against the canonical copies.
 "scripts/manifest_gate.py" = ["T20", "INP001", "D103", "E501", "PLR0911"]
 "tests/test_manifest_gate.py" = ["D100", "D103", "E501", "PT018", "INP001"]
+# The first import claims the name `custom_components` before the HA test plugin
+# binds it, so isort must not reorder it.
+"conftest.py" = ["I001", "PT022", "INP001"]
+"scripts/commit_summary.py" = [
+  "T20", "INP001", "D103", "D401", "E501", "PLR0911", "PLW2901", "SIM115",
+]
+"tests/test_commit_summary.py" = ["D100", "D103", "E501", "INP001"]
 
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
