@@ -20,6 +20,7 @@ CONF_WATCHLIST: Final = "watchlist"
 CONF_COLLECTION_INTERVAL: Final = "collection_interval_hours"
 CONF_FEEDS_INTERVAL: Final = "feeds_interval_hours"
 CONF_DAILY_CALL_BUDGET: Final = "daily_call_budget"
+CONF_PANEL: Final = "panel"
 CONF_CATALOGUE: Final = "catalogue"
 CONF_CATALOGUE_RICH: Final = "catalogue_rich"
 CONF_CATALOGUE_INTERVAL: Final = "catalogue_interval"
@@ -60,6 +61,15 @@ MAX_CATALOGUE_INTERVAL_DAYS: Final = 90
 
 STORAGE_KEY: Final = "lego_catalogue"
 STORAGE_VERSION: Final = 1
+
+DEFAULT_PANEL: Final = True
+PANEL_URL_PATH: Final = "lego"
+PANEL_MODULE_URL: Final = "/lego_panel/lego-panel.js"
+PANEL_COMPONENT: Final = "lego-panel"
+PANEL_STORAGE_KEY: Final = "lego_panel"
+PANEL_STORE: Final = "lego_panel_store"
+# Row ids the panel may order; unknown ids from a newer build are dropped.
+PANEL_ROWS: Final = ("themes", "wishlist", "collection")
 
 MIN_TIME_BETWEEN_QUOTA_CHECKS: Final = timedelta(minutes=30)
 

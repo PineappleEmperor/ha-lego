@@ -1,0 +1,40 @@
+name: Frontend build
+
+on:
+  push:
+    paths:
+      - "frontend/**"
+      - "custom_components/lego/panel/**"
+      - ".github/workflows/frontend_build.yml"
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "custom_components/lego/panel/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install and type-check
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run check
+
+      - name: Build bundle
+        working-directory: frontend
+        run: npm run build
+
+      # HACS ships the repo as-is, so the built bundle is committed. Nothing else
+      # notices when it drifts from its source: the stale bundle still runs.
+      - name: Verify committed bundle matches build
+        run: git diff --exit-code custom_components/lego/panel/lego-panel.js

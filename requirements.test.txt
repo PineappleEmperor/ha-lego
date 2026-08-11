@@ -16,3 +16,10 @@ pytest-homeassistant-custom-component==0.13.354
 # freezegun beyond what the plugin already pins).
 ruff==0.15.18
 pyright==1.1.409
+
+# The panel makes `frontend` a manifest dependency, and the frontend component
+# has its own pip requirement that installing homeassistant does not pull in.
+# Without it every setup test fails with "No module named 'hass_frontend'".
+# Read the pin from homeassistant/components/frontend/manifest.json whenever the
+# pytest-homeassistant-custom-component pin above moves.
+home-assistant-frontend==20260729.5

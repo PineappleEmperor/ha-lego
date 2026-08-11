@@ -27,8 +27,10 @@ from .const import (
     DEFAULT_CATALOGUE_RICH,
     DEFAULT_DAILY_CALL_BUDGET,
     DOMAIN,
+    PANEL_STORE,
 )
 from .coordinator import LegoCollectionCoordinator, LegoFeedsCoordinator
+from .panel import PanelStore, async_refresh_panel, async_setup_panel_static
 from .quota import QuotaManager
 from .services import async_setup_services
 from .websocket import async_setup_websocket
@@ -56,9 +58,13 @@ type LegoConfigEntry = ConfigEntry[LegoRuntimeData]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the integration's actions and websocket commands."""
+    """Register the integration's actions, websocket commands and panel bundle."""
     async_setup_services(hass)
     async_setup_websocket(hass)
+    store = PanelStore(hass)
+    await store.async_load()
+    hass.data[PANEL_STORE] = store
+    await async_setup_panel_static(hass)
     return True
 
 
@@ -122,6 +128,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
         )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await async_refresh_panel(hass)
     entry.async_on_unload(entry.add_update_listener(async_update_options))
     return True
 
@@ -134,7 +141,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> boo
         await entry.runtime_data.feeds.async_shutdown()
         if entry.runtime_data.catalogue is not None:
             await entry.runtime_data.catalogue.async_save_if_dirty()
+        await async_refresh_panel(hass)
     return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> None:
+    """Drop the sidebar panel once the last entry is gone."""
+    await async_refresh_panel(hass)
 
 
 async def async_update_options(hass: HomeAssistant, entry: LegoConfigEntry) -> None:

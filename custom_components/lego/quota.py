@@ -1,9 +1,8 @@
-"""Daily call budget tracking for the Brickset API.
+"""Daily call budget tracking for the Brickset API."""
 
-Brickset allows 100 getSets calls per key per day and counts no other method.
-The manager keeps a local tally between polls and reconciles it against the
-authoritative server-side figure from getKeyUsageStats.
-"""
+# Brickset allows 100 getSets calls per key per day and counts no other method,
+# so the tally kept between polls is reconciled against the authoritative
+# server-side figure from getKeyUsageStats.
 
 from __future__ import annotations
 

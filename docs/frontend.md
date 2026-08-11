@@ -1,4 +1,25 @@
-# Frontend (proposal)
+# Frontend
+
+The panel shipped in 0.5.0. What follows is the reasoning it was built on; the
+cards are still to come.
+
+## What exists
+
+`frontend/src/panel.ts` is a single Lit element, built by esbuild to the committed
+`custom_components/lego/panel/lego-panel.js`. HACS ships the repo as-is with no
+build step on the user's machine, so the bundle has to be in the repo — and a
+stale bundle is invisible, because it still runs. `frontend_build.yml` rebuilds
+from source on every PR touching either, and fails if the result differs from the
+committed file.
+
+Rows on the home view are reorderable by drag, saved per Home Assistant user
+through `lego/panel_config/set`. Keying by user costs nothing over keying by
+install and avoids a migration if two people ever share a dashboard.
+
+Data comes from `lego/dashboard`, `lego/collection` and `lego/search` — never from
+entity state. That is what makes a card extractable later.
+
+
 
 An optional panel in this repository first, with cards extracted to their own
 repository once the pieces have earned it.

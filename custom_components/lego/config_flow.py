@@ -33,6 +33,7 @@ from .const import (
     CONF_COLLECTION_INTERVAL,
     CONF_DAILY_CALL_BUDGET,
     CONF_FEEDS_INTERVAL,
+    CONF_PANEL,
     CONF_REGION,
     CONF_THEMES,
     CONF_USER_HASH,
@@ -44,6 +45,7 @@ from .const import (
     DEFAULT_COLLECTION_INTERVAL_HOURS,
     DEFAULT_DAILY_CALL_BUDGET,
     DEFAULT_FEEDS_INTERVAL_HOURS,
+    DEFAULT_PANEL,
     DEFAULT_REGION,
     DOMAIN,
     MAX_CATALOGUE_INTERVAL_DAYS,
@@ -286,6 +288,7 @@ class LegoOptionsFlow(OptionsFlow):
                 CONF_COLLECTION_INTERVAL: int(user_input[CONF_COLLECTION_INTERVAL]),
                 CONF_FEEDS_INTERVAL: int(user_input[CONF_FEEDS_INTERVAL]),
                 CONF_DAILY_CALL_BUDGET: int(user_input[CONF_DAILY_CALL_BUDGET]),
+                CONF_PANEL: user_input[CONF_PANEL],
                 CONF_CATALOGUE: user_input[CONF_CATALOGUE],
                 CONF_CATALOGUE_RICH: user_input[CONF_CATALOGUE_RICH],
                 CONF_CATALOGUE_INTERVAL: int(user_input[CONF_CATALOGUE_INTERVAL]),
@@ -347,6 +350,9 @@ class LegoOptionsFlow(OptionsFlow):
                         unit_of_measurement="h",
                     )
                 ),
+                vol.Required(
+                    CONF_PANEL, default=options.get(CONF_PANEL, DEFAULT_PANEL)
+                ): BooleanSelector(),
                 vol.Required(
                     CONF_CATALOGUE,
                     default=options.get(CONF_CATALOGUE, DEFAULT_CATALOGUE),
