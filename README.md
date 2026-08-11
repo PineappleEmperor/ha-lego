@@ -36,6 +36,10 @@ anniversaries.
 | Brickset API v3 | Owned/wanted collection, set catalogue, LEGO.com RRP and availability dates, collection writes |
 | Rebrickable set list | The public CSV of every LEGO set, used as a local index so searching and checking a set number costs no Brickset calls |
 
+Rebrickable's part-level features — MOCs buildable from the parts you own, and designers
+to follow — need a Rebrickable API key and user token, so they are planned as a separate,
+optional config entry under this same integration. The set list above needs neither.
+
 ## Installation
 
 ### HACS (recommended)
