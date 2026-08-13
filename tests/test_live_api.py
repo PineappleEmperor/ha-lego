@@ -162,23 +162,41 @@ async def test_theme_still_accepts_a_comma_separated_list() -> None:
     )
 
 
-async def test_the_minifig_collection_reports_its_shape() -> None:
-    """Nothing here parses minifigs yet, so this exists to learn the format.
+async def test_the_minifig_collection_keeps_its_shape() -> None:
+    """Nothing parses minifigs yet, so this records the shape a feature would read.
 
-    A wrong parameter fails with Brickset's own message, which is the fastest
-    way to discover what the method wants. The keys are printed so the shape
-    lands in the run log rather than in somebody's memory.
+    Brickset splits ownership into what came inside owned sets and what was
+    bought loose, which is a truer count than the minifig slots this integration
+    currently sums from set records. It also lowercases the number it echoes
+    back, so anything matching on it has to fold case.
     """
     async with aiohttp.ClientSession() as session:
         payload = await _post(session, "getMinifigCollection", {"owned": 1})
 
     figs = payload.get("minifigs") or []
     print(f"\nminifigs owned: {payload.get('matches')}")  # noqa: T201
-    if figs:
-        print(f"record keys: {sorted(figs[0])}")  # noqa: T201
-        print(f"first record: {json.dumps(figs[0], indent=2)[:600]}")  # noqa: T201
-    else:
-        print("none owned; add a few to the test account to learn the record shape")  # noqa: T201
+    if not figs:
+        pytest.skip(
+            "the test account owns no minifigs, so there is no record to check; "
+            "seed one with setMinifigCollection and a Brickset minifig number"
+        )
 
-    for key in ("status", "matches"):
-        assert key in payload, f"getMinifigCollection no longer returns {key}"
+    print(f"record keys: {sorted(figs[0])}")  # noqa: T201
+    for key in (
+        "minifigNumber",
+        "name",
+        "category",
+        "ownedInSets",
+        "ownedLoose",
+        "ownedTotal",
+        "wanted",
+    ):
+        assert key in figs[0], f"the minifig record no longer carries {key}"
+
+    for fig in figs:
+        assert fig["minifigNumber"] == fig["minifigNumber"].lower(), (
+            "Brickset used to echo the number in lower case; matching depends on it"
+        )
+        assert fig["ownedTotal"] == fig["ownedInSets"] + fig["ownedLoose"], (
+            f"{fig['minifigNumber']}: ownedTotal no longer sums the two halves"
+        )
