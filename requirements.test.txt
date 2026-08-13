@@ -14,7 +14,7 @@ pytest-homeassistant-custom-component==0.13.354
 
 # Add integration-specific test deps below (e.g. a fake transport, respx,
 # freezegun beyond what the plugin already pins).
-ruff==0.15.18
+ruff==0.16.2
 pyright==1.1.409
 
 # The panel makes `frontend` a manifest dependency, and the frontend component
