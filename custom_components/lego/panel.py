@@ -16,6 +16,7 @@ from .const import (
     DEFAULT_PANEL,
     DOMAIN,
     PANEL_COMPONENT,
+    PANEL_ICON_URL,
     PANEL_MODULE_URL,
     PANEL_ROWS,
     PANEL_STORAGE_KEY,
@@ -62,14 +63,14 @@ class PanelStore:
 
 
 async def async_setup_panel_static(hass: HomeAssistant) -> None:
-    """Serve the built panel bundle."""
+    """Serve the built panel bundle and the brand icon it uses for missing art."""
+    here = Path(__file__).parent
     await hass.http.async_register_static_paths(
         [
             StaticPathConfig(
-                PANEL_MODULE_URL,
-                str(Path(__file__).parent / "panel" / "lego-panel.js"),
-                False,
-            )
+                PANEL_MODULE_URL, str(here / "panel" / "lego-panel.js"), False
+            ),
+            StaticPathConfig(PANEL_ICON_URL, str(here / "brand" / "icon.png"), True),
         ]
     )
 
@@ -140,9 +141,17 @@ def dashboard_payload(entry: LegoConfigEntry, rows: list[str]) -> dict[str, Any]
     data = entry.runtime_data.collection.data
     region = entry.runtime_data.collection.region
     summary = data.summary if data else None
+    quota = entry.runtime_data.collection.quota
     return {
+        "entry_id": entry.entry_id,
         "rows": rows,
         "region": region,
+        "quota": {
+            "calls_today": quota.calls_today,
+            "budget": quota.budget,
+            "remaining": quota.remaining,
+            "refresh_cost": entry.runtime_data.collection.poll_cost,
+        },
         "stats": {
             "sets_owned": summary.sets_owned if summary else 0,
             "sets_distinct": summary.sets_distinct if summary else 0,

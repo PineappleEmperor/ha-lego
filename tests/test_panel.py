@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+from http import HTTPStatus
+
 from homeassistant.components import frontend
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from pytest_homeassistant_custom_component.typing import WebSocketGenerator
+from pytest_homeassistant_custom_component.typing import (
+    ClientSessionGenerator,
+    WebSocketGenerator,
+)
 
-from custom_components.lego.const import CONF_PANEL, PANEL_ROWS, PANEL_URL_PATH
+from custom_components.lego.const import (
+    CONF_PANEL,
+    PANEL_ICON_URL,
+    PANEL_ROWS,
+    PANEL_URL_PATH,
+)
 
 from .conftest import BricksetServer, setup_integration
 
@@ -35,6 +45,21 @@ async def test_panel_can_be_turned_off(
     assert PANEL_URL_PATH not in hass.data[frontend.DATA_PANELS]
 
 
+async def test_the_fallback_icon_is_served(
+    hass: HomeAssistant,
+    hass_client: ClientSessionGenerator,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Cards without art point at the brand icon, so it has to be reachable."""
+    await setup_integration(hass, mock_config_entry)
+
+    response = await (await hass_client()).get(PANEL_ICON_URL)
+
+    assert response.status == HTTPStatus.OK
+    assert response.content_type == "image/png"
+
+
 async def test_dashboard_returns_the_home_view(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
@@ -59,6 +84,11 @@ async def test_dashboard_returns_the_home_view(
     assert [item["set_number"] for item in result["wishlist"]] == ["10294-1"]
     assert list(result["themes"]) == ["Technic"]
     assert len(brickset.get_sets_calls) == before
+    # The panel writes through actions that require the entry id, so the payload
+    # has to carry it; without this the ownership toggle fails validation.
+    assert result["entry_id"] == mock_config_entry.entry_id
+    assert result["quota"]["refresh_cost"] == 2
+    assert result["quota"]["budget"] >= result["quota"]["calls_today"]
 
 
 async def test_dashboard_carries_dates_for_the_wishlist(

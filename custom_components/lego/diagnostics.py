@@ -52,7 +52,6 @@ async def async_get_config_entry_diagnostics(
                 ),
                 "owned_sets": len(data.owned) if data else 0,
                 "wanted_sets": len(data.wanted) if data else 0,
-                "watched_sets": sorted(data.watched) if data else [],
             },
             "feeds": {
                 "last_update_success": feeds.last_update_success,

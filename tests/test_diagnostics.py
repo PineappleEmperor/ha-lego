@@ -47,7 +47,6 @@ async def test_diagnostics_include_quota_and_coordinator_state(
     assert collection["last_update_success"] is True
     assert collection["owned_sets"] == 3
     assert collection["wanted_sets"] == 1
-    assert collection["watched_sets"] == ["10497-1"]
     assert collection["update_interval_hours"] == 1
 
     assert diagnostics["coordinators"]["feeds"]["themes"] == {"Technic": 2}

@@ -85,7 +85,7 @@ class LegoCalendarBase(LegoCollectionEntity, CalendarEntity):
 
 
 class LegoRetirementCalendar(LegoCalendarBase):
-    """LEGO.com exit dates for sets you own, want or watch."""
+    """LEGO.com exit dates for the sets you own or want."""
 
     _attr_translation_key = "retirements"
 
@@ -113,7 +113,7 @@ class LegoRetirementCalendar(LegoCalendarBase):
 
 
 class LegoReleaseCalendar(LegoCalendarBase):
-    """LEGO.com launch dates for wanted sets and watched themes."""
+    """LEGO.com launch dates for wanted sets and followed themes."""
 
     _attr_translation_key = "releases"
 
@@ -126,14 +126,11 @@ class LegoReleaseCalendar(LegoCalendarBase):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_releases"
 
     def _build_events(self, start: date, end: date) -> list[CalendarEvent]:
-        """Build a release event per wanted or watched-theme set."""
+        """Build a release event per wanted or followed-theme set."""
         region = self.region
         candidates: dict[str, LegoSet] = {}
         if self.coordinator.data is not None:
-            for lego_set in (
-                *self.coordinator.data.wanted,
-                *self.coordinator.data.watched.values(),
-            ):
+            for lego_set in self.coordinator.data.wanted:
                 candidates[lego_set.number] = lego_set
         for theme_sets in (self._feeds.data or {}).values():
             for lego_set in theme_sets:

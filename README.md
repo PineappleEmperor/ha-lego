@@ -81,8 +81,7 @@ Reachable via **Configure** on the integration entry.
 |--------|---------|-------|
 | Pricing region | from HA's country | Which LEGO.com market supplies prices and availability dates (`UK`, `US`, `CA`, `DE`). |
 | Themes to watch | none | Which themes to follow for new releases. However many you pick, they ride in one call per refresh. |
-| Set numbers to track individually | none | Which sets get a retirement countdown of their own, as full set numbers like `10497-1`. Called the watchlist below and in the actions. It is not your Brickset wishlist, which is tracked whatever you put here. |
-| Collection refresh interval | 1 h | How often owned and wanted sets are re-fetched. Each refresh costs two calls, or three if the watchlist holds a set you neither own nor want. |
+| Collection refresh interval | 1 h | How often owned and wanted sets are re-fetched. Each refresh costs two calls. |
 | New release refresh interval | 12 h | How often watched themes are checked. Each refresh costs one call. |
 | Daily call budget | 80 | How many calls polling may spend before it pauses, leaving headroom for anything you ask for by hand. |
 | Show the LEGO panel in the sidebar | on | Whether to add the sidebar page for browsing your collection, your wishlist and new releases. |
@@ -116,7 +115,7 @@ exceeded rather than failing at the API.
 | Sets wanted | Size of your Brickset wishlist. A `sets` attribute lists them, soonest to retire first with already-retired sets last, carrying your Brickset priority, and is kept out of the recorder. |
 | Collection value | Sum of LEGO.com RRP × quantity in the chosen region. |
 | Brickset calls today | Diagnostic; usage against the daily limit. |
-| Set *N* retires in | One per watchlist entry; days until retirement, full set data in attributes. |
+| Next wishlist retirement | Days until the soonest set on your wishlist leaves sale, with that set's full record in attributes. Sets already gone are excluded. |
 | Latest *theme* set | One per watched theme; newest set number, with details in attributes. |
 | Set retirements / releases / anniversaries | Three calendar entities. |
 
@@ -125,11 +124,9 @@ exceeded rather than failing at the API.
 | Action | What it does |
 |--------|--------------|
 | `lego.set_collection` | Marks a set owned/wanted, or updates quantity, rating or notes. |
-| `lego.add_watch` | Adds a set to the watchlist. |
-| `lego.remove_watch` | Removes a set from the watchlist. |
 | `lego.search_sets` | Searches Brickset and returns matches (response action). Costs one API call. |
 | `lego.refresh_catalogue` | Re-downloads the local set index now, whatever the interval says. Costs no API calls. |
-| `lego.refresh_collection` | Polls Brickset now instead of waiting for the interval. Costs 2 calls, or 3 with a watchlist, and refuses if the budget would be exceeded. |
+| `lego.refresh_collection` | Polls Brickset now instead of waiting for the interval. Costs 2 calls, and refuses if the budget would be exceeded. |
 
 `lego.set_collection` spends a call only for a set no poll has returned; the local index
 remembers the Brickset ID of everything already seen.
@@ -139,8 +136,7 @@ remembers the Brickset ID of everything already seen.
 Brickset allows **100 `getSets` calls per API key per day**; no other method counts. The
 integration polls on two schedules and self-limits:
 
-- **Collection** (default every 1 h): one call for owned sets, one for wanted, plus one
-  more if the watchlist contains sets in neither list.
+- **Collection** (default every 1 h): one call for owned sets and one for wanted.
 - **Themes** (default every 12 h): one call for all of them, comma joined. A theme with
   no releases this year is confirmed separately, which costs one more.
 - `getKeyUsageStats` does not count against the 100. It is polled at most every 30

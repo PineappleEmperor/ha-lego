@@ -20,7 +20,6 @@ from .const import (
     CONF_FEEDS_INTERVAL,
     CONF_REGION,
     CONF_THEMES,
-    CONF_WATCHLIST,
     DEFAULT_COLLECTION_INTERVAL_HOURS,
     DEFAULT_FEEDS_INTERVAL_HOURS,
     DEFAULT_REGION,
@@ -51,14 +50,18 @@ class CollectionData:
 
     owned: list[LegoSet] = field(default_factory=list)
     wanted: list[LegoSet] = field(default_factory=list)
-    watched: dict[str, LegoSet] = field(default_factory=dict)
     summary: CollectionSummary = field(default_factory=CollectionSummary)
+
+    @property
+    def wanted_by_number(self) -> dict[str, LegoSet]:
+        """Return the wishlist keyed by set number."""
+        return {lego_set.number: lego_set for lego_set in self.wanted}
 
     @property
     def all_sets(self) -> dict[str, LegoSet]:
         """Return every known set keyed by set number."""
         merged: dict[str, LegoSet] = {}
-        for lego_set in (*self.owned, *self.wanted, *self.watched.values()):
+        for lego_set in (*self.owned, *self.wanted):
             merged[lego_set.number] = lego_set
         return merged
 
@@ -150,7 +153,7 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
 
 
 class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
-    """Poll the signed-in user's owned, wanted and watched sets."""
+    """Poll the signed-in user's owned and wanted sets."""
 
     def __init__(
         self,
@@ -175,23 +178,15 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
         )
 
     @property
-    def watchlist(self) -> list[str]:
-        """Return the set numbers the user asked to track individually."""
-        return list(self.config_entry.options.get(CONF_WATCHLIST, []))
-
-    @property
     def poll_cost(self) -> int:
         """Return the billed calls one refresh would spend."""
-        # Owned and wanted are one call each until a list passes a page, and the
-        # watchlist adds one only for sets neither list already carries.
+        # Owned and wanted are one call each until a list passes a page.
         if self.data is None:
             return 2
         pages = math.ceil(len(self.data.owned) / PAGE_SIZE) + math.ceil(
             len(self.data.wanted) / PAGE_SIZE
         )
-        known = {lego_set.number for lego_set in (*self.data.owned, *self.data.wanted)}
-        extra = 1 if any(number not in known for number in self.watchlist) else 0
-        return max(pages, 2) + extra
+        return max(pages, 2)
 
     def apply_collection_change(
         self,
@@ -229,43 +224,26 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
         if status.wanted:
             wanted.append(lego_set)
 
-        watched = dict(self.data.watched)
-        if lego_set.number in watched:
-            watched[lego_set.number] = lego_set
-
         self.async_set_updated_data(
             CollectionData(
                 owned=owned,
                 wanted=wanted,
-                watched=watched,
                 summary=CollectionSummary.from_sets(owned, wanted, self.region),
             )
         )
 
     async def _fetch(self) -> CollectionData:
-        """Fetch owned, wanted and watched sets."""
+        """Fetch owned and wanted sets."""
         owned = await self.client.get_all_sets({"owned": 1, "extendedData": 1})
         wanted = await self.client.get_all_sets({"wanted": 1, "extendedData": 1})
 
-        known = {lego_set.number: lego_set for lego_set in (*owned, *wanted)}
-        watched = {
-            number: known[number] for number in self.watchlist if number in known
-        }
-        missing = [number for number in self.watchlist if number not in known]
-        if missing:
-            for lego_set in await self.client.get_sets(
-                {"setNumber": ",".join(missing), "extendedData": 1}
-            ):
-                watched[lego_set.number] = lego_set
-
         if self.catalogue is not None:
-            self.catalogue.remember([*owned, *wanted, *watched.values()])
+            self.catalogue.remember([*owned, *wanted])
             await self.catalogue.async_save_if_dirty()
 
         data = CollectionData(
             owned=owned,
             wanted=wanted,
-            watched=watched,
             summary=CollectionSummary.from_sets(owned, wanted, self.region),
         )
         self._fire_wanted_events(data)

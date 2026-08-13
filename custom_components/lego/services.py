@@ -13,7 +13,7 @@ from homeassistant.core import (
     callback,
 )
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, issue_registry as ir
 import voluptuous as vol
 
 from .const import (
@@ -29,16 +29,14 @@ from .const import (
     ATTR_WANTED,
     ATTR_YEAR,
     CONF_CATALOGUE_RICH,
-    CONF_WATCHLIST,
     DEFAULT_CATALOGUE_RICH,
     DOMAIN,
-    SERVICE_ADD_WATCH,
     SERVICE_REFRESH_CATALOGUE,
-    SERVICE_REMOVE_WATCH,
+    SERVICE_REFRESH_COLLECTION,
     SERVICE_SEARCH_SETS,
     SERVICE_SET_COLLECTION,
 )
-from .exceptions import BricksetError, BricksetUserHashError
+from .exceptions import BricksetError, BricksetQuotaError, BricksetUserHashError
 from .models import LegoSet
 
 if TYPE_CHECKING:
@@ -60,7 +58,11 @@ SET_COLLECTION_SCHEMA = vol.Schema(
     }
 )
 
-WATCH_SCHEMA = vol.Schema({**ENTRY_SCHEMA, vol.Required(ATTR_SET_NUMBER): cv.string})
+ENTRY_ONLY = vol.Schema(ENTRY_SCHEMA)
+
+NONE = SupportsResponse.NONE
+ONLY = SupportsResponse.ONLY
+OPTIONAL = SupportsResponse.OPTIONAL
 
 SEARCH_SCHEMA = vol.Schema(
     {
@@ -166,18 +168,68 @@ async def async_refresh_catalogue(call: ServiceCall) -> ServiceResponse:
     }
 
 
-def _updated_watchlist(
-    entry: ConfigEntry, number: str, *, add: bool
-) -> list[str] | None:
-    """Return the new watchlist, or None when nothing would change."""
-    current: list[str] = list(entry.options.get(CONF_WATCHLIST, []))
-    if add:
-        if number in current:
-            return None
-        return [*current, number]
-    if number not in current:
-        return None
-    return [item for item in current if item != number]
+async def async_refresh_collection(call: ServiceCall) -> ServiceResponse:
+    """Poll Brickset now rather than waiting for the interval."""
+    entry = _get_entry(call.hass, call)
+    collection = entry.runtime_data.collection
+    cost = collection.poll_cost
+    try:
+        collection.quota.reserve(cost)
+    except BricksetQuotaError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="quota_spent",
+            translation_placeholders={
+                "calls_today": str(collection.quota.calls_today),
+                "budget": str(collection.quota.budget),
+                "cost": str(cost),
+            },
+        ) from err
+
+    await collection.async_refresh()
+    return {
+        "cost": cost,
+        "calls_today": collection.quota.calls_today,
+        "remaining": collection.quota.remaining,
+        "updated": collection.last_update_success,
+    }
+
+
+def _write_issue_id(entry: ConfigEntry) -> str:
+    """Identify the repair issue for a rejected collection write."""
+    return f"collection_write_failed_{entry.entry_id}"
+
+
+@callback
+def _async_report_write_failure(
+    hass: HomeAssistant, entry: ConfigEntry, error: str
+) -> None:
+    """Record a rejected write where a user will see it."""
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        _write_issue_id(entry),
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="collection_write_failed",
+        translation_placeholders={"name": entry.title, "error": error},
+    )
+
+
+@callback
+def _async_write_succeeded(
+    hass: HomeAssistant, entry: LegoConfigEntry, lego_set: LegoSet, call: ServiceCall
+) -> None:
+    """Clear any past rejection and fold the change into the cached collection."""
+    ir.async_delete_issue(hass, DOMAIN, _write_issue_id(entry))
+    entry.runtime_data.collection.apply_collection_change(
+        lego_set,
+        own=call.data.get(ATTR_OWNED),
+        want=call.data.get(ATTR_WANTED),
+        qty_owned=call.data.get(ATTR_QTY_OWNED),
+        rating=call.data.get(ATTR_RATING),
+        notes=call.data.get(ATTR_NOTES),
+    )
 
 
 @callback
@@ -203,6 +255,8 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 translation_domain=DOMAIN, translation_key="auth_expired"
             ) from err
         except BricksetError as err:
+            # A UI call shows the raise; a call from an automation only reaches the log.
+            _async_report_write_failure(hass, entry, str(err))
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="api_error",
@@ -213,26 +267,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 translation_domain=DOMAIN, translation_key="no_changes"
             ) from err
 
-        await entry.runtime_data.collection.async_request_refresh()
-
-    async def async_add_watch(call: ServiceCall) -> None:
-        """Add a set to the watchlist."""
-        entry = _get_entry(hass, call)
-        number = call.data[ATTR_SET_NUMBER]
-        await _async_resolve_set(entry, number)
-        if (watchlist := _updated_watchlist(entry, number, add=True)) is not None:
-            hass.config_entries.async_update_entry(
-                entry, options={**entry.options, CONF_WATCHLIST: watchlist}
-            )
-
-    async def async_remove_watch(call: ServiceCall) -> None:
-        """Remove a set from the watchlist."""
-        entry = _get_entry(hass, call)
-        number = call.data[ATTR_SET_NUMBER]
-        if (watchlist := _updated_watchlist(entry, number, add=False)) is not None:
-            hass.config_entries.async_update_entry(
-                entry, options={**entry.options, CONF_WATCHLIST: watchlist}
-            )
+        _async_write_succeeded(hass, entry, lego_set, call)
 
     async def async_search_sets(call: ServiceCall) -> ServiceResponse:
         """Search the Brickset catalogue and return the matches."""
@@ -260,26 +295,12 @@ def async_setup_services(hass: HomeAssistant) -> None:
 
         return {"sets": [_summarise(lego_set) for lego_set in matches]}
 
-    hass.services.async_register(
-        DOMAIN, SERVICE_SET_COLLECTION, async_set_collection, SET_COLLECTION_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_ADD_WATCH, async_add_watch, WATCH_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_REMOVE_WATCH, async_remove_watch, WATCH_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SEARCH_SETS,
-        async_search_sets,
-        SEARCH_SCHEMA,
-        supports_response=SupportsResponse.ONLY,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_REFRESH_CATALOGUE,
-        async_refresh_catalogue,
-        vol.Schema(ENTRY_SCHEMA),
-        supports_response=SupportsResponse.OPTIONAL,
-    )
+    for name, handler, schema, response in (
+        (SERVICE_SET_COLLECTION, async_set_collection, SET_COLLECTION_SCHEMA, NONE),
+        (SERVICE_SEARCH_SETS, async_search_sets, SEARCH_SCHEMA, ONLY),
+        (SERVICE_REFRESH_CATALOGUE, async_refresh_catalogue, ENTRY_ONLY, OPTIONAL),
+        (SERVICE_REFRESH_COLLECTION, async_refresh_collection, ENTRY_ONLY, OPTIONAL),
+    ):
+        hass.services.async_register(
+            DOMAIN, name, handler, schema, supports_response=response
+        )
