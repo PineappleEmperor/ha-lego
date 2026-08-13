@@ -87,7 +87,10 @@ def estimated_daily_calls(options: Mapping[str, Any]) -> int:
 
     collection_polls = math.ceil(24 / max(collection_hours, 1))
     feed_polls = math.ceil(24 / max(feeds_hours, 1)) if themes else 0
-    return collection_polls * (2 + watchlist) + feed_polls * themes
+    # Every watched theme rides in one comma-joined call, so the feed cost does not
+    # grow with the theme count. A theme with no releases this year is confirmed
+    # individually, which adds a call the steady state does not pay.
+    return collection_polls * (2 + watchlist) + feed_polls
 
 
 async def _validate(hass: Any, api_key: str, username: str, password: str) -> str:

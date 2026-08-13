@@ -76,19 +76,26 @@ def brick(a: float = HALF_WIDTH) -> tuple[str, tuple]:
 
     parts = [
         f'<polygon points="{_pts([p_left, p_front, b_front, b_left])}" fill="{LEFT}"/>',
-        f'<polygon points="{_pts([p_front, p_right, b_right, b_front])}" '
-        f'fill="{RIGHT}"/>',
+        (
+            f'<polygon points="{_pts([p_front, p_right, b_right, b_front])}" '
+            f'fill="{RIGHT}"/>'
+        ),
         f'<polygon points="{_pts([p_apex, p_right, p_front, p_left])}" fill="{TOP}"/>',
-        f'<g stroke="{EDGE}" stroke-width="{INNER_STROKE}" fill="none" '
-        f'stroke-linecap="round">'
-        f'<path d="M{p_left[0]:.3f},{p_left[1]:.3f} L{p_front[0]:.3f},{p_front[1]:.3f} '
-        f'L{p_right[0]:.3f},{p_right[1]:.3f}"/>'
-        f'<path d="M{p_front[0]:.3f},{p_front[1]:.3f} '
-        f'L{b_front[0]:.3f},{b_front[1]:.3f}"/></g>',
-        f"<polygon points="
-        f'"{_pts([p_apex, p_right, b_right, b_front, b_left, p_left])}" '
-        f'fill="none" stroke="{EDGE}" stroke-width="{OUTER_STROKE}" '
-        f'stroke-linejoin="round"/>',
+        (
+            f'<g stroke="{EDGE}" stroke-width="{INNER_STROKE}" fill="none" '
+            f'stroke-linecap="round">'
+            f'<path d="M{p_left[0]:.3f},{p_left[1]:.3f} '
+            f"L{p_front[0]:.3f},{p_front[1]:.3f} "
+            f'L{p_right[0]:.3f},{p_right[1]:.3f}"/>'
+            f'<path d="M{p_front[0]:.3f},{p_front[1]:.3f} '
+            f'L{b_front[0]:.3f},{b_front[1]:.3f}"/></g>'
+        ),
+        (
+            f"<polygon points="
+            f'"{_pts([p_apex, p_right, b_right, b_front, b_left, p_left])}" '
+            f'fill="none" stroke="{EDGE}" stroke-width="{OUTER_STROKE}" '
+            f'stroke-linejoin="round"/>'
+        ),
     ]
     for cy, cx in studs:
         parts.append(
