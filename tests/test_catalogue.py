@@ -31,7 +31,7 @@ def _csv_requests(aioclient_mock: AiohttpClientMocker) -> int:
 async def _seed(hass: HomeAssistant, entry: MockConfigEntry):
     """Set the entry up and wait for the background seed to finish."""
     await setup_integration(hass, entry)
-    await hass.async_block_till_done()
+    await hass.async_block_till_done(wait_background_tasks=True)
     return entry.runtime_data.catalogue
 
 
@@ -121,7 +121,7 @@ async def test_catalogue_can_be_turned_off(
         options={**mock_config_entry.options, CONF_CATALOGUE: False},
     )
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
-    await hass.async_block_till_done()
+    await hass.async_block_till_done(wait_background_tasks=True)
 
     assert mock_config_entry.runtime_data.catalogue is None
 
@@ -169,7 +169,7 @@ async def test_the_index_refreshes_without_a_restart(
 
     freezer.tick(timedelta(days=8))
     async_fire_time_changed(hass)
-    await hass.async_block_till_done()
+    await hass.async_block_till_done(wait_background_tasks=True)
 
     assert _csv_requests(aioclient_mock) > downloads
     assert catalogue.stale is False

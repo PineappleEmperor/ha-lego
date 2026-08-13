@@ -88,3 +88,6 @@ py-version = "3.14"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Live tests spend real Brickset calls, so they never run unless asked for.
+addopts = "-m 'not live'"
+markers = ["live: hits the real Brickset API; needs credentials and spends quota"]
