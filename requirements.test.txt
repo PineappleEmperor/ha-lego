@@ -22,4 +22,4 @@ pyright==1.1.409
 # Without it every setup test fails with "No module named 'hass_frontend'".
 # Read the pin from homeassistant/components/frontend/manifest.json whenever the
 # pytest-homeassistant-custom-component pin above moves.
-home-assistant-frontend==20260729.5
+home-assistant-frontend==20260729.6
