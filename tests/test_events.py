@@ -6,12 +6,17 @@ from datetime import timedelta
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import Event, HomeAssistant, callback
+import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
 
-from custom_components.lego.const import EVENT_NEW_SET, EVENT_WANTED_CHANGED
+from custom_components.lego.const import (
+    CONF_THEMES,
+    EVENT_NEW_SET,
+    EVENT_WANTED_CHANGED,
+)
 
 from .conftest import BricksetServer, make_set, setup_integration
 
@@ -150,3 +155,50 @@ async def test_unchanged_wanted_set_fires_nothing(
     await hass.async_block_till_done()
 
     assert events == []
+
+
+async def test_two_themes_cost_one_call(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """Brickset takes a comma-joined theme, so a feed poll is one call not two."""
+    brickset.theme_sets.append(make_set(60, "10333-1", "Icons Thing", theme="Icons"))
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        options={**mock_config_entry.options, CONF_THEMES: ["Technic", "Icons"]},
+    )
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    theme_calls = [call for call in brickset.get_sets_calls if "theme" in call]
+    assert [call["theme"] for call in theme_calls] == ["Technic,Icons"]
+
+    feeds = mock_config_entry.runtime_data.feeds.data
+    assert [s.number for s in feeds["Technic"]] == ["42200-1", "42199-1"]
+    assert [s.number for s in feeds["Icons"]] == ["10333-1"]
+
+
+async def test_theme_batching_falls_back_when_brickset_stops_accepting_it(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An undocumented shortcut must degrade to per-theme calls, not lose a feed."""
+    brickset.theme_sets.append(make_set(60, "10333-1", "Icons Thing", theme="Icons"))
+    brickset.themes_batchable = False
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        options={**mock_config_entry.options, CONF_THEMES: ["Technic", "Icons"]},
+    )
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    theme_calls = [call["theme"] for call in brickset.get_sets_calls if "theme" in call]
+    assert theme_calls == ["Technic,Icons", "Technic", "Icons"]
+
+    feeds = mock_config_entry.runtime_data.feeds.data
+    assert [s.number for s in feeds["Technic"]] == ["42200-1", "42199-1"]
+    assert [s.number for s in feeds["Icons"]] == ["10333-1"]
+    assert "falling back to one call per theme" in caplog.text

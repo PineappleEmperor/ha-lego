@@ -308,13 +308,24 @@ async def test_options_flow(
 
 def test_estimated_daily_calls() -> None:
     """The estimate accounts for both coordinators and the watchlist."""
-    # 4 collection polls x (owned + wanted) = 8, plus 2 feed polls x 1 theme.
+    # 4 collection polls x (owned + wanted) = 8, plus 2 feed polls of one call each.
     assert (
         estimated_daily_calls(
             {
                 CONF_COLLECTION_INTERVAL: 6,
                 CONF_FEEDS_INTERVAL: 12,
                 CONF_THEMES: ["Technic"],
+            }
+        )
+        == 10
+    )
+    # Themes ride in one comma-joined call, so five cost the same as one.
+    assert (
+        estimated_daily_calls(
+            {
+                CONF_COLLECTION_INTERVAL: 6,
+                CONF_FEEDS_INTERVAL: 12,
+                CONF_THEMES: ["Technic", "Icons", "City", "Star Wars", "Botanicals"],
             }
         )
         == 10
