@@ -4,6 +4,10 @@ The icon and logo are an isometric 2x2 LEGO brick in Home Assistant blue, carryi
 the Home Assistant mark on its front-left face. Everything is drawn from constants
 by `scripts/generate_brand.py`; no artwork is hand-edited.
 
+The mark is trademarked and the property of the Open Home Foundation, whose terms allow
+non-commercial use only. The README carries the attribution. Selling anything built on
+these assets would need written permission from `partner@openhomefoundation.org`.
+
 ```bash
 python3 scripts/generate_brand.py
 ```
