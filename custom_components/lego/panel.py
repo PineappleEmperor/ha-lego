@@ -31,7 +31,7 @@ REGISTERED = f"{DOMAIN}_panel_registered"
 
 
 class PanelStore:
-    """Remembers each user's row order for the panel."""
+    """Remembers each user's row order and chosen account for the panel."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialise an empty store."""
@@ -39,11 +39,17 @@ class PanelStore:
             hass, STORAGE_VERSION, PANEL_STORAGE_KEY
         )
         self._rows: dict[str, list[str]] = {}
+        self._accounts: dict[str, str] = {}
 
     async def async_load(self) -> None:
-        """Read the stored orders."""
-        stored = await self._store.async_load()
-        self._rows = {k: list(v) for k, v in (stored or {}).get("rows", {}).items()}
+        """Read the stored orders and account choices."""
+        stored = await self._store.async_load() or {}
+        self._rows = {k: list(v) for k, v in stored.get("rows", {}).items()}
+        self._accounts = {k: str(v) for k, v in stored.get("accounts", {}).items()}
+
+    async def _async_save(self) -> None:
+        """Write both maps, since they share one storage key."""
+        await self._store.async_save({"rows": self._rows, "accounts": self._accounts})
 
     def rows(self, user_id: str | None) -> list[str]:
         """Return a user's row order, falling back to the default."""
@@ -58,8 +64,17 @@ class PanelStore:
     async def async_set_rows(self, user_id: str, rows: list[str]) -> list[str]:
         """Save a user's row order, ignoring anything unrecognised."""
         self._rows[user_id] = [row for row in rows if row in PANEL_ROWS]
-        await self._store.async_save({"rows": self._rows})
+        await self._async_save()
         return self.rows(user_id)
+
+    def account(self, user_id: str | None) -> str | None:
+        """Return the entry id this user last looked at, if any."""
+        return self._accounts.get(user_id or "")
+
+    async def async_set_account(self, user_id: str, entry_id: str) -> None:
+        """Remember which account this user's panel is showing."""
+        self._accounts[user_id] = entry_id
+        await self._async_save()
 
 
 async def async_setup_panel_static(hass: HomeAssistant) -> None:

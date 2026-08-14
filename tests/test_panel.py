@@ -5,6 +5,7 @@ from __future__ import annotations
 from http import HTTPStatus
 
 from homeassistant.components import frontend
+from homeassistant.const import CONF_API_KEY, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import (
@@ -14,12 +15,163 @@ from pytest_homeassistant_custom_component.typing import (
 
 from custom_components.lego.const import (
     CONF_PANEL,
+    CONF_REGION,
+    CONF_THEMES,
+    CONF_USER_HASH,
+    DOMAIN,
     PANEL_ICON_URL,
     PANEL_ROWS,
     PANEL_URL_PATH,
 )
 
-from .conftest import BricksetServer, setup_integration
+from .conftest import API_KEY, BricksetServer, setup_integration
+
+
+async def _second_account(hass: HomeAssistant) -> MockConfigEntry:
+    """Set up a second Brickset account alongside the fixture's."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="otherfan",
+        unique_id="otherfan",
+        version=2,
+        data={
+            CONF_API_KEY: API_KEY,
+            CONF_USERNAME: "otherfan",
+            CONF_USER_HASH: "second-hash",
+        },
+        options={CONF_REGION: "US", CONF_THEMES: []},
+    )
+    return await setup_integration(hass, entry)
+
+
+async def test_accounts_lists_every_loaded_entry(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """The panel can ask which accounts exist and which to show first."""
+    await setup_integration(hass, mock_config_entry)
+    second = await _second_account(hass)
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "lego/accounts"})
+    result = (await client.receive_json())["result"]
+
+    assert [item["name"] for item in result["accounts"]] == ["brickfan", "otherfan"]
+    assert {item["entry_id"] for item in result["accounts"]} == {
+        mock_config_entry.entry_id,
+        second.entry_id,
+    }
+    assert result["selected"] == mock_config_entry.entry_id
+
+
+async def test_dashboard_serves_two_accounts(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Naming an account returns that account, not an error."""
+    await setup_integration(hass, mock_config_entry)
+    second = await _second_account(hass)
+
+    client = await hass_ws_client(hass)
+    for entry in (mock_config_entry, second):
+        await client.send_json_auto_id(
+            {"type": "lego/dashboard", "config_entry_id": entry.entry_id}
+        )
+        message = await client.receive_json()
+        assert message["success"], message
+        assert message["result"]["entry_id"] == entry.entry_id
+
+
+async def test_dashboard_without_an_account_falls_back(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """An unnamed request picks the first account rather than failing."""
+    await setup_integration(hass, mock_config_entry)
+    await _second_account(hass)
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "lego/dashboard"})
+    message = await client.receive_json()
+
+    assert message["success"], message
+    assert message["result"]["entry_id"] == mock_config_entry.entry_id
+
+
+async def test_chosen_account_is_remembered(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A stored choice decides both the listing and an unnamed dashboard call."""
+    await setup_integration(hass, mock_config_entry)
+    second = await _second_account(hass)
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "lego/account/set", "config_entry_id": second.entry_id}
+    )
+    assert (await client.receive_json())["result"] == {"selected": second.entry_id}
+
+    await client.send_json_auto_id({"type": "lego/accounts"})
+    assert (await client.receive_json())["result"]["selected"] == second.entry_id
+
+    await client.send_json_auto_id({"type": "lego/dashboard"})
+    message = await client.receive_json()
+    assert message["result"]["entry_id"] == second.entry_id
+
+
+async def test_stored_account_falls_back_once_removed(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Unloading the chosen account does not leave the panel pointing at nothing."""
+    await setup_integration(hass, mock_config_entry)
+    second = await _second_account(hass)
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "lego/account/set", "config_entry_id": second.entry_id}
+    )
+    await client.receive_json()
+
+    assert await hass.config_entries.async_unload(second.entry_id)
+    await hass.async_block_till_done()
+
+    await client.send_json_auto_id({"type": "lego/accounts"})
+    result = (await client.receive_json())["result"]
+    assert [item["entry_id"] for item in result["accounts"]] == [
+        mock_config_entry.entry_id
+    ]
+    assert result["selected"] == mock_config_entry.entry_id
+
+
+async def test_setting_an_unknown_account_is_rejected(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A stale entry id from an old browser tab is refused, not stored."""
+    await setup_integration(hass, mock_config_entry)
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "lego/account/set", "config_entry_id": "does-not-exist"}
+    )
+    message = await client.receive_json()
+
+    assert not message["success"]
+    assert message["error"]["code"] == "not_found"
 
 
 async def test_panel_is_registered_by_default(

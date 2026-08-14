@@ -99,6 +99,10 @@ A **LEGO** entry appears in the sidebar unless you turn it off in options. It ha
 - **Collection** is the full grid. Its search box covers both your own sets and the whole
   catalogue.
 
+One sidebar entry serves every Brickset account you have set up. A picker appears in the
+header when there is more than one, and your choice is remembered per Home Assistant user,
+as the row order already is.
+
 Every card can mark a set owned or not owned. The panel reads only websocket commands, so
 browsing and searching cost no Brickset calls; only the ownership toggle writes.
 

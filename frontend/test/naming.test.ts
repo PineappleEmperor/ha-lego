@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { displayName, isNamed, ownershipCall } from "../src/panel";
+import { accountCall, displayName, isNamed, ownershipCall } from "../src/panel";
 
 describe("set naming", () => {
   it("treats a normal name as named", () => {
@@ -46,5 +46,30 @@ describe("ownership call", () => {
     expect("config_entry_id" in ownershipCall("", { set_number: "1-1", owned: false })).toBe(
       true,
     );
+  });
+});
+
+describe("addressing an account", () => {
+  it("names the account when one is selected", () => {
+    expect(accountCall("lego/dashboard", "abc123")).toEqual({
+      type: "lego/dashboard",
+      config_entry_id: "abc123",
+    });
+  });
+
+  it("omits the key entirely when no account is selected yet", () => {
+    // An empty string passes vol.Optional(str) and then resolves to no entry, so
+    // the key has to be absent for the server to fall back to the stored choice.
+    const call = accountCall("lego/dashboard", "");
+    expect(call).toEqual({ type: "lego/dashboard" });
+    expect("config_entry_id" in call).toBe(false);
+  });
+
+  it("keeps the caller's own fields when spread alongside", () => {
+    expect({ ...accountCall("lego/collection", "e1"), filter: "owned" }).toEqual({
+      type: "lego/collection",
+      config_entry_id: "e1",
+      filter: "owned",
+    });
   });
 });

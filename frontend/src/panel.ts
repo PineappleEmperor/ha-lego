@@ -43,6 +43,16 @@ interface Quota {
   refresh_cost: number;
 }
 
+interface Account {
+  entry_id: string;
+  name: string;
+}
+
+interface AccountList {
+  accounts: Account[];
+  selected: string | null;
+}
+
 interface Dashboard {
   entry_id: string;
   rows: string[];
@@ -72,6 +82,16 @@ export function ownershipCall(
     set_number: item.set_number,
     owned: !item.owned,
   };
+}
+
+/**
+ * Address a websocket command at one account. Exported for the same reason as
+ * ownershipCall: config_entry_id is vol.Optional on the Python side, so an empty
+ * string would pass the schema and then fail to resolve to an entry. Omitting the
+ * key is what makes the server fall back to the stored choice.
+ */
+export function accountCall(type: string, entryId: string): Record<string, unknown> {
+  return entryId ? { type, config_entry_id: entryId } : { type };
 }
 
 export function isNamed(item: Pick<LegoSet, "name">): boolean {
@@ -108,6 +128,8 @@ export class LegoPanel extends LitElement {
   @state() private _query = "";
   @state() private _results: LegoSet[] = [];
   @state() private _dragging = "";
+  @state() private _accounts: Account[] = [];
+  @state() private _account = "";
 
   public connectedCallback(): void {
     super.connectedCallback();
@@ -129,9 +151,32 @@ export class LegoPanel extends LitElement {
     }
   }
 
+  private async _selectAccount(entryId: string): Promise<void> {
+    if (entryId === this._account) return;
+    this._account = entryId;
+    this._collection = [];
+    this._results = [];
+    this._query = "";
+    this._theme = "";
+    await this._load();
+    if (this._tab === "collection") await this._loadCollection();
+    try {
+      await this.hass.callWS({ type: "lego/account/set", config_entry_id: entryId });
+    } catch {
+      // The switch has already been applied; it just will not survive a reload.
+    }
+  }
+
   private async _load(): Promise<void> {
     try {
-      const dash = await this.hass.callWS<Dashboard>({ type: "lego/dashboard" });
+      if (!this._accounts.length) {
+        const list = await this.hass.callWS<AccountList>({ type: "lego/accounts" });
+        this._accounts = list.accounts;
+        this._account = list.selected ?? "";
+      }
+      const dash = await this.hass.callWS<Dashboard>(
+        accountCall("lego/dashboard", this._account),
+      );
       this._dash = dash;
       this._error = "";
       if (!this._theme || !(this._theme in dash.themes)) {
@@ -146,7 +191,7 @@ export class LegoPanel extends LitElement {
     if (this._collection.length) return;
     try {
       const res = await this.hass.callWS<{ sets: LegoSet[] }>({
-        type: "lego/collection",
+        ...accountCall("lego/collection", this._account),
         filter: "owned",
       });
       this._collection = res.sets;
@@ -163,7 +208,7 @@ export class LegoPanel extends LitElement {
     }
     try {
       const res = await this.hass.callWS<{ sets: LegoSet[] }>({
-        type: "lego/search",
+        ...accountCall("lego/search", this._account),
         query,
         limit: 24,
       });
@@ -217,7 +262,10 @@ export class LegoPanel extends LitElement {
     return html`
       <div class="app">
         <header>
-          <h1>LEGO</h1>
+          <div class="bar">
+            <h1>LEGO</h1>
+            ${this._renderAccounts()}
+          </div>
           <div class="tabs">
             <button
               class=${this._tab === "home" ? "tab on" : "tab"}
@@ -247,6 +295,28 @@ export class LegoPanel extends LitElement {
             ? this._renderHome()
             : this._renderCollection()}
       </div>
+    `;
+  }
+
+  private _renderAccounts(): TemplateResult | typeof nothing {
+    // One account needs no picker, and the sidebar panel is registered once for
+    // all of them, so this is the only place to choose between them.
+    if (this._accounts.length < 2) return nothing;
+    return html`
+      <select
+        class="account"
+        aria-label="Brickset account"
+        @change=${(ev: Event) =>
+          void this._selectAccount((ev.target as HTMLSelectElement).value)}
+      >
+        ${this._accounts.map(
+          (item) => html`
+            <option value=${item.entry_id} ?selected=${item.entry_id === this._account}>
+              ${item.name}
+            </option>
+          `,
+        )}
+      </select>
     `;
   }
 
@@ -500,11 +570,29 @@ export class LegoPanel extends LitElement {
       border-bottom: 1px solid var(--pu-line);
       padding: 0 16px;
     }
+    .bar {
+      align-items: center;
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+    }
     h1 {
       font-size: 20px;
       line-height: 64px;
       font-weight: 500;
       margin: 0;
+    }
+    .account {
+      background: var(--pu-ground);
+      border: 1px solid var(--pu-line);
+      border-radius: 10px;
+      color: inherit;
+      font: inherit;
+      /* Material 3 body medium, matching the search field it sits above. */
+      font-size: 14px;
+      max-width: 50%;
+      min-height: 48px;
+      padding: 0 12px;
     }
     .tabs {
       display: flex;
