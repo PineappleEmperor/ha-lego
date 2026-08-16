@@ -14,6 +14,7 @@ pytest-homeassistant-custom-component==0.13.355
 
 # Add integration-specific test deps below (e.g. a fake transport, respx,
 # freezegun beyond what the plugin already pins).
+markdown-it-py
 ruff==0.16.2
 pyright==1.1.409
 

@@ -25,20 +25,25 @@ MAINT = frozenset({"chore", "docs", "refactor", "perf", "test", "build", "ci", "
 # version-shaped": an earlier pattern ended in `to v?\d+\.\d+`, which silently ate
 # `chore: bump actions/checkout from 6.0.0 to 7.0.1` — i.e. every semver dependency
 # bump vanished from the notes.
+# Release plumbing, not a changelog entry. The noun list stays closed on purpose:
+# allowing arbitrary words before "to <semver>" would swallow every Dependabot
+# bump ("bump aiohttp to 3.10.1"), which is a real change and must reach the notes.
 BUMP = re.compile(
     r"^[a-z]+(\([^)]*\))?:\s*bump\s+(the\s+)?"
-    r"((manifest|plugin|integration|skill)\s+)?version\b",
+    r"((manifest|plugin|integration|skill|marketplace|ha)\s+)*"
+    r"(version\b|to\s+v?\d+\.\d+)",
     re.I,
 )
 
 ORDER = ("breaking", "feat", "fix", "maint", "other")
-HEADINGS = {
-    "breaking": "  **🚨 Breaking**",
-    "feat": "  **🚀 Features**",
-    "fix": "  **🔧 Fixes**",
-    "maint": "  **🧰 Maintenance**",
-    "other": "  **📦 Other**",
-}
+
+# No group labels. release-drafter already files each PR under one category
+# heading, so a label inside the entry repeats it four lines later and, when a PR
+# spans types, files fixes under Features. Measured across one session: 3 of 8
+# merged PRs spanned more than one type, so this was not the rare case it was
+# documented as. The commits keep their severity order; the category above names
+# the PR, and the bullets say what it contained.
+
 # Suggested PR title type per winning commit group: (title, category, semver bump).
 SUGGESTIONS = {
     "breaking": ("`feat!:` (or any `type!:`)", "🚨 Breaking Change", "major"),
@@ -47,6 +52,12 @@ SUGGESTIONS = {
     "maint": ("`chore:`", "🧰 Maintenance", "patch"),
     "other": ("`chore:`", "🧰 Maintenance", "patch"),
 }
+
+
+def _strip_type(subject: str) -> str:
+    """The description part of a Conventional Commit subject, lowercased."""
+    m = TYPE.match(subject)
+    return (m.group("desc") if m else subject).strip().lower()
 
 
 def classify(subject: str) -> tuple[str, str]:
@@ -84,7 +95,7 @@ def group(subjects: list[str]) -> dict[str, list[str]]:
     return groups
 
 
-def render(subjects: list[str]) -> str:
+def render(subjects: list[str], title: str | None = None) -> str:
     """The marked-block body, or "" when it would add nothing.
 
     A single bullet is always the PR title minus its type prefix, so the block
@@ -93,17 +104,25 @@ def render(subjects: list[str]) -> str:
     case the sub-heads exist for. Emit nothing and let the caller drop the block.
     """
     groups = group(subjects)
+
+    # Drop any bullet that merely restates the PR title. The title is meant to be
+    # the winning commit subject, so on most PRs one bullet duplicates the heading
+    # it sits under. Release notes then say the same thing twice.
+    if title:
+        want = _strip_type(title)
+        for k in groups:
+            groups[k] = [d for d in groups[k] if d.strip().lower() != want]
+
     used = [k for k in ORDER if groups[k]]
     if not used:
         return ""
-    if sum(len(groups[k]) for k in used) == 1:
+    # Without a title we fall back to a heuristic: a lone bullet is almost always
+    # the title minus its prefix. With a title the check above is exact, so a
+    # surviving single bullet says something the title does not and is kept.
+    if title is None and sum(len(groups[k]) for k in used) == 1:
         return ""
     lines: list[str] = []
     for key in used:
-        # Sub-heads only when the PR spans >1 type: release-drafter already files
-        # the PR under one category heading, so a lone sub-head duplicates it.
-        if len(used) > 1:
-            lines.append(HEADINGS[key])
         lines += [f"  - {d}" for d in groups[key]]
     return "\n".join(lines)
 
@@ -121,13 +140,14 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--mode", choices=("render", "winning"), default="render")
     ap.add_argument("--subjects", default="-", help="file of commit subjects, or - for stdin")
+    ap.add_argument("--title", help="PR title; bullets that merely restate it are dropped")
     args = ap.parse_args()
 
     src = sys.stdin if args.subjects == "-" else open(args.subjects, encoding="utf-8")
     with src as fh:
         subjects = fh.read().splitlines()
 
-    print(render(subjects) if args.mode == "render" else winning(subjects))
+    print(render(subjects, args.title) if args.mode == "render" else winning(subjects))
     return 0
 
 
