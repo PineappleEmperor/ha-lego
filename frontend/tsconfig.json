@@ -8,7 +8,8 @@
     "strict": true,
     "noUnusedLocals": true,
     "skipLibCheck": true,
+    "types": ["vitest/globals"],
     "lib": ["ES2021", "DOM", "DOM.Iterable"]
   },
-  "include": ["src"]
+  "include": ["src", "test"]
 }

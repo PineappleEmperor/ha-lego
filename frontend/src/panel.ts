@@ -36,13 +36,75 @@ interface Stats {
   sets_missing_price: number;
 }
 
+interface Quota {
+  calls_today: number;
+  budget: number;
+  remaining: number;
+  refresh_cost: number;
+}
+
+interface Account {
+  entry_id: string;
+  name: string;
+}
+
+interface AccountList {
+  accounts: Account[];
+  selected: string | null;
+}
+
 interface Dashboard {
+  entry_id: string;
   rows: string[];
   region: string;
+  quota: Quota;
   stats: Stats;
   wishlist: LegoSet[];
   themes: Record<string, LegoSet[]>;
 }
+
+// Brickset publishes a set before its name is announced and fills the name with
+// this placeholder. It is real data, not a fault, but it means nothing on a card.
+const UNNAMED = "{?}";
+
+/**
+ * The data a set_collection call needs. Exported because the required fields are
+ * declared in Python and nothing here can check them: callService takes a plain
+ * record, so omitting config_entry_id type-checks cleanly and fails at runtime,
+ * in the browser, where nobody is watching. That shipped in four releases.
+ */
+export function ownershipCall(
+  entryId: string,
+  item: Pick<LegoSet, "set_number" | "owned">,
+): Record<string, unknown> {
+  return {
+    config_entry_id: entryId,
+    set_number: item.set_number,
+    owned: !item.owned,
+  };
+}
+
+/**
+ * Address a websocket command at one account. Exported for the same reason as
+ * ownershipCall: config_entry_id is vol.Optional on the Python side, so an empty
+ * string would pass the schema and then fail to resolve to an entry. Omitting the
+ * key is what makes the server fall back to the stored choice.
+ */
+export function accountCall(type: string, entryId: string): Record<string, unknown> {
+  return entryId ? { type, config_entry_id: entryId } : { type };
+}
+
+export function isNamed(item: Pick<LegoSet, "name">): boolean {
+  const name = (item.name ?? "").trim();
+  return name !== "" && name !== UNNAMED;
+}
+
+export function displayName(item: Pick<LegoSet, "name">): string {
+  return isNamed(item) ? item.name : "Name tbd";
+}
+
+// The integration's own icon, served from custom_components/lego/brand/.
+const FALLBACK_ART = "/lego_panel/icon.png";
 
 const ROW_TITLES: Record<string, string> = {
   themes: "New in my themes",
@@ -57,21 +119,64 @@ export class LegoPanel extends LitElement {
 
   @state() private _tab: "home" | "collection" = "home";
   @state() private _dash?: Dashboard;
+  @state() private _refreshing = false;
+  @state() private _refreshError = "";
+  @state() private _writeError = "";
   @state() private _theme = "";
   @state() private _error = "";
   @state() private _collection: LegoSet[] = [];
   @state() private _query = "";
   @state() private _results: LegoSet[] = [];
   @state() private _dragging = "";
+  @state() private _accounts: Account[] = [];
+  @state() private _account = "";
 
   public connectedCallback(): void {
     super.connectedCallback();
     void this._load();
   }
 
+  private async _refreshCollection(): Promise<void> {
+    this._refreshing = true;
+    this._refreshError = "";
+    try {
+      await this.hass.callService("lego", "refresh_collection", {
+        config_entry_id: this._dash?.entry_id ?? "",
+      });
+      await this._load();
+    } catch (err) {
+      this._refreshError = err instanceof Error ? err.message : String(err);
+    } finally {
+      this._refreshing = false;
+    }
+  }
+
+  private async _selectAccount(entryId: string): Promise<void> {
+    if (entryId === this._account) return;
+    this._account = entryId;
+    this._collection = [];
+    this._results = [];
+    this._query = "";
+    this._theme = "";
+    await this._load();
+    if (this._tab === "collection") await this._loadCollection();
+    try {
+      await this.hass.callWS({ type: "lego/account/set", config_entry_id: entryId });
+    } catch {
+      // The switch has already been applied; it just will not survive a reload.
+    }
+  }
+
   private async _load(): Promise<void> {
     try {
-      const dash = await this.hass.callWS<Dashboard>({ type: "lego/dashboard" });
+      if (!this._accounts.length) {
+        const list = await this.hass.callWS<AccountList>({ type: "lego/accounts" });
+        this._accounts = list.accounts;
+        this._account = list.selected ?? "";
+      }
+      const dash = await this.hass.callWS<Dashboard>(
+        accountCall("lego/dashboard", this._account),
+      );
       this._dash = dash;
       this._error = "";
       if (!this._theme || !(this._theme in dash.themes)) {
@@ -86,7 +191,7 @@ export class LegoPanel extends LitElement {
     if (this._collection.length) return;
     try {
       const res = await this.hass.callWS<{ sets: LegoSet[] }>({
-        type: "lego/collection",
+        ...accountCall("lego/collection", this._account),
         filter: "owned",
       });
       this._collection = res.sets;
@@ -103,7 +208,7 @@ export class LegoPanel extends LitElement {
     }
     try {
       const res = await this.hass.callWS<{ sets: LegoSet[] }>({
-        type: "lego/search",
+        ...accountCall("lego/search", this._account),
         query,
         limit: 24,
       });
@@ -114,10 +219,19 @@ export class LegoPanel extends LitElement {
   }
 
   private async _toggleOwned(item: LegoSet): Promise<void> {
-    await this.hass.callService("lego", "set_collection", {
-      set_number: item.set_number,
-      owned: !item.owned,
-    });
+    this._writeError = "";
+    try {
+      await this.hass.callService(
+        "lego",
+        "set_collection",
+        ownershipCall(this._dash?.entry_id ?? "", item),
+      );
+    } catch (err) {
+      // A rejected write used to fail only in the console, which read as a
+      // flaky button rather than a broken one.
+      this._writeError = err instanceof Error ? err.message : String(err);
+      return;
+    }
     this._collection = [];
     await this._load();
     if (this._tab === "collection") await this._loadCollection();
@@ -148,7 +262,10 @@ export class LegoPanel extends LitElement {
     return html`
       <div class="app">
         <header>
-          <h1>LEGO</h1>
+          <div class="bar">
+            <h1>LEGO</h1>
+            ${this._renderAccounts()}
+          </div>
           <div class="tabs">
             <button
               class=${this._tab === "home" ? "tab on" : "tab"}
@@ -167,12 +284,39 @@ export class LegoPanel extends LitElement {
             </button>
           </div>
         </header>
+        ${this._writeError
+          ? html`<p class="error" role="alert">
+              Brickset would not save that change: ${this._writeError}
+            </p>`
+          : nothing}
         ${this._error
           ? html`<p class="error" role="alert">${this._error}</p>`
           : this._tab === "home"
             ? this._renderHome()
             : this._renderCollection()}
       </div>
+    `;
+  }
+
+  private _renderAccounts(): TemplateResult | typeof nothing {
+    // One account needs no picker, and the sidebar panel is registered once for
+    // all of them, so this is the only place to choose between them.
+    if (this._accounts.length < 2) return nothing;
+    return html`
+      <select
+        class="account"
+        aria-label="Brickset account"
+        @change=${(ev: Event) =>
+          void this._selectAccount((ev.target as HTMLSelectElement).value)}
+      >
+        ${this._accounts.map(
+          (item) => html`
+            <option value=${item.entry_id} ?selected=${item.entry_id === this._account}>
+              ${item.name}
+            </option>
+          `,
+        )}
+      </select>
     `;
   }
 
@@ -248,6 +392,35 @@ export class LegoPanel extends LitElement {
     );
   }
 
+  private _renderRefresh(): TemplateResult {
+    const quota = this._dash?.quota;
+    if (!quota) return html``;
+    const cost = quota.refresh_cost;
+    const short = quota.remaining < cost;
+    const tight = !short && quota.remaining <= cost * 3;
+    return html`
+      <div class="refresh">
+        <button
+          class="refreshbtn"
+          ?disabled=${this._refreshing || short}
+          @click=${() => void this._refreshCollection()}
+        >
+          <ha-icon icon=${this._refreshing ? "mdi:sync" : "mdi:cloud-sync"}></ha-icon>
+          ${this._refreshing ? "Updating…" : "Update now"}
+        </button>
+        <span class="quota ${short ? "bad" : tight ? "warn" : ""}">
+          ${short
+            ? html`Daily budget spent, ${quota.calls_today} of ${quota.budget} used.
+              Resets at midnight UTC.`
+            : html`Costs ${cost} of ${quota.remaining} calls left today.`}
+        </span>
+      </div>
+      ${this._refreshError
+        ? html`<p class="caveat bad">${this._refreshError}</p>`
+        : nothing}
+    `;
+  }
+
   private _renderStats(): TemplateResult {
     const stats = this._dash?.stats;
     if (!stats) return html``;
@@ -266,6 +439,7 @@ export class LegoPanel extends LitElement {
           `,
         )}
       </div>
+      ${this._renderRefresh()}
       ${stats.sets_missing_price
         ? html`<p class="caveat">
             ${this._num(stats.sets_missing_price)} sets have no published price and are not
@@ -313,9 +487,13 @@ export class LegoPanel extends LitElement {
       <article class="card">
         ${item.image
           ? html`<img src=${item.image} alt="" loading="lazy" />`
-          : html`<div class="noimg"><ha-icon icon="mdi:toy-brick-outline"></ha-icon></div>`}
+          : html`<img class="noart" src=${FALLBACK_ART} alt="" loading="lazy" />`}
         <div class="meta">
-          <span class="name" title=${item.name}>${item.name}</span>
+          <span
+            class=${isNamed(item) ? "name" : "name unnamed"}
+            title=${isNamed(item) ? item.name : "Brickset has not published a name yet"}
+            >${displayName(item)}</span
+          >
           <span class="num">${item.set_number}</span>
           <span class="when">${this._when(item)}</span>
           <div class="foot">
@@ -345,7 +523,7 @@ export class LegoPanel extends LitElement {
   private _when(item: LegoSet): string {
     if (item.available_until) return `Retires ${this._date(item.available_until)}`;
     if (item.available_from) return `Out ${this._date(item.available_from)}`;
-    return "Date unknown";
+    return isNamed(item) ? "Date unknown" : "Details tbd";
   }
 
   private _date(iso: string): string {
@@ -372,6 +550,7 @@ export class LegoPanel extends LitElement {
       --pu-accent: var(--primary-color, #0288d1);
       --pu-own: var(--success-color, #2e7d32);
       --pu-want: var(--warning-color, #b26a00);
+      --pu-bad: var(--error-color, #b3261e);
       --pu-radius: var(--ha-card-border-radius, 12px);
       display: block;
       background: var(--pu-ground);
@@ -391,11 +570,29 @@ export class LegoPanel extends LitElement {
       border-bottom: 1px solid var(--pu-line);
       padding: 0 16px;
     }
+    .bar {
+      align-items: center;
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+    }
     h1 {
       font-size: 20px;
       line-height: 64px;
       font-weight: 500;
       margin: 0;
+    }
+    .account {
+      background: var(--pu-ground);
+      border: 1px solid var(--pu-line);
+      border-radius: 10px;
+      color: inherit;
+      font: inherit;
+      /* Material 3 body medium, matching the search field it sits above. */
+      font-size: 14px;
+      max-width: 50%;
+      min-height: 48px;
+      padding: 0 12px;
     }
     .tabs {
       display: flex;
@@ -506,18 +703,17 @@ export class LegoPanel extends LitElement {
       display: flex;
       flex-direction: column;
     }
-    .card img,
-    .noimg {
+    .card img {
       width: 100%;
       height: 104px;
       object-fit: contain;
       background: var(--pu-ground);
     }
-    .noimg {
-      display: grid;
-      place-items: center;
-      color: var(--pu-text-2);
-      --mdc-icon-size: 32px;
+    /* Stand-in art, so it must read as absent rather than as the set. */
+    .card img.noart {
+      padding: 26px;
+      opacity: 0.35;
+      box-sizing: border-box;
     }
     .meta {
       display: flex;
@@ -533,10 +729,21 @@ export class LegoPanel extends LitElement {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    /* An unannounced set has no name worth reading, so the number leads. */
+    .name.unnamed {
+      color: var(--pu-text-2);
+      font-style: italic;
+      font-weight: 400;
+    }
     .num {
       font-size: 11px;
       color: var(--pu-text-2);
       font-variant-numeric: tabular-nums;
+    }
+    .name.unnamed + .num {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--pu-text);
     }
     .when {
       font-size: 11px;
@@ -612,6 +819,56 @@ export class LegoPanel extends LitElement {
       font-size: 12px;
       color: var(--pu-text-2);
       margin: 8px 0 0;
+    }
+    .caveat.bad {
+      color: var(--pu-bad);
+    }
+    .refresh {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+      margin: 12px 0 0;
+    }
+    .refreshbtn {
+      appearance: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 48px;
+      padding: 0 20px;
+      border: 0;
+      border-radius: var(--pu-radius);
+      background: var(--pu-accent);
+      color: var(--text-primary-color, #fff);
+      /* Material 3 label large */
+      font-size: 14px;
+      line-height: 20px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .refreshbtn ha-icon {
+      --mdc-icon-size: 20px;
+    }
+    .refreshbtn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .refreshbtn:focus-visible {
+      outline: 2px solid var(--pu-accent);
+      outline-offset: 2px;
+    }
+    .quota {
+      /* Material 3 label medium */
+      font-size: 12px;
+      line-height: 16px;
+      color: var(--pu-text-2);
+    }
+    .quota.warn {
+      color: var(--pu-want);
+    }
+    .quota.bad {
+      color: var(--pu-bad);
     }
     .link {
       appearance: none;

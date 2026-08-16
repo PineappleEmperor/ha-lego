@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_API_KEY, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.lego import async_remove_config_entry_device
@@ -13,11 +13,46 @@ from custom_components.lego.const import (
     CONF_REGION,
     CONF_THEMES,
     CONF_USER_HASH,
-    CONF_WATCHLIST,
     DOMAIN,
 )
 
-from .conftest import USER_HASH, BricksetServer, setup_integration
+from .conftest import API_KEY, USER_HASH, USERNAME, BricksetServer, setup_integration
+
+
+async def test_migrate_watchlist_entry_to_the_wishlist(
+    hass: HomeAssistant, brickset: BricksetServer
+) -> None:
+    """A version 1 entry loses the watchlist option and the sensors it created."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=USERNAME,
+        unique_id=USERNAME,
+        version=1,
+        data={
+            CONF_API_KEY: API_KEY,
+            CONF_USERNAME: USERNAME,
+            CONF_USER_HASH: USER_HASH,
+        },
+        options={CONF_REGION: "UK", CONF_THEMES: [], "watchlist": ["10294-1"]},
+    )
+    entry.add_to_hass(hass)
+
+    registry = er.async_get(hass)
+    legacy = [
+        registry.async_get_or_create(
+            "sensor", DOMAIN, f"{entry.entry_id}_watch_{number}", config_entry=entry
+        )
+        for number in ("10294-1", "10497-1")
+    ]
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.version == 2
+    assert "watchlist" not in entry.options
+
+    assert all(registry.async_get(item.entity_id) is None for item in legacy)
 
 
 async def test_setup_and_unload(
@@ -52,7 +87,8 @@ async def test_setup_two_entries(
             CONF_USERNAME: "otherfan",
             CONF_USER_HASH: "second-hash",
         },
-        options={CONF_REGION: "US", CONF_THEMES: [], CONF_WATCHLIST: []},
+        version=2,
+        options={CONF_REGION: "US", CONF_THEMES: []},
     )
 
     await setup_integration(hass, mock_config_entry)

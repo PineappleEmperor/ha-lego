@@ -5,17 +5,17 @@ from __future__ import annotations
 import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import issue_registry as ir
+from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.lego.const import (
     CONF_CATALOGUE,
-    CONF_WATCHLIST,
     DOMAIN,
-    SERVICE_ADD_WATCH,
     SERVICE_REFRESH_CATALOGUE,
-    SERVICE_REMOVE_WATCH,
+    SERVICE_REFRESH_COLLECTION,
     SERVICE_SEARCH_SETS,
     SERVICE_SET_COLLECTION,
 )
@@ -39,7 +39,8 @@ async def test_refresh_catalogue(
         return_response=True,
     )
 
-    assert response == {"updated": True, "sets": 2, "fetched": "2026-08-11"}
+    today = dt_util.now().date().isoformat()
+    assert response == {"updated": True, "sets": 2, "fetched": today}
     assert len(brickset.get_sets_calls) == before
 
 
@@ -227,6 +228,76 @@ async def test_set_collection_expired_token_raises(
     assert err.value.translation_key == "auth_expired"
 
 
+async def test_set_collection_folds_the_change_into_the_cache(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """A write must not spend billed calls re-learning what it just sent."""
+    await setup_integration(hass, mock_config_entry)
+    billed = len(brickset.get_sets_calls)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_COLLECTION,
+        {
+            "config_entry_id": mock_config_entry.entry_id,
+            "set_number": "10294-1",
+            "owned": True,
+            "qty_owned": 1,
+        },
+        blocking=True,
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert len(brickset.get_sets_calls) == billed
+    data = mock_config_entry.runtime_data.collection.data
+    assert data is not None
+    owned = {lego_set.number for lego_set in data.owned}
+    assert "10294-1" in owned
+    assert data.summary.sets_distinct == len(owned)
+
+
+async def test_set_collection_rejection_raises_a_repair_issue(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    issue_registry: ir.IssueRegistry,
+) -> None:
+    """A rejected write is visible even when nobody is watching the action fail."""
+    await setup_integration(hass, mock_config_entry)
+    brickset.set_collection_error = "Set not found"
+    issue_id = f"collection_write_failed_{mock_config_entry.entry_id}"
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_COLLECTION,
+            {
+                "config_entry_id": mock_config_entry.entry_id,
+                "set_number": "10497-1",
+                "owned": True,
+            },
+            blocking=True,
+        )
+
+    issue = issue_registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.translation_key == "collection_write_failed"
+
+    brickset.set_collection_error = None
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_COLLECTION,
+        {
+            "config_entry_id": mock_config_entry.entry_id,
+            "set_number": "10497-1",
+            "owned": True,
+        },
+        blocking=True,
+    )
+
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+
+
 async def test_unknown_entry_raises(
     hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
 ) -> None:
@@ -236,39 +307,12 @@ async def test_unknown_entry_raises(
     with pytest.raises(ServiceValidationError) as err:
         await hass.services.async_call(
             DOMAIN,
-            SERVICE_ADD_WATCH,
+            SERVICE_SET_COLLECTION,
             {"config_entry_id": "does-not-exist", "set_number": "10497-1"},
             blocking=True,
         )
 
     assert err.value.translation_key == "entry_not_found"
-
-
-async def test_add_and_remove_watch(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
-) -> None:
-    """Watching and unwatching a set updates the options."""
-    await setup_integration(hass, mock_config_entry)
-
-    await hass.services.async_call(
-        DOMAIN,
-        SERVICE_ADD_WATCH,
-        {"config_entry_id": mock_config_entry.entry_id, "set_number": "10305-1"},
-        blocking=True,
-    )
-    await hass.async_block_till_done()
-
-    assert mock_config_entry.options[CONF_WATCHLIST] == ["10497-1", "10305-1"]
-
-    await hass.services.async_call(
-        DOMAIN,
-        SERVICE_REMOVE_WATCH,
-        {"config_entry_id": mock_config_entry.entry_id, "set_number": "10497-1"},
-        blocking=True,
-    )
-    await hass.async_block_till_done()
-
-    assert mock_config_entry.options[CONF_WATCHLIST] == ["10305-1"]
 
 
 async def test_search_sets_returns_matches(
@@ -305,3 +349,44 @@ async def test_search_without_criteria_raises(
         )
 
     assert err.value.translation_key == "search_needs_criteria"
+
+
+async def test_refresh_collection_polls_now(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """A manual refresh polls immediately and reports what it spent."""
+    await setup_integration(hass, mock_config_entry)
+    billed = len(brickset.get_sets_calls)
+
+    result = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_REFRESH_COLLECTION,
+        {"config_entry_id": mock_config_entry.entry_id},
+        blocking=True,
+        return_response=True,
+    )
+
+    assert len(brickset.get_sets_calls) > billed
+    assert result["cost"] == 2
+    assert result["updated"] is True
+
+
+async def test_refresh_collection_refuses_when_the_budget_is_spent(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """The manual path must not be the way a user blows through the daily limit."""
+    await setup_integration(hass, mock_config_entry)
+    quota = mock_config_entry.runtime_data.collection.quota
+    quota.record(quota.remaining)
+    billed = len(brickset.get_sets_calls)
+
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_REFRESH_COLLECTION,
+            {"config_entry_id": mock_config_entry.entry_id},
+            blocking=True,
+        )
+
+    assert err.value.translation_key == "quota_spent"
+    assert len(brickset.get_sets_calls) == billed

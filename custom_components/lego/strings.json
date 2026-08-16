@@ -64,7 +64,6 @@
         "data": {
           "region": "Pricing region",
           "themes": "Themes to watch for new releases",
-          "watchlist": "Set numbers to track individually",
           "collection_interval_hours": "Collection refresh interval",
           "feeds_interval_hours": "New release refresh interval",
           "daily_call_budget": "Daily call budget",
@@ -75,8 +74,7 @@
         },
         "data_description": {
           "region": "Which LEGO.com market supplies recommended retail prices and retirement dates.",
-          "themes": "Each watched theme costs one API call per refresh.",
-          "watchlist": "Full set numbers including the variant, for example 10497-1.",
+          "themes": "However many themes you pick, they are fetched together in one API call per refresh.",
           "collection_interval_hours": "How often owned and wanted sets are refreshed.",
           "feeds_interval_hours": "How often watched themes are checked for new sets.",
           "daily_call_budget": "Polling stops once this many calls have been made, leaving headroom for manual actions.",
@@ -111,8 +109,8 @@
       "api_calls_today": {
         "name": "Brickset calls today"
       },
-      "watched_set": {
-        "name": "Set {set_number} retires in"
+      "next_wishlist_retirement": {
+        "name": "Next wishlist retirement"
       },
       "latest_theme_set": {
         "name": "Latest {theme} set"
@@ -157,6 +155,15 @@
     },
     "catalogue_unavailable": {
       "message": "Could not download the set list. Check Home Assistant's internet access and try again."
+    },
+    "quota_spent": {
+      "message": "A refresh needs {cost} Brickset calls but the daily budget is spent ({calls_today} of {budget} used). It resets at midnight UTC."
+    }
+  },
+  "issues": {
+    "collection_write_failed": {
+      "title": "Brickset rejected a collection change",
+      "description": "Brickset would not save a change made through {name}: {error}\n\nThe change was not applied. This clears the next time a collection change succeeds."
     }
   },
   "services": {
@@ -194,34 +201,6 @@
         }
       }
     },
-    "add_watch": {
-      "name": "Watch set",
-      "description": "Adds a set to the watchlist, creating a sensor that counts down to its retirement.",
-      "fields": {
-        "config_entry_id": {
-          "name": "Brickset account",
-          "description": "The LEGO configuration entry to act on."
-        },
-        "set_number": {
-          "name": "Set number",
-          "description": "Full set number including the variant, for example 10497-1."
-        }
-      }
-    },
-    "remove_watch": {
-      "name": "Stop watching set",
-      "description": "Removes a set from the watchlist.",
-      "fields": {
-        "config_entry_id": {
-          "name": "Brickset account",
-          "description": "The LEGO configuration entry to act on."
-        },
-        "set_number": {
-          "name": "Set number",
-          "description": "Full set number including the variant, for example 10497-1."
-        }
-      }
-    },
     "search_sets": {
       "name": "Search sets",
       "description": "Searches the Brickset catalogue and returns matching sets. Uses one of your daily API calls.",
@@ -251,6 +230,16 @@
     "refresh_catalogue": {
       "name": "Refresh set index",
       "description": "Re-downloads the local LEGO set list now, rather than waiting for the next scheduled refresh. Uses no Brickset API calls.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Which Brickset account to refresh the index for."
+        }
+      }
+    },
+    "refresh_collection": {
+      "name": "Refresh collection",
+      "description": "Poll Brickset now instead of waiting for the next scheduled update. Spends billed calls.",
       "fields": {
         "config_entry_id": {
           "name": "Account",

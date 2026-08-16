@@ -32,6 +32,8 @@ def async_setup_websocket(hass: HomeAssistant) -> None:
     async_register_command(hass, websocket_dashboard)
     async_register_command(hass, websocket_collection)
     async_register_command(hass, websocket_set_rows)
+    async_register_command(hass, websocket_accounts)
+    async_register_command(hass, websocket_set_account)
 
 
 @callback
@@ -154,27 +156,91 @@ async def websocket_set_rows(
     connection.send_result(msg["id"], {"rows": rows})
 
 
+@callback
+@websocket_command({vol.Required("type"): "lego/accounts"})
+def websocket_accounts(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """List the loaded Brickset accounts and which one this user is on."""
+    loaded = _loaded_entries(hass)
+    connection.send_result(
+        msg["id"],
+        {
+            "accounts": [
+                {"entry_id": entry.entry_id, "name": entry.title} for entry in loaded
+            ],
+            "selected": _selected(hass, connection, loaded),
+        },
+    )
+
+
+@websocket_command(
+    {
+        vol.Required("type"): "lego/account/set",
+        vol.Required("config_entry_id"): str,
+    }
+)
+@async_response
+async def websocket_set_account(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Remember which account this user's panel is showing."""
+    if connection.user is None:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "No signed-in user")
+        return
+
+    entry_id = msg["config_entry_id"]
+    if entry_id not in {entry.entry_id for entry in _loaded_entries(hass)}:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Unknown LEGO entry")
+        return
+
+    await hass.data[PANEL_STORE].async_set_account(connection.user.id, entry_id)
+    connection.send_result(msg["id"], {"selected": entry_id})
+
+
+def _loaded_entries(hass: HomeAssistant) -> list[LegoConfigEntry]:
+    """Return every LEGO entry currently loaded."""
+    return [
+        cast("LegoConfigEntry", item)
+        for item in hass.config_entries.async_entries(DOMAIN)
+        if item.state is ConfigEntryState.LOADED
+    ]
+
+
+def _selected(
+    hass: HomeAssistant,
+    connection: ActiveConnection,
+    loaded: list[LegoConfigEntry],
+) -> str | None:
+    """Return the account to show: this user's last choice, else the first."""
+    if not loaded:
+        return None
+    user_id = connection.user.id if connection.user else None
+    chosen = hass.data[PANEL_STORE].account(user_id)
+    if any(entry.entry_id == chosen for entry in loaded):
+        return str(chosen)
+    return loaded[0].entry_id
+
+
 def _loaded_entry(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> LegoConfigEntry | None:
     """Resolve a loaded LEGO entry, reporting why not when it fails."""
     requested = msg.get("config_entry_id")
     if requested is None:
-        # The panel is registered globally and has no entry to name, so a single
-        # account needs no picker.
-        loaded = [
-            item
-            for item in hass.config_entries.async_entries(DOMAIN)
-            if item.state is ConfigEntryState.LOADED
-        ]
-        if len(loaded) != 1:
-            connection.send_error(
-                msg["id"],
-                ERR_NOT_FOUND,
-                f"Name a config_entry_id: found {len(loaded)} loaded LEGO accounts",
-            )
+        # The panel is registered globally, so it names no entry until it has asked
+        # which accounts exist. Falling back to this user's stored choice keeps a
+        # browser still running an older bundle working with several accounts.
+        loaded = _loaded_entries(hass)
+        if not loaded:
+            connection.send_error(msg["id"], ERR_NOT_FOUND, "No LEGO account is loaded")
             return None
-        return cast("LegoConfigEntry", loaded[0])
+        selected = _selected(hass, connection, loaded)
+        return next(entry for entry in loaded if entry.entry_id == selected)
 
     entry = hass.config_entries.async_get_entry(requested)
     if entry is None or entry.domain != DOMAIN:

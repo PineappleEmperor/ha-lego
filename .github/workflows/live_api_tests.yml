@@ -1,0 +1,55 @@
+name: Live API tests
+
+# Checks the assumptions this integration makes about Brickset's payloads, which
+# fixtures cannot: a fixture only confirms what we already believed. Every
+# assertion here corresponds to something that was wrong once.
+#
+# Never runs on pull_request. A fork PR gets no secrets by design, and
+# pull_request_target would run PR-authored code with the API key in reach. The
+# `api` environment requires a human approval, so a run pauses until it is
+# granted, and the key stays unreadable to every other workflow in the repo.
+
+on:
+  # Manual only. A schedule would be pointless: environment protection applies
+  # whatever the trigger, so a scheduled run would just queue for approval.
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Reuse a sample seed from an earlier run, to repeat it exactly"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    environment: api
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements.test.txt
+
+      - name: Contract tests
+        env:
+          BRICKSET_API_KEY: ${{ secrets.BRICKSET_API_KEY }}
+          BRICKSET_USER_HASH: ${{ secrets.BRICKSET_USER_HASH }}
+          LIVE_SAMPLE_SEED: ${{ inputs.seed }}
+        run: pytest -m live -v -s tests/test_live_api.py
+
+      - name: Explain an auth failure
+        if: failure()
+        run: |
+          echo "::notice::If this failed on authentication rather than a payload"
+          echo "::notice::assertion, the user hash has expired. A password change on"
+          echo "::notice::the Brickset account invalidates it; mint a new one and"
+          echo "::notice::update the BRICKSET_USER_HASH secret in the api environment."

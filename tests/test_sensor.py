@@ -32,6 +32,64 @@ async def test_summary_sensors(
     assert hass.states.get(f"{PREFIX}_sets_wanted").state == "1"
 
 
+async def test_wishlist_sensor_carries_the_sets_unrecorded(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """The count is the state, the sets ride along, and history stays out of it."""
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(f"{PREFIX}_sets_wanted")
+    assert state.state == "1"
+    sets = state.attributes["sets"]
+    assert [item["set_number"] for item in sets] == ["10294-1"]
+    assert sets[0]["set_name"] == "Titanic"
+    assert sets[0]["retirement_date"] == "2099-12-31"
+    assert sets[0]["retired"] is False
+    assert sets[0]["priority"] == 1
+    # Lean on purpose: the 16-field payload would go to every browser each poll.
+    assert set(sets[0]) == {
+        "set_number",
+        "set_name",
+        "theme",
+        "year",
+        "retail_price",
+        "retirement_date",
+        "image_url",
+        "brickset_url",
+        "retired",
+        "priority",
+    }
+    assert "sets" in state.state_info["unrecorded_attributes"]
+
+    other = hass.states.get(f"{PREFIX}_sets_owned")
+    assert "sets" not in other.attributes
+
+
+async def test_wishlist_order_sinks_retired_sets(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """Soonest to retire leads, undated follows, and the unbuyable sinks."""
+    brickset.wanted = [
+        make_set(40, "10294-1", "Titanic", wanted=True, last_available="2099-12-31"),
+        make_set(41, "6876-1", "Alienator", wanted=True, last_available="2020-01-01"),
+        make_set(42, "42200-1", "Technic", wanted=True, last_available="2030-06-01"),
+        make_set(43, "10305-1", "Castle", wanted=True, last_available=None),
+        make_set(44, "999-1", "Undated Old", wanted=True, last_available=None),
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    sets = hass.states.get(f"{PREFIX}_sets_wanted").attributes["sets"]
+
+    assert [item["set_number"] for item in sets] == [
+        "42200-1",
+        "10294-1",
+        "999-1",
+        "10305-1",
+        "6876-1",
+    ]
+    assert [item["retired"] for item in sets] == [False, False, False, False, True]
+
+
 async def test_value_sensor_reports_missing_prices(
     hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
 ) -> None:
@@ -78,56 +136,91 @@ async def test_quota_sensor(
     assert state.attributes["remaining"] == 77
 
 
-async def test_watched_set_countdown(
+async def test_next_wishlist_retirement(
     hass: HomeAssistant,
     brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:
-    """A watched set counts down to its retirement date."""
+    """The sensor counts down to the soonest wishlist retirement."""
     freezer.move_to("2099-12-01 12:00:00+00:00")
+    brickset.wanted.append(
+        make_set(97, "10305-1", "Lion Knights", wanted=True, last_available=None)
+    )
     await setup_integration(hass, mock_config_entry)
 
-    state = hass.states.get(f"{PREFIX}_set_10497_1_retires_in")
+    state = hass.states.get(f"{PREFIX}_next_wishlist_retirement")
     assert state.state == "30"
-    assert state.attributes["set_name"] == "Galaxy Explorer"
+    assert state.attributes["set_number"] == "10294-1"
+    assert state.attributes["set_name"] == "Titanic"
     assert state.attributes["retirement_date"] == "2099-12-31"
-    assert state.attributes["qty_owned"] == 2
-    assert state.attributes["brickset_url"] == "https://brickset.com/sets/10497-1"
 
 
-async def test_watched_set_without_a_retirement_date(
+async def test_next_retirement_prefers_the_sooner_set(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A nearer retirement wins, whatever order Brickset returned the sets in."""
+    freezer.move_to("2099-12-01 12:00:00+00:00")
+    brickset.wanted.insert(
+        0,
+        make_set(
+            97, "10305-1", "Lion Knights", wanted=True, last_available="2099-12-11"
+        ),
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get(f"{PREFIX}_next_wishlist_retirement")
+    assert state.state == "10"
+    assert state.attributes["set_number"] == "10305-1"
+
+
+async def test_next_retirement_ignores_already_retired_sets(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A date in the past is not reported as a negative countdown."""
+    freezer.move_to("2099-12-01 12:00:00+00:00")
+    brickset.wanted = [
+        make_set(97, "21034-1", "London", wanted=True, last_available="2020-01-01")
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    assert hass.states.get(f"{PREFIX}_next_wishlist_retirement").state == STATE_UNKNOWN
+
+
+async def test_next_retirement_without_any_dates(
     hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
 ) -> None:
-    """A set with no published exit date reports unknown, not zero."""
-    mock_config_entry.add_to_hass(hass)
-    hass.config_entries.async_update_entry(
-        mock_config_entry,
-        options={**mock_config_entry.options, "watchlist": ["6876-1"]},
-    )
-    await hass.config_entries.async_setup(mock_config_entry.entry_id)
-    await hass.async_block_till_done()
+    """An undated wishlist reports unknown, not zero."""
+    brickset.wanted = [
+        make_set(
+            98,
+            "6879-1",
+            "Dateless Wanted Thing",
+            wanted=True,
+            price=None,
+            first_available=None,
+            last_available=None,
+        )
+    ]
+    await setup_integration(hass, mock_config_entry)
 
-    assert hass.states.get(f"{PREFIX}_set_6876_1_retires_in").state == STATE_UNKNOWN
+    assert hass.states.get(f"{PREFIX}_next_wishlist_retirement").state == STATE_UNKNOWN
 
 
-async def test_watched_set_outside_the_collection_costs_one_call(
+async def test_wishlist_sets_get_no_sensor_of_their_own(
     hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Watching a set you neither own nor want triggers a single extra lookup."""
-    brickset.theme_sets.append(make_set(99, "77777-1", "Unowned Thing"))
-    mock_config_entry.add_to_hass(hass)
-    hass.config_entries.async_update_entry(
-        mock_config_entry,
-        options={**mock_config_entry.options, "watchlist": ["77777-1"]},
-    )
-    await hass.config_entries.async_setup(mock_config_entry.entry_id)
-    await hass.async_block_till_done()
+    """The entity count does not track the wishlist length."""
+    await setup_integration(hass, mock_config_entry)
 
-    lookups = [call for call in brickset.get_sets_calls if "setNumber" in call]
-    assert len(lookups) == 1
-    assert lookups[0]["setNumber"] == "77777-1"
-    assert hass.states.get(f"{PREFIX}_set_77777_1_retires_in") is not None
+    assert hass.states.get(f"{PREFIX}_set_10294_1_retires_in") is None
+    assert hass.states.get(f"{PREFIX}_set_10497_1_retires_in") is None
 
 
 async def test_latest_theme_sensor(
