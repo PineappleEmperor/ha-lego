@@ -1,3 +1,4 @@
+# skill-audit: local-tool
 """Fill a Brickset test account with sets that cover the shapes we parse.
 
 The live API tests read whatever this account holds, so what goes in here

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# skill-audit: local-tool
 """Measure how far Rebrickable's set list and Brickset's agree.
 
 Spends two billed getSets calls, because setNumber accepts a comma-delimited list

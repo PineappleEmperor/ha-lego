@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# skill-audit: local-tool
 """Draw the brand assets: an isometric 2x2 LEGO brick carrying the HA tree.
 
 Proportions come from a real 2x2 brick rather than from any drawing: a 15.8 mm
