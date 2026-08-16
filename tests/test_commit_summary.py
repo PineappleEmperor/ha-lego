@@ -75,6 +75,11 @@ def test_classify(subject: str, group: str, desc: str) -> None:
         "chore: bump version to 5.0.1",
         "chore: bump the manifest version",
         "chore: bump integration version to 1.2.3",
+        # The bare form the release workflow actually writes. It leaked into
+        # Maintenance in the v7.0.1 draft because the pattern demanded the word
+        # "version" after the noun.
+        "chore: bump to 7.0.1",
+        "chore: bump the ha plugin to 6.4.0",
     ],
 )
 def test_release_plumbing_is_dropped(subject: str) -> None:
@@ -115,18 +120,65 @@ def test_single_type_has_no_subheads() -> None:
     """One type -> the category heading above already says it; no sub-head."""
     out = cs.render(["fix: one", "fix: two"])
     assert out == "  - one\n  - two"
-    assert "**" not in out
 
 
-def test_multiple_types_get_subheads_in_severity_order() -> None:
-    """Sub-heads appear only when they add information, hardest type first."""
+def test_multiple_types_are_one_flat_list_in_severity_order() -> None:
+    """No group labels: the release category above already names the PR.
+
+    A label inside the entry repeats that heading four lines later, and on a PR
+    spanning types it files fixes under Features. Measured at 3 of 8 merged PRs,
+    so this is the common case, not the rare one.
+    """
     out = cs.render(["chore: c", "fix: b", "feat!: a", "feat: d"])
-    assert out.splitlines() == [
-        "  **🚨 Breaking**", "  - a",
-        "  **🚀 Features**", "  - d",
-        "  **🔧 Fixes**", "  - b",
-        "  **🧰 Maintenance**", "  - c",
-    ]
+    assert out.splitlines() == ["  - a", "  - d", "  - b", "  - c"]
+    assert "**" not in out, f"group label leaked into the block:\n{out}"
+
+
+def test_block_renders_as_a_list_not_a_paragraph() -> None:
+    """The block must render as a list in BOTH places it appears.
+
+    A plain indented line does not start a markdown list without a preceding blank
+    line, so `  **Label**` + `  - item` collapsed into one run-on paragraph in a PR
+    body. Blank lines fix that but break the release notes, where the block is
+    inlined after `- $TITLE ...`. Only a nested list works in both.
+    """
+    # CommonMark, because that is what GitHub renders with. python-markdown needs
+    # four spaces to nest a list where CommonMark needs two, so it reported this
+    # block as broken when GitHub showed it fine, and fine when GitHub showed it
+    # broken. A test against the wrong parser is worse than no test.
+    MarkdownIt = pytest.importorskip("markdown_it").MarkdownIt
+    md = MarkdownIt("commonmark")
+    block = cs.render(["feat!: a", "feat: d", "fix: b", "chore: c"])
+
+    standalone = md.render(block)
+    assert "<li>" in standalone, f"PR body renders as a paragraph, not a list:\n{standalone}"
+
+    nested = md.render(f"- feat: a title @dev (#1)\n{block}")
+    assert nested.count("<ul>") > 1, f"release note does not nest the block:\n{nested}"
+
+
+def test_a_bullet_never_restates_the_pr_title() -> None:
+    """The title is the winning commit subject, so one bullet usually duplicates it."""
+    subs = ["docs: describe the artefacts", "docs: lead with install"]
+    out = cs.render(subs, title="docs: describe the artefacts")
+    assert "describe the artefacts" not in out
+    assert "lead with install" in out
+    # If the only commit IS the title, the block says nothing and is dropped.
+    assert cs.render(["fix: only change"], title="fix: only change") == ""
+
+
+def test_every_line_keeps_its_indent() -> None:
+    """No line may sit flush left.
+
+    The block is spliced into a PR body and then inlined under release-drafter's
+    `- $TITLE ...` bullet, so every line carries a two-space base indent. A bare
+    .strip() in the splice step once removed it from the FIRST line only, leaving
+    the opening label flush left while every later one stayed indented.
+    """
+    out = cs.render(["chore: c", "fix: b", "feat!: a"])
+    for line in out.splitlines():
+        assert line.startswith("  "), f"flush-left line: {line!r}"
+    assert out.strip("\n") == out, "render must not emit leading/trailing blank lines"
 
 
 def test_empty_and_plumbing_only_input() -> None:
@@ -179,8 +231,7 @@ def test_winning(subjects: list[str], expected: str) -> None:
     assert cs.winning(subjects) == expected
 
 
-def test_every_group_has_a_suggestion_and_heading() -> None:
-    """No group can be reached that lacks a rendering or a suggestion."""
+def test_every_group_has_a_title_suggestion() -> None:
+    """No group can be reached that lacks a suggestion for title-check."""
     for key in cs.ORDER:
-        assert key in cs.HEADINGS
         assert key in cs.SUGGESTIONS

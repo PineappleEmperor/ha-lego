@@ -34,8 +34,9 @@ def test_exception_translation_keys_exist() -> None:
     used = set(re.findall(r'translation_key="([a-z_]+)"', _source()))
     entity_keys = {key for platform in STRINGS["entity"].values() for key in platform}
     exception_keys = set(STRINGS["exceptions"])
+    issue_keys = set(STRINGS["issues"])
 
-    unresolved = used - entity_keys - exception_keys
+    unresolved = used - entity_keys - exception_keys - issue_keys
     assert not unresolved, (
         f"translation keys with no entry in strings.json: {unresolved}"
     )

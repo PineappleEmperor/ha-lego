@@ -18,7 +18,6 @@ from custom_components.lego.const import (
     CONF_REGION,
     CONF_THEMES,
     CONF_USER_HASH,
-    CONF_WATCHLIST,
     DOMAIN,
 )
 
@@ -288,7 +287,6 @@ async def test_options_flow(
         {
             CONF_REGION: "US",
             CONF_THEMES: ["Technic", "Icons"],
-            CONF_WATCHLIST: ["10305-1", "  "],
             CONF_COLLECTION_INTERVAL: 8,
             CONF_FEEDS_INTERVAL: 24,
             CONF_DAILY_CALL_BUDGET: 50,
@@ -302,13 +300,12 @@ async def test_options_flow(
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert mock_config_entry.options[CONF_REGION] == "US"
     assert mock_config_entry.options["catalogue_interval"] == 14
-    # Blank watchlist entries are dropped rather than creating an empty sensor.
-    assert mock_config_entry.options[CONF_WATCHLIST] == ["10305-1"]
+    assert mock_config_entry.options[CONF_THEMES] == ["Technic", "Icons"]
 
 
 def test_estimated_daily_calls() -> None:
-    """The estimate accounts for both coordinators and the watchlist."""
-    # 4 collection polls x (owned + wanted) = 8, plus 2 feed polls x 1 theme.
+    """The estimate accounts for both coordinators."""
+    # 4 collection polls x (owned + wanted) = 8, plus 2 feed polls of one call each.
     assert (
         estimated_daily_calls(
             {
@@ -319,17 +316,16 @@ def test_estimated_daily_calls() -> None:
         )
         == 10
     )
-    # A watchlist adds a third call to each collection poll.
+    # Themes ride in one comma-joined call, so five cost the same as one.
     assert (
         estimated_daily_calls(
             {
                 CONF_COLLECTION_INTERVAL: 6,
                 CONF_FEEDS_INTERVAL: 12,
-                CONF_THEMES: ["Technic"],
-                CONF_WATCHLIST: ["10497-1"],
+                CONF_THEMES: ["Technic", "Icons", "City", "Star Wars", "Botanicals"],
             }
         )
-        == 14
+        == 10
     )
     # No themes means no feed polls at all.
     assert (

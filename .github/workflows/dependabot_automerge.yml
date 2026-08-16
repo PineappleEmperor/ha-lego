@@ -1,0 +1,26 @@
+name: Dependabot auto-merge
+
+# Dependabot PRs are the only ones this touches: the guard reads the PR author,
+# so a human PR never reaches the merge step. Majors are excluded deliberately —
+# a major bump is the one worth reading before it lands.
+
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@v3
+      # --merge, not --squash: release_notes.py resolves a commit's PR number from
+      # the merge commit that introduced it, so a squash drops the link.
+      - if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --merge "$PR_URL"

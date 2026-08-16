@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import (
@@ -33,6 +34,55 @@ class LegoSummaryEntityDescription(SensorEntityDescription):
     """Describes a sensor derived from the collection summary."""
 
     value_fn: Callable[[CollectionSummary], int | float]
+    items_fn: Callable[[list[LegoSet], str], list[dict[str, Any]]] | None = None
+
+
+def _set_number_key(number: str) -> tuple[int, int, str]:
+    """Sort set numbers by their numeric parts, so 6876-1 precedes 10294-1."""
+    base, _, variant = number.partition("-")
+    if not base.isdigit():
+        return (1, 0, number)
+    return (0, int(base), variant.zfill(3))
+
+
+def _wishlist_items(sets: list[LegoSet], region: str) -> list[dict[str, Any]]:
+    """Return a lean record per wanted set, soonest to retire first."""
+    today = dt_util.now().date().isoformat()
+    # The full per-set payload is 16 fields, which a long wishlist would push to
+    # every connected browser on each update. These are what a card needs.
+    items = [
+        {
+            "set_number": lego_set.number,
+            "set_name": lego_set.name,
+            "theme": lego_set.theme,
+            "year": lego_set.year,
+            "retail_price": lego_set.price(region),
+            "retirement_date": (
+                retirement.isoformat()
+                if (retirement := lego_set.retirement_date(region))
+                else None
+            ),
+            "priority": lego_set.collection.wanted_priority,
+            "image_url": lego_set.image_url,
+            "brickset_url": lego_set.brickset_url,
+        }
+        for lego_set in sets
+    ]
+    for item in items:
+        retirement = item["retirement_date"]
+        item["retired"] = retirement is not None and retirement < today
+    # A retired set is the least actionable thing on a wishlist, so it sinks
+    # rather than floats. Brickset exposes no date a set was added, so set
+    # number breaks the remaining ties.
+    return sorted(
+        items,
+        key=lambda item: (
+            item["retired"],
+            item["retirement_date"] is None,
+            item["retirement_date"] or "",
+            _set_number_key(item["set_number"]),
+        ),
+    )
 
 
 SUMMARY_SENSORS: tuple[LegoSummaryEntityDescription, ...] = (
@@ -70,6 +120,7 @@ SUMMARY_SENSORS: tuple[LegoSummaryEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement="sets",
         value_fn=lambda summary: summary.sets_wanted,
+        items_fn=_wishlist_items,
     ),
 )
 
@@ -88,9 +139,7 @@ async def async_setup_entry(
     ]
     entities.append(LegoValueSensor(collection))
     entities.append(LegoQuotaSensor(collection))
-    entities.extend(
-        LegoWatchedSetSensor(collection, number) for number in collection.watchlist
-    )
+    entities.append(LegoNextRetirementSensor(collection))
     entities.extend(
         LegoLatestThemeSetSensor(runtime.feeds, theme) for theme in runtime.feeds.themes
     )
@@ -102,6 +151,9 @@ class LegoSummarySensor(LegoCollectionEntity, SensorEntity):
     """A whole-collection total."""
 
     entity_description: LegoSummaryEntityDescription
+    # Recording the list would write the whole wishlist to the database on every
+    # poll, and past 16 KB the recorder drops the attributes altogether.
+    _unrecorded_attributes = frozenset({"sets"})
 
     def __init__(
         self,
@@ -119,6 +171,14 @@ class LegoSummarySensor(LegoCollectionEntity, SensorEntity):
         if self.coordinator.data is None:
             return None
         return self.entity_description.value_fn(self.coordinator.data.summary)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the sets behind the total, for the sensors that carry them."""
+        items_fn = self.entity_description.items_fn
+        if items_fn is None or self.coordinator.data is None:
+            return None
+        return {"sets": items_fn(self.coordinator.data.wanted, self.coordinator.region)}
 
 
 class LegoValueSensor(LegoCollectionEntity, SensorEntity):
@@ -218,44 +278,51 @@ def _set_attributes(lego_set: LegoSet, region: str) -> dict[str, Any]:
     }
 
 
-class LegoWatchedSetSensor(LegoCollectionEntity, SensorEntity):
-    """Days until a watched set retires, so automations can threshold on it."""
+class LegoNextRetirementSensor(LegoCollectionEntity, SensorEntity):
+    """Days until the next set on the wishlist retires."""
 
-    _attr_translation_key = "watched_set"
+    _attr_translation_key = "next_wishlist_retirement"
     _attr_native_unit_of_measurement = UnitOfTime.DAYS
 
-    def __init__(self, coordinator: LegoCollectionCoordinator, number: str) -> None:
+    def __init__(self, coordinator: LegoCollectionCoordinator) -> None:
         """Initialise the sensor."""
         super().__init__(coordinator)
-        self._number = number
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_watch_{number}"
-        self._attr_translation_placeholders = {"set_number": number}
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_next_retirement"
 
     @property
-    def _lego_set(self) -> LegoSet | None:
-        """Return the watched set from the last poll."""
+    def _next(self) -> tuple[date, LegoSet] | None:
+        """Return the soonest wishlist retirement still to come."""
         if self.coordinator.data is None:
             return None
-        return self.coordinator.data.watched.get(self._number)
+        today = dt_util.now().date()
+        region = self.coordinator.region
+        # Already-retired sets are excluded rather than reported as negative days;
+        # the wishlist attribute on Sets wanted is where those still show up.
+        upcoming = [
+            (retires, lego_set)
+            for lego_set in self.coordinator.data.wanted
+            if (retires := lego_set.retirement_date(region)) is not None
+            and retires >= today
+        ]
+        if not upcoming:
+            return None
+        return min(upcoming, key=lambda item: item[0])
 
     @property
     def native_value(self) -> int | None:
-        """Return days remaining until retirement."""
-        lego_set = self._lego_set
-        if lego_set is None:
+        """Return days remaining until that retirement."""
+        soonest = self._next
+        if soonest is None:
             return None
-        retirement = lego_set.retirement_date(self.coordinator.region)
-        if retirement is None:
-            return None
-        return (retirement - dt_util.now().date()).days
+        return (soonest[0] - dt_util.now().date()).days
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Return the full set record."""
-        lego_set = self._lego_set
-        if lego_set is None:
+        """Return the full record of the set that is retiring."""
+        soonest = self._next
+        if soonest is None:
             return None
-        return _set_attributes(lego_set, self.coordinator.region)
+        return _set_attributes(soonest[1], self.coordinator.region)
 
 
 class LegoLatestThemeSetSensor(LegoEntity[dict[str, list[LegoSet]]], SensorEntity):

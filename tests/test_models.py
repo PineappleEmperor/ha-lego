@@ -123,3 +123,60 @@ def test_summary_of_an_empty_collection() -> None:
     assert summary.sets_owned == 0
     assert summary.value == 0.0
     assert summary.sets_missing_price == 0
+
+
+def test_dates_fall_back_to_the_set_wide_window() -> None:
+    """A set still on sale carries no regional exit date, only a projected one."""
+    # Shaped like a real getSets record: LEGOCom prices the set per region and
+    # gives a launch date, while only the top level says when it leaves sale.
+    record = make_set(
+        50740,
+        "10343-1",
+        "Mini Orchid",
+        first_available="2024-11-14T00:00:00Z",
+        last_available=None,
+        launch_date="2025-01-01T00:00:00Z",
+        exit_date="2027-12-31T00:00:00Z",
+    )
+    lego_set = LegoSet.from_api(record)
+
+    assert lego_set.retirement_date("UK") == date(2027, 12, 31)
+    # The region knows when it arrived, so that wins over the set-wide launch.
+    assert lego_set.release_date("UK") == date(2024, 11, 14)
+
+
+def test_a_regional_exit_date_wins_over_the_set_wide_one() -> None:
+    """Where a region publishes its own exit date, that is the accurate one."""
+    lego_set = LegoSet.from_api(
+        make_set(
+            1,
+            "10497-1",
+            "Galaxy Explorer",
+            last_available="2026-06-30T00:00:00Z",
+            exit_date="2027-12-31T00:00:00Z",
+        )
+    )
+
+    assert lego_set.retirement_date("UK") == date(2026, 6, 30)
+
+
+def test_no_dates_anywhere_stays_none() -> None:
+    """An old set with nothing published must not invent a date."""
+    lego_set = LegoSet.from_api(
+        make_set(3, "6876-1", "Alienator", first_available=None, last_available=None)
+    )
+
+    assert lego_set.retirement_date("UK") is None
+    assert lego_set.release_date("UK") is None
+
+
+def test_parses_the_whole_collection_block() -> None:
+    """Brickset sends more than owned and wanted, and the extras are useful."""
+    record = make_set(4, "10294-1", "Titanic", wanted=True, qty_owned=0, priority=3)
+    status = LegoSet.from_api(record).collection
+
+    assert status.wanted is True
+    assert status.qty_wanted == 1
+    assert status.wanted_priority == 3
+    assert status.qty_owned_new == 0
+    assert status.qty_owned_used == 0

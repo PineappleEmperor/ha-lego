@@ -22,7 +22,6 @@ from custom_components.lego.const import (
     CONF_REGION,
     CONF_THEMES,
     CONF_USER_HASH,
-    CONF_WATCHLIST,
     DOMAIN,
 )
 
@@ -64,6 +63,9 @@ def make_set(
     price: float | None = 99.99,
     first_available: str | None = "2024-01-01T00:00:00Z",
     last_available: str | None = "2099-12-31T00:00:00Z",
+    launch_date: str | None = None,
+    exit_date: str | None = None,
+    priority: int = 1,
 ) -> dict[str, Any]:
     """Build a getSets record shaped like Brickset's own payloads."""
     uk: dict[str, Any] = {}
@@ -75,7 +77,13 @@ def make_set(
         uk["dateLastAvailable"] = last_available
 
     base, _, variant = number.partition("-")
+    dates = {}
+    if launch_date is not None:
+        dates["launchDate"] = launch_date
+    if exit_date is not None:
+        dates["exitDate"] = exit_date
     return {
+        **dates,
         "setID": set_id,
         "number": base,
         "numberVariant": int(variant or 1),
@@ -97,6 +105,10 @@ def make_set(
             "owned": owned,
             "wanted": wanted,
             "qtyOwned": qty_owned,
+            "qtyWanted": 1 if wanted else 0,
+            "qtyOwnedNew": qty_owned,
+            "qtyOwnedUsed": 0,
+            "wantedPriority": priority,
             "notes": "",
         },
         "collections": {"ownedBy": 100, "wantedBy": 50},
@@ -185,6 +197,10 @@ class BricksetServer:
         self.hash_valid = True
         # When set, every getSets call fails with this message.
         self.get_sets_error: str | None = None
+        # When set, every setCollection call fails with this message.
+        self.set_collection_error: str | None = None
+        # Clear this to act like a Brickset that stopped accepting comma-joined themes.
+        self.themes_batchable = True
 
         mocker.get(
             SETS_CSV_URL,
@@ -275,9 +291,11 @@ class BricksetServer:
         elif params.get("wanted"):
             sets = self.wanted
         elif "theme" in params:
-            sets = [
-                item for item in self.theme_sets if item["theme"] == params["theme"]
-            ]
+            # Brickset accepts a comma-separated theme; verified against the live API.
+            wanted_themes = str(params["theme"]).split(",")
+            if not self.themes_batchable:
+                wanted_themes = wanted_themes[:1] if len(wanted_themes) == 1 else []
+            sets = [item for item in self.theme_sets if item["theme"] in wanted_themes]
         elif "setNumber" in params:
             requested = str(params["setNumber"]).split(",")
             pool = [*self.owned, *self.wanted, *self.theme_sets]
@@ -298,6 +316,8 @@ class BricksetServer:
     async def _set_collection(self, method: str, url: str, data: Any) -> Any:
         if not self.hash_valid:
             return self._error("Invalid userHash")
+        if self.set_collection_error is not None:
+            return self._error(self.set_collection_error)
         self.set_collection_calls.append(
             {"setID": data["setID"], "params": json.loads(data["params"])}
         )
@@ -317,6 +337,7 @@ def mock_config_entry() -> MockConfigEntry:
         domain=DOMAIN,
         title=USERNAME,
         unique_id=USERNAME,
+        version=2,
         data={
             CONF_API_KEY: API_KEY,
             CONF_USERNAME: USERNAME,
@@ -325,7 +346,6 @@ def mock_config_entry() -> MockConfigEntry:
         options={
             CONF_REGION: "UK",
             CONF_THEMES: ["Technic"],
-            CONF_WATCHLIST: ["10497-1"],
         },
     )
 
@@ -336,7 +356,8 @@ async def setup_integration(
     """Add and set up a config entry."""
     entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    # Setup seeds the catalogue in a background task that hops to an executor.
+    await hass.async_block_till_done(wait_background_tasks=True)
     return entry
 
 

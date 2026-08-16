@@ -80,6 +80,10 @@ class CollectionStatus:
     owned: bool = False
     wanted: bool = False
     qty_owned: int = 0
+    qty_wanted: int = 0
+    qty_owned_new: int = 0
+    qty_owned_used: int = 0
+    wanted_priority: int | None = None
     rating: int | None = None
     notes: str = ""
 
@@ -90,6 +94,10 @@ class CollectionStatus:
             owned=bool(data.get("owned")),
             wanted=bool(data.get("wanted")),
             qty_owned=_as_int(data.get("qtyOwned")) or 0,
+            qty_wanted=_as_int(data.get("qtyWanted")) or 0,
+            qty_owned_new=_as_int(data.get("qtyOwnedNew")) or 0,
+            qty_owned_used=_as_int(data.get("qtyOwnedUsed")) or 0,
+            wanted_priority=_as_int(data.get("wantedPriority")),
             rating=_as_int(data.get("rating")),
             notes=data.get("notes") or "",
         )
@@ -118,6 +126,8 @@ class LegoSet:
     last_updated: datetime | None = None
     collection: CollectionStatus = field(default_factory=CollectionStatus)
     pricing: dict[str, RegionPricing] = field(default_factory=dict)
+    launch_date: date | None = None
+    exit_date: date | None = None
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> LegoSet:
@@ -143,6 +153,8 @@ class LegoSet:
             availability=data.get("availability") or "",
             last_updated=_parse_datetime(data.get("lastUpdated")),
             collection=CollectionStatus.from_api(data.get("collection") or {}),
+            launch_date=_parse_date(data.get("launchDate")),
+            exit_date=_parse_date(data.get("exitDate")),
             pricing={
                 region: RegionPricing.from_api(payload)
                 for region, payload in lego_com.items()
@@ -156,14 +168,20 @@ class LegoSet:
         return pricing.retail_price if pricing else None
 
     def retirement_date(self, region: str) -> date | None:
-        """Return the LEGO.com exit date for a region, if published."""
+        """Return when the set leaves sale, preferring the chosen region."""
+        # A set still on sale often has no regional exit date while Brickset
+        # publishes a projected one for the set as a whole.
         pricing = self.pricing.get(region)
-        return pricing.date_last_available if pricing else None
+        if pricing is not None and pricing.date_last_available is not None:
+            return pricing.date_last_available
+        return self.exit_date
 
     def release_date(self, region: str) -> date | None:
-        """Return the LEGO.com launch date for a region, if published."""
+        """Return when the set went on sale, preferring the chosen region."""
         pricing = self.pricing.get(region)
-        return pricing.date_first_available if pricing else None
+        if pricing is not None and pricing.date_first_available is not None:
+            return pricing.date_first_available
+        return self.launch_date
 
 
 @dataclass(slots=True)

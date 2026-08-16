@@ -61,14 +61,14 @@ rules:
   discovery-update-info:
     status: exempt
     comment: No discovery, and the cloud endpoint is a fixed hostname.
-  repair-issues: todo
-  docs-use-cases: done
+  repair-issues: done
+  docs-use-cases: todo
   docs-supported-devices: done
   docs-supported-functions: done
   docs-data-update: done
-  docs-known-limitations: done
-  docs-troubleshooting: done
-  docs-examples: done
+  docs-known-limitations: todo
+  docs-troubleshooting: todo
+  docs-examples: todo
 
   # Platinum
   async-dependency: done

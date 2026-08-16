@@ -37,7 +37,6 @@ from .const import (
     CONF_REGION,
     CONF_THEMES,
     CONF_USER_HASH,
-    CONF_WATCHLIST,
     COUNTRY_TO_REGION,
     DEFAULT_CATALOGUE,
     DEFAULT_CATALOGUE_INTERVAL_DAYS,
@@ -83,11 +82,13 @@ def estimated_daily_calls(options: Mapping[str, Any]) -> int:
     )
     feeds_hours = options.get(CONF_FEEDS_INTERVAL, DEFAULT_FEEDS_INTERVAL_HOURS)
     themes = len(options.get(CONF_THEMES, []))
-    watchlist = 1 if options.get(CONF_WATCHLIST) else 0
 
     collection_polls = math.ceil(24 / max(collection_hours, 1))
     feed_polls = math.ceil(24 / max(feeds_hours, 1)) if themes else 0
-    return collection_polls * (2 + watchlist) + feed_polls * themes
+    # Every watched theme rides in one comma-joined call, so the feed cost does not
+    # grow with the theme count. A theme with no releases this year is confirmed
+    # individually, which adds a call the steady state does not pay.
+    return collection_polls * 2 + feed_polls
 
 
 async def _validate(hass: Any, api_key: str, username: str, password: str) -> str:
@@ -100,7 +101,7 @@ async def _validate(hass: Any, api_key: str, username: str, password: str) -> st
 class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for LEGO."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         """Initialise the flow."""
@@ -274,17 +275,12 @@ class LegoOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage region, feeds, watchlist and polling budget."""
+        """Manage region, feeds, intervals and polling budget."""
         entry = self.config_entry
         if user_input is not None:
             options = {
                 CONF_REGION: user_input[CONF_REGION],
                 CONF_THEMES: user_input.get(CONF_THEMES, []),
-                CONF_WATCHLIST: [
-                    number.strip()
-                    for number in user_input.get(CONF_WATCHLIST, [])
-                    if number.strip()
-                ],
                 CONF_COLLECTION_INTERVAL: int(user_input[CONF_COLLECTION_INTERVAL]),
                 CONF_FEEDS_INTERVAL: int(user_input[CONF_FEEDS_INTERVAL]),
                 CONF_DAILY_CALL_BUDGET: int(user_input[CONF_DAILY_CALL_BUDGET]),
@@ -316,11 +312,6 @@ class LegoOptionsFlow(OptionsFlow):
                         custom_value=True,
                         mode=SelectSelectorMode.DROPDOWN,
                     )
-                ),
-                vol.Optional(
-                    CONF_WATCHLIST, default=list(options.get(CONF_WATCHLIST, []))
-                ): SelectSelector(
-                    SelectSelectorConfig(options=[], multiple=True, custom_value=True)
                 ),
                 vol.Required(
                     CONF_COLLECTION_INTERVAL,

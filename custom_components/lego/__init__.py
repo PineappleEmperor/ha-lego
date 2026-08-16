@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.event import async_track_time_interval
@@ -36,6 +36,10 @@ from .services import async_setup_services
 from .websocket import async_setup_websocket
 
 PLATFORMS: list[Platform] = [Platform.CALENDAR, Platform.SENSOR]
+
+# Removed in 1.0.0: the wishlist now decides which sets get a countdown sensor.
+LEGACY_CONF_WATCHLIST = "watchlist"
+LEGACY_COUNTDOWN_PREFIX = "_watch_"
 
 # How often staleness is reconsidered, not how often the index is downloaded.
 CATALOGUE_CHECK_INTERVAL = timedelta(hours=6)
@@ -130,6 +134,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await async_refresh_panel(hass)
     entry.async_on_unload(entry.add_update_listener(async_update_options))
+    return True
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool:
+    """Drop the watchlist option and the sensors it created."""
+    if entry.version > 1:
+        return True
+
+    registry = er.async_get(hass)
+    legacy_prefix = f"{entry.entry_id}{LEGACY_COUNTDOWN_PREFIX}"
+    for registered in list(er.async_entries_for_config_entry(registry, entry.entry_id)):
+        if registered.unique_id.startswith(legacy_prefix):
+            registry.async_remove(registered.entity_id)
+
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            key: value
+            for key, value in entry.options.items()
+            if key != LEGACY_CONF_WATCHLIST
+        },
+        version=2,
+    )
     return True
 
 

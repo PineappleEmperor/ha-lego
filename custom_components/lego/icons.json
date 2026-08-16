@@ -1,27 +1,56 @@
 {
   "entity": {
     "sensor": {
-      "sets_owned": { "default": "mdi:toy-brick" },
-      "sets_distinct": { "default": "mdi:toy-brick-outline" },
-      "pieces_owned": { "default": "mdi:cube-outline" },
-      "minifigs_owned": { "default": "mdi:human" },
-      "sets_wanted": { "default": "mdi:heart-outline" },
-      "collection_value": { "default": "mdi:cash-multiple" },
-      "api_calls_today": { "default": "mdi:api" },
-      "watched_set": { "default": "mdi:calendar-clock" },
-      "latest_theme_set": { "default": "mdi:new-box" }
+      "sets_owned": {
+        "default": "mdi:toy-brick"
+      },
+      "sets_distinct": {
+        "default": "mdi:toy-brick-outline"
+      },
+      "pieces_owned": {
+        "default": "mdi:cube-outline"
+      },
+      "minifigs_owned": {
+        "default": "mdi:human"
+      },
+      "sets_wanted": {
+        "default": "mdi:heart-outline"
+      },
+      "collection_value": {
+        "default": "mdi:cash-multiple"
+      },
+      "api_calls_today": {
+        "default": "mdi:api"
+      },
+      "next_wishlist_retirement": {
+        "default": "mdi:calendar-clock"
+      },
+      "latest_theme_set": {
+        "default": "mdi:new-box"
+      }
     },
     "calendar": {
-      "retirements": { "default": "mdi:calendar-remove" },
-      "releases": { "default": "mdi:calendar-star" },
-      "anniversaries": { "default": "mdi:cake-variant" }
+      "retirements": {
+        "default": "mdi:calendar-remove"
+      },
+      "releases": {
+        "default": "mdi:calendar-star"
+      },
+      "anniversaries": {
+        "default": "mdi:cake-variant"
+      }
     }
   },
   "services": {
-    "set_collection": { "service": "mdi:playlist-edit" },
-    "add_watch": { "service": "mdi:eye-plus" },
-    "remove_watch": { "service": "mdi:eye-remove" },
-    "search_sets": { "service": "mdi:magnify" },
-    "refresh_catalogue": { "service": "mdi:database-refresh" }
+    "refresh_catalogue": {
+      "service": "mdi:database-refresh"
+    },
+    "refresh_collection": "mdi:cloud-sync",
+    "search_sets": {
+      "service": "mdi:magnify"
+    },
+    "set_collection": {
+      "service": "mdi:playlist-edit"
+    }
   }
 }

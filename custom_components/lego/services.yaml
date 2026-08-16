@@ -33,32 +33,6 @@ set_collection:
         text:
           multiline: true
 
-add_watch:
-  fields:
-    config_entry_id:
-      required: true
-      selector:
-        config_entry:
-          integration: lego
-    set_number:
-      required: true
-      example: 10497-1
-      selector:
-        text:
-
-remove_watch:
-  fields:
-    config_entry_id:
-      required: true
-      selector:
-        config_entry:
-          integration: lego
-    set_number:
-      required: true
-      example: 10497-1
-      selector:
-        text:
-
 search_sets:
   fields:
     config_entry_id:
@@ -90,6 +64,13 @@ search_sets:
           mode: box
 
 refresh_catalogue:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: lego
+refresh_collection:
   fields:
     config_entry_id:
       required: true
