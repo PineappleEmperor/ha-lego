@@ -69,14 +69,18 @@ def _secret(prompt: str) -> str:
 SEED: tuple[tuple[str, str, dict[str, Any]], ...] = (
     (
         "6876-1",
-        "1988, no LEGO.com price and no dates: the missing-price and unknown-"
-        "countdown branches",
+        (
+            "1988, no LEGO.com price and no dates: the missing-price and "
+            "unknown-countdown branches"
+        ),
         {"own": 1, "qtyOwned": 1},
     ),
     (
         "10179-1",
-        "2007, long retired: a regional dateLastAvailable should exist here if it "
-        "exists anywhere",
+        (
+            "2007, long retired: a regional dateLastAvailable should exist "
+            "here if it exists anywhere"
+        ),
         {"own": 1, "qtyOwned": 1},
     ),
     (
