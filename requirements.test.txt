@@ -10,17 +10,17 @@
 #
 # Version map (verify at pypi.org/project/pytest-homeassistant-custom-component):
 #   0.13.354 -> homeassistant 2026.8.0, requires-python >=3.14
-pytest-homeassistant-custom-component==0.13.355
+pytest-homeassistant-custom-component==0.13.356
 
 # Add integration-specific test deps below (e.g. a fake transport, respx,
 # freezegun beyond what the plugin already pins).
 markdown-it-py
-ruff==0.16.2
-pyright==1.1.409
+ruff==0.16.3
+pyright==1.1.411
 
 # The panel makes `frontend` a manifest dependency, and the frontend component
 # has its own pip requirement that installing homeassistant does not pull in.
 # Without it every setup test fails with "No module named 'hass_frontend'".
 # Read the pin from homeassistant/components/frontend/manifest.json whenever the
 # pytest-homeassistant-custom-component pin above moves.
-home-assistant-frontend==20260729.5
+home-assistant-frontend==20260729.7
