@@ -1,6 +1,7 @@
 """Tests for the lego/search websocket command."""
 
 from homeassistant.core import HomeAssistant
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
@@ -43,10 +44,10 @@ async def test_search_returns_catalogue_hits(
     assert len(brickset.get_sets_calls) == before
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_search_honours_the_limit(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """A type-ahead asks for a handful, not the whole index."""
@@ -68,10 +69,10 @@ async def test_search_honours_the_limit(
     assert len(response["result"]["sets"]) == 1
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_search_rejects_an_unknown_entry(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """An entry id from another integration is not searchable."""
@@ -87,10 +88,10 @@ async def test_search_rejects_an_unknown_entry(
     assert response["error"]["code"] == "not_found"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_search_reports_a_missing_catalogue(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """Searching with the index turned off fails loudly rather than silently empty."""

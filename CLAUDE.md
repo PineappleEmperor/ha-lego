@@ -6,7 +6,7 @@ Domain: `lego`. Package: `custom_components/lego/`.
 ## AI sessions
 
 Before writing or modifying integration code (config flow, platforms, manifest,
-coordinator, services…), invoke the `ha-integration` skill. Re-invoke it after any
+coordinator, websocket, services…), invoke the `ha-integration` skill. Re-invoke it after any
 `/compact`, since compaction can drop the skill's guidance from context.
 
 ## Hard constraints
@@ -44,11 +44,19 @@ Brand assets are generated, not hand-drawn — see `docs/brand.md` before touchi
 
 ## Conventions
 
-- Conventional Commits; one version bump as the last commit before merge.
-- `git config core.hooksPath .githooks` once per clone — the commit-msg hook enforces
-  terse subjects and rejects AI trailers.
-- Run before claiming done: `ruff check custom_components/`, `ruff format`,
-  `pyright custom_components/`, `pytest`, `scripts/skill_audit.sh`.
+- Conventional Commits. The release tag is the version: nothing bumps `manifest.json`,
+  which the release workflow writes when a release is published.
+- CI is reusable workflows called from `PineappleEmperor/release-flow`,
+  `ha-integration-ci` and `ha-panel-ci`, pinned by SHA and moved by Dependabot. Never
+  copy a workflow body back in.
+- Run before claiming done: `ruff check .`, `ruff format --check .`,
+  `mypy --config-file mypy.ini custom_components/`, `pytest`, and for panel changes
+  `npm ci && npm run check && npm test && npm run build` in `frontend/`.
 - `quality_scale.yaml` is the definition of done. A rule is only `done` when a test
   exercises it. Do not add `"quality_scale"` to `manifest.json` until every rule at that
   tier is `done` or `exempt`.
+
+## Git hooks
+
+Run `git config core.hooksPath .githooks` once in every clone. The commit-msg hook
+enforces terse Conventional Commit subjects and rejects AI trailers.

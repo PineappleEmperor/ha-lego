@@ -42,8 +42,9 @@ async def test_refresh_catalogue(
     assert len(brickset.get_sets_calls) == before
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_refresh_catalogue_ignores_the_interval(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Asking by hand refreshes a fresh index, which is the point of asking."""
     await setup_integration(hass, mock_config_entry)
@@ -61,8 +62,9 @@ async def test_refresh_catalogue_ignores_the_interval(
     assert response["updated"] is True
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_refresh_catalogue_needs_the_index_enabled(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Refreshing an index the user turned off is a validation error, not a crash."""
     mock_config_entry.add_to_hass(hass)
@@ -183,8 +185,9 @@ async def test_set_collection_looks_up_an_unseen_set(
     assert _lookups(brickset, before) == ["21034-1"]
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_set_collection_unknown_set_raises(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """An unknown set number is a validation error, not a crash."""
     await setup_integration(hass, mock_config_entry)
@@ -296,8 +299,9 @@ async def test_set_collection_rejection_raises_a_repair_issue(
     assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_unknown_entry_raises(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Targeting a non-existent entry is a validation error."""
     await setup_integration(hass, mock_config_entry)
@@ -313,8 +317,9 @@ async def test_unknown_entry_raises(
     assert err.value.translation_key == "entry_not_found"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_search_sets_returns_matches(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """The search action returns a response payload."""
     await setup_integration(hass, mock_config_entry)
@@ -331,8 +336,9 @@ async def test_search_sets_returns_matches(
     assert response["sets"][0]["name"] == "Lion Knights' Castle"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_search_without_criteria_raises(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """An unbounded search is refused rather than pulling the whole catalogue."""
     await setup_integration(hass, mock_config_entry)

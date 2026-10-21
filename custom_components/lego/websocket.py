@@ -2,16 +2,7 @@
 
 from typing import TYPE_CHECKING, Any, cast
 
-from homeassistant.components.websocket_api import async_register_command
-from homeassistant.components.websocket_api.connection import ActiveConnection
-from homeassistant.components.websocket_api.const import (
-    ERR_HOME_ASSISTANT_ERROR,
-    ERR_NOT_FOUND,
-)
-from homeassistant.components.websocket_api.decorators import (
-    async_response,
-    websocket_command,
-)
+from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 import probatio
@@ -28,16 +19,16 @@ if TYPE_CHECKING:
 @callback
 def async_setup_websocket(hass: HomeAssistant) -> None:
     """Register the websocket commands."""
-    async_register_command(hass, websocket_search)
-    async_register_command(hass, websocket_dashboard)
-    async_register_command(hass, websocket_collection)
-    async_register_command(hass, websocket_set_rows)
-    async_register_command(hass, websocket_accounts)
-    async_register_command(hass, websocket_set_account)
+    websocket_api.async_register_command(hass, websocket_search)
+    websocket_api.async_register_command(hass, websocket_dashboard)
+    websocket_api.async_register_command(hass, websocket_collection)
+    websocket_api.async_register_command(hass, websocket_set_rows)
+    websocket_api.async_register_command(hass, websocket_accounts)
+    websocket_api.async_register_command(hass, websocket_set_account)
 
 
 @callback
-@websocket_command(
+@websocket_api.websocket_command(
     {
         probatio.Required("type"): "lego/search",
         probatio.Optional("config_entry_id"): str,
@@ -49,7 +40,7 @@ def async_setup_websocket(hass: HomeAssistant) -> None:
 )
 def websocket_search(
     hass: HomeAssistant,
-    connection: ActiveConnection,
+    connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
     """Search the local catalogue; never reaches Brickset, so never billed."""
@@ -60,7 +51,7 @@ def websocket_search(
     catalogue = entry.runtime_data.catalogue
     if catalogue is None or not catalogue.loaded:
         connection.send_error(
-            msg["id"], ERR_NOT_FOUND, "The set catalogue is not available"
+            msg["id"], websocket_api.ERR_NOT_FOUND, "The set catalogue is not available"
         )
         return
 
@@ -82,7 +73,7 @@ def websocket_search(
 
 
 @callback
-@websocket_command(
+@websocket_api.websocket_command(
     {
         probatio.Required("type"): "lego/dashboard",
         probatio.Optional("config_entry_id"): str,
@@ -90,7 +81,7 @@ def websocket_search(
 )
 def websocket_dashboard(
     hass: HomeAssistant,
-    connection: ActiveConnection,
+    connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
     """Return the home view in one reply: stats, wishlist and theme feeds."""
@@ -104,7 +95,7 @@ def websocket_dashboard(
 
 
 @callback
-@websocket_command(
+@websocket_api.websocket_command(
     {
         probatio.Required("type"): "lego/collection",
         probatio.Optional("config_entry_id"): str,
@@ -115,7 +106,7 @@ def websocket_dashboard(
 )
 def websocket_collection(
     hass: HomeAssistant,
-    connection: ActiveConnection,
+    connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
     """Return the sets Brickset already told us about; costs no calls."""
@@ -138,23 +129,25 @@ def websocket_collection(
     )
 
 
-@websocket_command(
+@websocket_api.websocket_command(
     {
         probatio.Required("type"): "lego/panel_config/set",
         probatio.Required("rows"): [str],
     }
 )
-@async_response
+@websocket_api.async_response
 async def websocket_set_rows(
     hass: HomeAssistant,
-    connection: ActiveConnection,
+    connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
     """Save this user's row order and return what was stored."""
-    # ActiveConnection types user as always set; keep the guard anyway, since a
+    # websocket_api.ActiveConnection types user as always set; keep the guard anyway, since a
     # write keyed on a missing user would land in another user's slot.
     if (user := cast("User | None", connection.user)) is None:
-        connection.send_error(msg["id"], ERR_NOT_FOUND, "No signed-in user")
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "No signed-in user"
+        )
         return
 
     store = hass.data[PANEL_STORE]
@@ -163,10 +156,10 @@ async def websocket_set_rows(
 
 
 @callback
-@websocket_command({probatio.Required("type"): "lego/accounts"})
+@websocket_api.websocket_command({probatio.Required("type"): "lego/accounts"})
 def websocket_accounts(
     hass: HomeAssistant,
-    connection: ActiveConnection,
+    connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
     """List the loaded Brickset accounts and which one this user is on."""
@@ -182,28 +175,32 @@ def websocket_accounts(
     )
 
 
-@websocket_command(
+@websocket_api.websocket_command(
     {
         probatio.Required("type"): "lego/account/set",
         probatio.Required("config_entry_id"): str,
     }
 )
-@async_response
+@websocket_api.async_response
 async def websocket_set_account(
     hass: HomeAssistant,
-    connection: ActiveConnection,
+    connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
     """Remember which account this user's panel is showing."""
-    # ActiveConnection types user as always set; keep the guard anyway, since a
+    # websocket_api.ActiveConnection types user as always set; keep the guard anyway, since a
     # write keyed on a missing user would land in another user's slot.
     if (user := cast("User | None", connection.user)) is None:
-        connection.send_error(msg["id"], ERR_NOT_FOUND, "No signed-in user")
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "No signed-in user"
+        )
         return
 
     entry_id = msg["config_entry_id"]
     if entry_id not in {entry.entry_id for entry in _loaded_entries(hass)}:
-        connection.send_error(msg["id"], ERR_NOT_FOUND, "Unknown LEGO entry")
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Unknown LEGO entry"
+        )
         return
 
     await hass.data[PANEL_STORE].async_set_account(user.id, entry_id)
@@ -221,7 +218,7 @@ def _loaded_entries(hass: HomeAssistant) -> list[LegoConfigEntry]:
 
 def _selected(
     hass: HomeAssistant,
-    connection: ActiveConnection,
+    connection: websocket_api.ActiveConnection,
     loaded: list[LegoConfigEntry],
 ) -> str | None:
     """Return the account to show: this user's last choice, else the first."""
@@ -235,7 +232,7 @@ def _selected(
 
 
 def _loaded_entry(
-    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> LegoConfigEntry | None:
     """Resolve a loaded LEGO entry, reporting why not when it fails."""
     requested = msg.get("config_entry_id")
@@ -245,18 +242,24 @@ def _loaded_entry(
         # browser still running an older bundle working with several accounts.
         loaded = _loaded_entries(hass)
         if not loaded:
-            connection.send_error(msg["id"], ERR_NOT_FOUND, "No LEGO account is loaded")
+            connection.send_error(
+                msg["id"], websocket_api.ERR_NOT_FOUND, "No LEGO account is loaded"
+            )
             return None
         selected = _selected(hass, connection, loaded)
         return next(entry for entry in loaded if entry.entry_id == selected)
 
     entry = hass.config_entries.async_get_entry(requested)
     if entry is None or entry.domain != DOMAIN:
-        connection.send_error(msg["id"], ERR_NOT_FOUND, "Unknown LEGO entry")
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Unknown LEGO entry"
+        )
         return None
     if entry.state is not ConfigEntryState.LOADED:
         connection.send_error(
-            msg["id"], ERR_HOME_ASSISTANT_ERROR, "LEGO entry is not loaded"
+            msg["id"],
+            websocket_api.ERR_HOME_ASSISTANT_ERROR,
+            "LEGO entry is not loaded",
         )
         return None
     return cast("LegoConfigEntry", entry)

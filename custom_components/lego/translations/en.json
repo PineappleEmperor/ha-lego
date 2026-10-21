@@ -1,56 +1,8 @@
 {
   "config": {
-    "step": {
-      "user": {
-        "title": "Connect to Brickset",
-        "description": "This integration reads your LEGO collection from Brickset.com. Get a free API key from your Brickset account under {api_key_path}, then sign in below. Your password is used once to obtain a token and is never stored. This integration is unofficial and not affiliated with, authorised by or endorsed by the LEGO Group or Brickset.",
-        "data": {
-          "api_key": "Brickset API key",
-          "username": "Brickset username",
-          "password": "Brickset password"
-        },
-        "data_description": {
-          "api_key": "Issued from your Brickset account under Tools, Web services.",
-          "username": "The account whose owned and wanted sets should be tracked.",
-          "password": "Exchanged for a long-lived token; only the token is saved."
-        }
-      },
-      "reauth_confirm": {
-        "title": "Reconnect to Brickset",
-        "description": "Brickset rejected the saved token for {username}. Confirm your API key and password to reconnect.",
-        "data": {
-          "api_key": "Brickset API key",
-          "password": "Brickset password"
-        },
-        "data_description": {
-          "api_key": "Issued from your Brickset account under Tools, Web services.",
-          "password": "Exchanged for a new long-lived token; only the token is saved."
-        }
-      },
-      "reconfigure": {
-        "title": "Change Brickset account",
-        "description": "Update the API key or switch to a different Brickset account.",
-        "data": {
-          "api_key": "Brickset API key",
-          "username": "Brickset username",
-          "password": "Brickset password"
-        },
-        "data_description": {
-          "api_key": "Issued from your Brickset account under Tools, Web services.",
-          "username": "Must be the account this entry already tracks.",
-          "password": "Exchanged for a long-lived token; only the token is saved."
-        }
-      },
-      "region": {
-        "title": "Pricing region",
-        "description": "Prices and availability dates come from one LEGO.com market. Home Assistant reports your country as {country}; change the market if you buy from a different store.",
-        "data": {
-          "region": "Pricing region"
-        },
-        "data_description": {
-          "region": "Which LEGO.com market supplies recommended retail prices and retirement dates."
-        }
-      }
+    "abort": {
+      "account_mismatch": "That is a different Brickset account. Use a new entry instead of reconfiguring this one.",
+      "already_configured": "That Brickset account is already set up."
     },
     "error": {
       "cannot_connect": "Could not reach Brickset. Check your internet connection and try again.",
@@ -58,104 +10,107 @@
       "invalid_auth": "Brickset rejected that username or password.",
       "unknown": "Unexpected error talking to Brickset."
     },
-    "abort": {
-      "already_configured": "That Brickset account is already set up.",
-      "account_mismatch": "That is a different Brickset account. Use a new entry instead of reconfiguring this one."
-    }
-  },
-  "options": {
     "step": {
-      "init": {
-        "title": "LEGO options",
-        "description": "Brickset allows 100 catalogue calls per API key per day. Your current settings use about {estimated_calls} of your {budget} call budget.",
+      "reauth_confirm": {
         "data": {
-          "region": "Pricing region",
-          "themes": "Themes to watch for new releases",
-          "collection_interval_hours": "Collection refresh interval",
-          "feeds_interval_hours": "New release refresh interval",
-          "daily_call_budget": "Daily call budget",
-          "catalogue": "Keep a local set index",
-          "catalogue_rich": "Include set names in the index",
-          "catalogue_interval": "Set index refresh interval",
-          "panel": "Show the LEGO panel in the sidebar"
+          "api_key": "Brickset API key",
+          "password": "Brickset password"
         },
         "data_description": {
-          "region": "Which LEGO.com market supplies recommended retail prices and retirement dates.",
-          "themes": "However many themes you pick, they are fetched together in one API call per refresh.",
-          "collection_interval_hours": "How often owned and wanted sets are refreshed.",
-          "feeds_interval_hours": "How often watched themes are checked for new sets.",
-          "daily_call_budget": "Polling stops once this many calls have been made, leaving headroom for manual actions.",
-          "catalogue": "Downloads the public LEGO set list so searching and checking a set number costs no Brickset calls. Uses no part of your daily allowance.",
-          "catalogue_rich": "Names make the index searchable, at roughly 1.8 MB instead of 450 KB. Turn off on a storage-constrained machine, and search falls back to set numbers only.",
-          "catalogue_interval": "How often the public LEGO set list is re-downloaded. The source is rebuilt nightly and gains roughly five sets a day; a set the index has not heard of still works, it just costs one Brickset call to look up.",
-          "panel": "Adds a page for browsing your collection, your wishlist and new releases in the themes you follow. Turning it off removes the sidebar entry."
-        }
+          "api_key": "Issued from your Brickset account under Tools, Web services.",
+          "password": "Exchanged for a new long-lived token; only the token is saved."
+        },
+        "description": "Brickset rejected the saved token for {username}. Confirm your API key and password to reconnect.",
+        "title": "Reconnect to Brickset"
+      },
+      "reconfigure": {
+        "data": {
+          "api_key": "Brickset API key",
+          "password": "Brickset password",
+          "username": "Brickset username"
+        },
+        "data_description": {
+          "api_key": "Issued from your Brickset account under Tools, Web services.",
+          "password": "Exchanged for a long-lived token; only the token is saved.",
+          "username": "Must be the account this entry already tracks."
+        },
+        "description": "Update the API key or switch to a different Brickset account.",
+        "title": "Change Brickset account"
+      },
+      "region": {
+        "data": {
+          "region": "Pricing region"
+        },
+        "data_description": {
+          "region": "Which LEGO.com market supplies recommended retail prices and retirement dates."
+        },
+        "description": "Prices and availability dates come from one LEGO.com market. Home Assistant reports your country as {country}; change the market if you buy from a different store.",
+        "title": "Pricing region"
+      },
+      "user": {
+        "data": {
+          "api_key": "Brickset API key",
+          "password": "Brickset password",
+          "username": "Brickset username"
+        },
+        "data_description": {
+          "api_key": "Issued from your Brickset account under Tools, Web services.",
+          "password": "Exchanged for a long-lived token; only the token is saved.",
+          "username": "The account whose owned and wanted sets should be tracked."
+        },
+        "description": "This integration reads your LEGO collection from Brickset.com. Get a free API key from your Brickset account under {api_key_path}, then sign in below. Your password is used once to obtain a token and is never stored. This integration is unofficial and not affiliated with, authorised by or endorsed by the LEGO Group or Brickset.",
+        "title": "Connect to Brickset"
       }
     }
   },
   "entity": {
-    "sensor": {
-      "sets_owned": {
-        "name": "Sets owned"
-      },
-      "sets_distinct": {
-        "name": "Distinct sets owned"
-      },
-      "pieces_owned": {
-        "name": "Pieces owned"
-      },
-      "minifigs_owned": {
-        "name": "Minifigures owned"
-      },
-      "sets_wanted": {
-        "name": "Sets wanted"
-      },
-      "collection_value": {
-        "name": "Collection value"
-      },
-      "api_calls_today": {
-        "name": "Brickset calls today"
-      },
-      "next_wishlist_retirement": {
-        "name": "Next wishlist retirement"
-      },
-      "latest_theme_set": {
-        "name": "Latest {theme} set"
-      }
-    },
     "calendar": {
-      "retirements": {
-        "name": "Set retirements"
+      "anniversaries": {
+        "name": "Set anniversaries"
       },
       "releases": {
         "name": "Set releases"
       },
-      "anniversaries": {
-        "name": "Set anniversaries"
+      "retirements": {
+        "name": "Set retirements"
+      }
+    },
+    "sensor": {
+      "api_calls_today": {
+        "name": "Brickset calls today"
+      },
+      "collection_value": {
+        "name": "Collection value"
+      },
+      "latest_theme_set": {
+        "name": "Latest {theme} set"
+      },
+      "minifigs_owned": {
+        "name": "Minifigures owned"
+      },
+      "next_wishlist_retirement": {
+        "name": "Next wishlist retirement"
+      },
+      "pieces_owned": {
+        "name": "Pieces owned"
+      },
+      "sets_distinct": {
+        "name": "Distinct sets owned"
+      },
+      "sets_owned": {
+        "name": "Sets owned"
+      },
+      "sets_wanted": {
+        "name": "Sets wanted"
       }
     }
   },
   "exceptions": {
-    "entry_not_found": {
-      "message": "No LEGO configuration entry with ID {entry_id}."
-    },
-    "entry_not_loaded": {
-      "message": "The LEGO entry {title} is not loaded."
-    },
-    "set_not_found": {
-      "message": "Brickset has no set numbered {set_number}."
-    },
     "api_error": {
       "message": "Brickset returned an error: {error}"
     },
     "auth_expired": {
       "message": "Brickset rejected the saved token. Reconnect the integration."
-    },
-    "no_changes": {
-      "message": "Provide at least one field to change."
-    },
-    "search_needs_criteria": {
-      "message": "Provide a query, theme or year to search for."
     },
     "catalogue_disabled": {
       "message": "The local set index is turned off for this account. Turn it on in the integration options first."
@@ -163,96 +118,141 @@
     "catalogue_unavailable": {
       "message": "Could not download the set list. Check Home Assistant's internet access and try again."
     },
+    "entry_not_found": {
+      "message": "No LEGO configuration entry with ID {entry_id}."
+    },
+    "entry_not_loaded": {
+      "message": "The LEGO entry {title} is not loaded."
+    },
+    "no_changes": {
+      "message": "Provide at least one field to change."
+    },
     "quota_spent": {
       "message": "A refresh needs {cost} Brickset calls but the daily budget is spent ({calls_today} of {budget} used). It resets at midnight UTC."
+    },
+    "search_needs_criteria": {
+      "message": "Provide a query, theme or year to search for."
+    },
+    "set_not_found": {
+      "message": "Brickset has no set numbered {set_number}."
     }
   },
   "issues": {
     "collection_write_failed": {
-      "title": "Brickset rejected a collection change",
-      "description": "Brickset would not save a change made through {name}: {error}\n\nThe change was not applied. This clears the next time a collection change succeeds."
+      "description": "Brickset would not save a change made through {name}: {error}\n\nThe change was not applied. This clears the next time a collection change succeeds.",
+      "title": "Brickset rejected a collection change"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "catalogue": "Keep a local set index",
+          "catalogue_interval": "Set index refresh interval",
+          "catalogue_rich": "Include set names in the index",
+          "collection_interval_hours": "Collection refresh interval",
+          "daily_call_budget": "Daily call budget",
+          "feeds_interval_hours": "New release refresh interval",
+          "panel": "Show the LEGO panel in the sidebar",
+          "region": "Pricing region",
+          "themes": "Themes to watch for new releases"
+        },
+        "data_description": {
+          "catalogue": "Downloads the public LEGO set list so searching and checking a set number costs no Brickset calls. Uses no part of your daily allowance.",
+          "catalogue_interval": "How often the public LEGO set list is re-downloaded. The source is rebuilt nightly and gains roughly five sets a day; a set the index has not heard of still works, it just costs one Brickset call to look up.",
+          "catalogue_rich": "Names make the index searchable, at roughly 1.8 MB instead of 450 KB. Turn off on a storage-constrained machine, and search falls back to set numbers only.",
+          "collection_interval_hours": "How often owned and wanted sets are refreshed.",
+          "daily_call_budget": "Polling stops once this many calls have been made, leaving headroom for manual actions.",
+          "feeds_interval_hours": "How often watched themes are checked for new sets.",
+          "panel": "Adds a page for browsing your collection, your wishlist and new releases in the themes you follow. Turning it off removes the sidebar entry.",
+          "region": "Which LEGO.com market supplies recommended retail prices and retirement dates.",
+          "themes": "However many themes you pick, they are fetched together in one API call per refresh."
+        },
+        "description": "Brickset allows 100 catalogue calls per API key per day. Your current settings use about {estimated_calls} of your {budget} call budget.",
+        "title": "LEGO options"
+      }
     }
   },
   "services": {
-    "set_collection": {
-      "name": "Update collection",
-      "description": "Marks a set as owned or wanted on Brickset, or updates its quantity, rating or notes.",
-      "fields": {
-        "config_entry_id": {
-          "name": "Brickset account",
-          "description": "The LEGO configuration entry to act on."
-        },
-        "set_number": {
-          "name": "Set number",
-          "description": "Full set number including the variant, for example 10497-1."
-        },
-        "owned": {
-          "name": "Owned",
-          "description": "Whether you own the set."
-        },
-        "wanted": {
-          "name": "Wanted",
-          "description": "Whether you want the set."
-        },
-        "qty_owned": {
-          "name": "Quantity owned",
-          "description": "How many copies you own. Any value above zero also marks the set as owned."
-        },
-        "rating": {
-          "name": "Rating",
-          "description": "Your rating for the set, from 1 to 5."
-        },
-        "notes": {
-          "name": "Notes",
-          "description": "Your private notes about the set."
-        }
-      }
-    },
-    "search_sets": {
-      "name": "Search sets",
-      "description": "Searches the Brickset catalogue and returns matching sets. Uses one of your daily API calls.",
-      "fields": {
-        "config_entry_id": {
-          "name": "Brickset account",
-          "description": "The LEGO configuration entry to act on."
-        },
-        "query": {
-          "name": "Query",
-          "description": "Free text searched against set number, name, theme and subtheme."
-        },
-        "theme": {
-          "name": "Theme",
-          "description": "Restrict results to a theme."
-        },
-        "year": {
-          "name": "Year",
-          "description": "Restrict results to a release year."
-        },
-        "limit": {
-          "name": "Limit",
-          "description": "Maximum number of sets to return."
-        }
-      }
-    },
     "refresh_catalogue": {
-      "name": "Refresh set index",
       "description": "Re-downloads the local LEGO set list now, rather than waiting for the next scheduled refresh. Uses no Brickset API calls.",
       "fields": {
         "config_entry_id": {
-          "name": "Account",
-          "description": "Which Brickset account to refresh the index for."
+          "description": "Which Brickset account to refresh the index for.",
+          "name": "Account"
         }
-      }
+      },
+      "name": "Refresh set index"
     },
     "refresh_collection": {
-      "name": "Refresh collection",
       "description": "Poll Brickset now instead of waiting for the next scheduled update. Spends billed calls.",
       "fields": {
         "config_entry_id": {
-          "name": "Account",
-          "description": "Which Brickset account to refresh the index for."
+          "description": "Which Brickset account to refresh the collection for.",
+          "name": "Account"
         }
-      }
+      },
+      "name": "Refresh collection"
+    },
+    "search_sets": {
+      "description": "Searches the Brickset catalogue and returns matching sets. Uses one of your daily API calls.",
+      "fields": {
+        "config_entry_id": {
+          "description": "The LEGO configuration entry to act on.",
+          "name": "Brickset account"
+        },
+        "limit": {
+          "description": "Maximum number of sets to return.",
+          "name": "Limit"
+        },
+        "query": {
+          "description": "Free text searched against set number, name, theme and subtheme.",
+          "name": "Query"
+        },
+        "theme": {
+          "description": "Restrict results to a theme.",
+          "name": "Theme"
+        },
+        "year": {
+          "description": "Restrict results to a release year.",
+          "name": "Year"
+        }
+      },
+      "name": "Search sets"
+    },
+    "set_collection": {
+      "description": "Marks a set as owned or wanted on Brickset, or updates its quantity, rating or notes.",
+      "fields": {
+        "config_entry_id": {
+          "description": "The LEGO configuration entry to act on.",
+          "name": "Brickset account"
+        },
+        "notes": {
+          "description": "Your private notes about the set.",
+          "name": "Notes"
+        },
+        "owned": {
+          "description": "Whether you own the set.",
+          "name": "Owned"
+        },
+        "qty_owned": {
+          "description": "How many copies you own. Any value above zero also marks the set as owned.",
+          "name": "Quantity owned"
+        },
+        "rating": {
+          "description": "Your rating for the set, from 1 to 5.",
+          "name": "Rating"
+        },
+        "set_number": {
+          "description": "Full set number including the variant, for example 10497-1.",
+          "name": "Set number"
+        },
+        "wanted": {
+          "description": "Whether you want the set.",
+          "name": "Wanted"
+        }
+      },
+      "name": "Update collection"
     }
   }
 }

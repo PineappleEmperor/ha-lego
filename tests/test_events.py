@@ -131,9 +131,9 @@ async def test_wanted_set_change_event(
     assert events[0].data["retirement_date"] == "2027-01-31"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_unchanged_wanted_set_fires_nothing(
     hass: HomeAssistant,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:

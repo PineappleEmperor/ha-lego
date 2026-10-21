@@ -31,10 +31,13 @@ var At=Object.defineProperty;var St=Object.getOwnPropertyDescriptor;var g=(i,t,e
       <select
         class="account"
         aria-label="Brickset account"
-        @change=${e=>void this._selectAccount(e.target.value)}
+        @change=${e=>{this._selectAccount(e.target.value)}}
       >
         ${this._accounts.map(e=>c`
-            <option value=${e.entry_id} ?selected=${e.entry_id===this._account}>
+            <option
+              value=${e.entry_id}
+              ?selected=${e.entry_id===this._account}
+            >
               ${e.name}
             </option>
           `)}
@@ -65,7 +68,8 @@ var At=Object.defineProperty;var St=Object.getOwnPropertyDescriptor;var g=(i,t,e
         ${s}
       </section>
     `}_renderThemes(){let e=Object.keys(this._dash?.themes??{});if(!e.length)return c`<p class="muted">
-        No themes followed yet. Add one in the integration options to see new releases here.
+        No themes followed yet. Add one in the integration options to see new
+        releases here.
       </p>`;let s=this._dash?.themes[this._theme]??[];return c`
       <div class="chips">
         ${e.map(r=>c`
@@ -83,29 +87,36 @@ var At=Object.defineProperty;var St=Object.getOwnPropertyDescriptor;var g=(i,t,e
         <button
           class="refreshbtn"
           ?disabled=${this._refreshing||r}
-          @click=${()=>void this._refreshCollection()}
+          @click=${()=>{this._refreshCollection()}}
         >
-          <ha-icon icon=${this._refreshing?"mdi:sync":"mdi:cloud-sync"}></ha-icon>
+          <ha-icon
+            icon=${this._refreshing?"mdi:sync":"mdi:cloud-sync"}
+          ></ha-icon>
           ${this._refreshing?"Updating\u2026":"Update now"}
         </button>
         <span class="quota ${r?"bad":n?"warn":""}">
-          ${r?c`Daily budget spent, ${e.calls_today} of ${e.budget} used.
-              Resets at midnight UTC.`:c`Costs ${s} of ${e.remaining} calls left today.`}
+          ${r?c`Daily budget spent, ${e.calls_today} of ${e.budget}
+              used. Resets at midnight UTC.`:c`Costs ${s} of ${e.remaining} calls left today.`}
         </span>
       </div>
       ${this._refreshError?c`<p class="caveat bad">${this._refreshError}</p>`:d}
     `}_renderStats(){let e=this._dash?.stats;if(!e)return c``;let s=[[this._num(e.sets_owned),"Sets owned"],[this._num(e.sets_distinct),"Distinct sets"],[this._num(e.pieces_owned),"Pieces"],[this._num(e.minifigs_owned),"Minifigures"],[this._num(Math.round(e.value)),"Value at RRP"]];return c`
       <div class="stats">
         ${s.map(([r,n])=>c`
-            <div class="stat"><span class="n">${r}</span><span class="l">${n}</span></div>
+            <div class="stat">
+              <span class="n">${r}</span><span class="l">${n}</span>
+            </div>
           `)}
       </div>
       ${this._renderRefresh()}
       ${e.sets_missing_price?c`<p class="caveat">
-            ${this._num(e.sets_missing_price)} sets have no published price and are not
-            counted in the value.
+            ${this._num(e.sets_missing_price)} sets have no published price
+            and are not counted in the value.
           </p>`:d}
-      <button class="link" @click=${()=>{this._tab="collection",this._loadCollection()}}>
+      <button
+        class="link"
+        @click=${()=>{this._tab="collection",this._loadCollection()}}
+      >
         Browse all sets ›
       </button>
     `}_renderCollection(){let e=this._query.trim().length>=2?this._results:this._collection;return c`
@@ -117,15 +128,22 @@ var At=Object.defineProperty;var St=Object.getOwnPropertyDescriptor;var g=(i,t,e
             .value=${this._query}
             placeholder="Search your sets and the full catalogue…"
             aria-label="Search sets"
-            @input=${s=>void this._search(s.target.value)}
+            @input=${s=>{this._search(s.target.value)}}
           />
           ${this._query.trim().length>=2?c`<p class="muted">${e.length} matching sets</p>`:c`<p class="muted">${e.length} sets owned</p>`}
           <div class="grid">${e.map(s=>this._card(s))}</div>
         </section>
       </div>
-    `}_carousel(e,s){return e.length?c`<div class="carousel">${e.map(r=>this._card(r))}</div>`:c`<p class="muted">${s}</p>`}_card(e){return c`
+    `}_carousel(e,s){return e.length?c`<div class="carousel">
+      ${e.map(r=>this._card(r))}
+    </div>`:c`<p class="muted">${s}</p>`}_card(e){return c`
       <article class="card">
-        ${e.image?c`<img src=${e.image} alt="" loading="lazy" />`:c`<img class="noart" src=${It} alt="" loading="lazy" />`}
+        ${e.image?c`<img src=${e.image} alt="" loading="lazy" />`:c`<img
+              class="noart"
+              src=${It}
+              alt=""
+              loading="lazy"
+            />`}
         <div class="meta">
           <span
             class=${I(e)?"name":"name unnamed"}
@@ -135,14 +153,16 @@ var At=Object.defineProperty;var St=Object.getOwnPropertyDescriptor;var g=(i,t,e
           <span class="num">${e.set_number}</span>
           <span class="when">${this._when(e)}</span>
           <div class="foot">
-            <span class=${e.owned?"state own":e.wanted?"state want":"state"}>
+            <span
+              class=${e.owned?"state own":e.wanted?"state want":"state"}
+            >
               ${e.owned?e.qty_owned>1?`Owned \xD7${e.qty_owned}`:"Owned":e.wanted?"Wanted":e.year||""}
             </span>
             <button
               class=${e.owned?"act on":"act"}
               title=${e.owned?"Remove from your collection":"Add to your collection"}
               aria-label=${e.owned?"Remove from your collection":"Add to your collection"}
-              @click=${()=>void this._toggleOwned(e)}
+              @click=${()=>{this._toggleOwned(e)}}
             >
               <ha-icon icon=${e.owned?"mdi:check":"mdi:plus"}></ha-icon>
             </button>
@@ -534,20 +554,17 @@ var At=Object.defineProperty;var St=Object.getOwnPropertyDescriptor;var g=(i,t,e
    *)
 
 @lit/reactive-element/reactive-element.js:
-  (**
-   * @license
-   * Copyright 2017 Google LLC
-   * SPDX-License-Identifier: BSD-3-Clause
-   *)
-
 lit-html/lit-html.js:
-  (**
-   * @license
-   * Copyright 2017 Google LLC
-   * SPDX-License-Identifier: BSD-3-Clause
-   *)
-
 lit-element/lit-element.js:
+@lit/reactive-element/decorators/custom-element.js:
+@lit/reactive-element/decorators/property.js:
+@lit/reactive-element/decorators/state.js:
+@lit/reactive-element/decorators/event-options.js:
+@lit/reactive-element/decorators/base.js:
+@lit/reactive-element/decorators/query.js:
+@lit/reactive-element/decorators/query-all.js:
+@lit/reactive-element/decorators/query-async.js:
+@lit/reactive-element/decorators/query-assigned-nodes.js:
   (**
    * @license
    * Copyright 2017 Google LLC
@@ -561,73 +578,10 @@ lit-html/is-server.js:
    * SPDX-License-Identifier: BSD-3-Clause
    *)
 
-@lit/reactive-element/decorators/custom-element.js:
-  (**
-   * @license
-   * Copyright 2017 Google LLC
-   * SPDX-License-Identifier: BSD-3-Clause
-   *)
-
-@lit/reactive-element/decorators/property.js:
-  (**
-   * @license
-   * Copyright 2017 Google LLC
-   * SPDX-License-Identifier: BSD-3-Clause
-   *)
-
-@lit/reactive-element/decorators/state.js:
-  (**
-   * @license
-   * Copyright 2017 Google LLC
-   * SPDX-License-Identifier: BSD-3-Clause
-   *)
-
-@lit/reactive-element/decorators/event-options.js:
-  (**
-   * @license
-   * Copyright 2017 Google LLC
-   * SPDX-License-Identifier: BSD-3-Clause
-   *)
-
-@lit/reactive-element/decorators/base.js:
-  (**
-   * @license
-   * Copyright 2017 Google LLC
-   * SPDX-License-Identifier: BSD-3-Clause
-   *)
-
-@lit/reactive-element/decorators/query.js:
-  (**
-   * @license
-   * Copyright 2017 Google LLC
-   * SPDX-License-Identifier: BSD-3-Clause
-   *)
-
-@lit/reactive-element/decorators/query-all.js:
-  (**
-   * @license
-   * Copyright 2017 Google LLC
-   * SPDX-License-Identifier: BSD-3-Clause
-   *)
-
-@lit/reactive-element/decorators/query-async.js:
-  (**
-   * @license
-   * Copyright 2017 Google LLC
-   * SPDX-License-Identifier: BSD-3-Clause
-   *)
-
 @lit/reactive-element/decorators/query-assigned-elements.js:
   (**
    * @license
    * Copyright 2021 Google LLC
-   * SPDX-License-Identifier: BSD-3-Clause
-   *)
-
-@lit/reactive-element/decorators/query-assigned-nodes.js:
-  (**
-   * @license
-   * Copyright 2017 Google LLC
    * SPDX-License-Identifier: BSD-3-Clause
    *)
 */

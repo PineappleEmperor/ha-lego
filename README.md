@@ -7,9 +7,9 @@
 <a href="https://github.com/hacs/integration"><img alt="hacs" src="https://img.shields.io/badge/hacs-custom-blue?style=flat-square"></a>
 <a href="LICENSE"><img alt="licence" src="https://img.shields.io/github/license/PineappleEmperor/ha-lego?style=flat-square"></a>
 <br>
-<img alt="python" src="https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-lego/python_validate.yml?style=flat-square&amp;label=python">
-<img alt="hassfest" src="https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-lego/hassfest_validate.yml?style=flat-square&amp;label=hassfest">
-<img alt="hacs valid" src="https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-lego/hacs_validate.yml?style=flat-square&amp;label=hacs%20valid">
+<img alt="python" src="https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-lego/python-validate.yml?style=flat-square&amp;label=python">
+<img alt="hassfest" src="https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-lego/hassfest-validate.yml?style=flat-square&amp;label=hassfest">
+<img alt="hacs valid" src="https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-lego/hacs-validate.yml?style=flat-square&amp;label=hacs%20valid">
 <a href="https://buymeacoffee.com/PineappleEmperor"><img alt="Buy me a coffee" height="20" src="https://cdn.buymeacoffee.com/buttons/default-yellow.png"></a>
 </p>
 

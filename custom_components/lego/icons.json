@@ -1,43 +1,43 @@
 {
   "entity": {
-    "sensor": {
-      "sets_owned": {
-        "default": "mdi:toy-brick"
-      },
-      "sets_distinct": {
-        "default": "mdi:toy-brick-outline"
-      },
-      "pieces_owned": {
-        "default": "mdi:cube-outline"
-      },
-      "minifigs_owned": {
-        "default": "mdi:human"
-      },
-      "sets_wanted": {
-        "default": "mdi:heart-outline"
-      },
-      "collection_value": {
-        "default": "mdi:cash-multiple"
-      },
-      "api_calls_today": {
-        "default": "mdi:api"
-      },
-      "next_wishlist_retirement": {
-        "default": "mdi:calendar-clock"
-      },
-      "latest_theme_set": {
-        "default": "mdi:new-box"
-      }
-    },
     "calendar": {
-      "retirements": {
-        "default": "mdi:calendar-remove"
+      "anniversaries": {
+        "default": "mdi:cake-variant"
       },
       "releases": {
         "default": "mdi:calendar-star"
       },
-      "anniversaries": {
-        "default": "mdi:cake-variant"
+      "retirements": {
+        "default": "mdi:calendar-remove"
+      }
+    },
+    "sensor": {
+      "api_calls_today": {
+        "default": "mdi:api"
+      },
+      "collection_value": {
+        "default": "mdi:cash-multiple"
+      },
+      "latest_theme_set": {
+        "default": "mdi:new-box"
+      },
+      "minifigs_owned": {
+        "default": "mdi:human"
+      },
+      "next_wishlist_retirement": {
+        "default": "mdi:calendar-clock"
+      },
+      "pieces_owned": {
+        "default": "mdi:cube-outline"
+      },
+      "sets_distinct": {
+        "default": "mdi:toy-brick-outline"
+      },
+      "sets_owned": {
+        "default": "mdi:toy-brick"
+      },
+      "sets_wanted": {
+        "default": "mdi:heart-outline"
       }
     }
   },
@@ -45,7 +45,9 @@
     "refresh_catalogue": {
       "service": "mdi:database-refresh"
     },
-    "refresh_collection": "mdi:cloud-sync",
+    "refresh_collection": {
+      "service": "mdi:cloud-sync"
+    },
     "search_sets": {
       "service": "mdi:magnify"
     },

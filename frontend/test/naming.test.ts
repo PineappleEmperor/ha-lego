@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { accountCall, displayName, isNamed, ownershipCall } from "../src/panel";
+import {
+  accountCall,
+  displayName,
+  isNamed,
+  ownershipCall,
+} from "../src/lego-panel";
 
 describe("set naming", () => {
   it("treats a normal name as named", () => {
@@ -19,7 +24,9 @@ describe("set naming", () => {
 
   it("handles an empty or absent name the same way", () => {
     expect(displayName({ name: "" })).toBe("Name tbd");
-    expect(displayName({ name: undefined as unknown as string })).toBe("Name tbd");
+    expect(displayName({ name: undefined as unknown as string })).toBe(
+      "Name tbd",
+    );
   });
 
   it("keeps a name that merely contains braces", () => {
@@ -29,23 +36,31 @@ describe("set naming", () => {
 
 describe("ownership call", () => {
   it("always sends config_entry_id, which the action requires", () => {
-    const data = ownershipCall("abc123", { set_number: "10497-1", owned: false });
+    const data = ownershipCall("abc123", {
+      set_number: "10497-1",
+      owned: false,
+    });
 
     expect(data).toHaveProperty("config_entry_id", "abc123");
     expect(data).toHaveProperty("set_number", "10497-1");
   });
 
   it("flips owned rather than repeating it", () => {
-    expect(ownershipCall("e", { set_number: "1-1", owned: false }).owned).toBe(true);
-    expect(ownershipCall("e", { set_number: "1-1", owned: true }).owned).toBe(false);
+    expect(ownershipCall("e", { set_number: "1-1", owned: false }).owned).toBe(
+      true,
+    );
+    expect(ownershipCall("e", { set_number: "1-1", owned: true }).owned).toBe(
+      false,
+    );
   });
 
   it("never omits the entry id, even when the dashboard has not loaded", () => {
     // The panel passes "" in that case; the key must still be present, since a
     // missing key is a schema rejection while an empty one is a clear error.
-    expect("config_entry_id" in ownershipCall("", { set_number: "1-1", owned: false })).toBe(
-      true,
-    );
+    expect(
+      "config_entry_id" in
+        ownershipCall("", { set_number: "1-1", owned: false }),
+    ).toBe(true);
   });
 });
 
@@ -66,7 +81,10 @@ describe("addressing an account", () => {
   });
 
   it("keeps the caller's own fields when spread alongside", () => {
-    expect({ ...accountCall("lego/collection", "e1"), filter: "owned" }).toEqual({
+    expect({
+      ...accountCall("lego/collection", "e1"),
+      filter: "owned",
+    }).toEqual({
       type: "lego/collection",
       config_entry_id: "e1",
       filter: "owned",

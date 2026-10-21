@@ -13,6 +13,12 @@ rules:
   docs-high-level-description: done
   docs-installation-instructions: done
   docs-removal-instructions: done
+  docs-triggers:
+    status: exempt
+    comment: The integration provides no triggers of its own.
+  docs-conditions:
+    status: exempt
+    comment: The integration provides no conditions of its own.
   entity-event-setup:
     status: exempt
     comment: Entities subscribe only through CoordinatorEntity; no external callbacks.

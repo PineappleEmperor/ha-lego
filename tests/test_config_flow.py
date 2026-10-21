@@ -7,6 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.lego.config_flow import estimated_daily_calls
 from custom_components.lego.const import (
@@ -27,7 +28,8 @@ USER_INPUT = {
 }
 
 
-async def test_user_flow(hass: HomeAssistant, brickset: BricksetServer) -> None:
+@pytest.mark.usefixtures("brickset")
+async def test_user_flow(hass: HomeAssistant) -> None:
     """A valid key and login create an entry that stores only the token."""
     hass.config.country = "GB"
     result = await hass.config_entries.flow.async_init(
@@ -57,8 +59,9 @@ async def test_user_flow(hass: HomeAssistant, brickset: BricksetServer) -> None:
     assert result["options"][CONF_REGION] == "UK"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_user_flow_asks_for_region_when_country_is_unmapped(
-    hass: HomeAssistant, brickset: BricksetServer
+    hass: HomeAssistant,
 ) -> None:
     """LEGO.com prices four markets, so any other country has to be asked."""
     hass.config.country = "FR"
@@ -83,9 +86,8 @@ async def test_user_flow_asks_for_region_when_country_is_unmapped(
     assert result["options"][CONF_REGION] == "DE"
 
 
-async def test_region_step_is_seeded_from_the_country(
-    hass: HomeAssistant, brickset: BricksetServer
-) -> None:
+@pytest.mark.usefixtures("brickset")
+async def test_region_step_is_seeded_from_the_country(hass: HomeAssistant) -> None:
     """A mapped country preselects its market, leaving it changeable."""
     hass.config.country = "CA"
 
@@ -100,9 +102,8 @@ async def test_region_step_is_seeded_from_the_country(
     assert result["data_schema"]({})[CONF_REGION] == "CA"
 
 
-async def test_region_can_be_overridden_at_setup(
-    hass: HomeAssistant, brickset: BricksetServer
-) -> None:
+@pytest.mark.usefixtures("brickset")
+async def test_region_can_be_overridden_at_setup(hass: HomeAssistant) -> None:
     """Buying from another country's store is common, so the seed is a default."""
     hass.config.country = "GB"
 
@@ -159,8 +160,9 @@ async def test_user_flow_errors(
     assert result["step_id"] == "region"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_user_flow_cannot_connect(
-    hass: HomeAssistant, aioclient_mock, brickset: BricksetServer
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
     """A transport failure maps to cannot_connect."""
     aioclient_mock.clear_requests()
@@ -179,8 +181,9 @@ async def test_user_flow_cannot_connect(
     assert result["errors"] == {"base": "cannot_connect"}
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_user_flow_unexpected_error(
-    hass: HomeAssistant, aioclient_mock, brickset: BricksetServer
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
     """An error Brickset does not classify maps to unknown."""
     aioclient_mock.clear_requests()
@@ -200,8 +203,9 @@ async def test_user_flow_unexpected_error(
     assert result["errors"] == {"base": "unknown"}
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_duplicate_account_aborts(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """The same Brickset account cannot be added twice."""
     mock_config_entry.add_to_hass(hass)
@@ -217,8 +221,9 @@ async def test_duplicate_account_aborts(
     assert result["reason"] == "already_configured"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_reauth_flow(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Reauth mints a fresh token and reloads the entry."""
     mock_config_entry.add_to_hass(hass)
@@ -256,8 +261,9 @@ async def test_reauth_flow_rejects_bad_password(
     assert result["errors"] == {"base": "invalid_auth"}
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_reconfigure_flow(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Reconfigure can swap the API key for the same account."""
     mock_config_entry.add_to_hass(hass)
@@ -275,8 +281,9 @@ async def test_reconfigure_flow(
     assert mock_config_entry.data[CONF_API_KEY] == "new-key"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_reconfigure_rejects_other_account(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Reconfiguring onto a different Brickset account is refused."""
     mock_config_entry.add_to_hass(hass)
@@ -290,8 +297,9 @@ async def test_reconfigure_rejects_other_account(
     assert result["reason"] == "account_mismatch"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_options_flow(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Options round-trip and the theme picker is populated from Brickset."""
     await setup_integration(hass, mock_config_entry)

@@ -9,10 +9,10 @@ from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
-    OptionsFlow,
+    OptionsFlowWithReload,
 )
 from homeassistant.const import CONF_API_KEY, CONF_PASSWORD, CONF_REGION, CONF_USERNAME
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
@@ -93,7 +93,9 @@ def estimated_daily_calls(options: Mapping[str, Any]) -> int:
     return int(collection_polls * 2 + feed_polls)
 
 
-async def _validate(hass: Any, api_key: str, username: str, password: str) -> str:
+async def _validate(
+    hass: HomeAssistant, api_key: str, username: str, password: str
+) -> str:
     """Validate credentials and return a user hash."""
     client = BricksetClient(async_get_clientsession(hass), api_key)
     await client.check_key()
@@ -273,7 +275,7 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
         return LegoOptionsFlow()
 
 
-class LegoOptionsFlow(OptionsFlow):
+class LegoOptionsFlow(OptionsFlowWithReload):
     """Handle LEGO options."""
 
     async def async_step_init(

@@ -113,6 +113,7 @@ async def async_refresh_panel(hass: HomeAssistant) -> None:
             sidebar_title="LEGO",
             sidebar_icon="mdi:toy-brick",
             require_admin=False,
+            handle_safe_area=False,  # the panel sets no insets, so keep HA's padding
         )
     elif registered and not want:
         frontend.async_remove_panel(hass, PANEL_URL_PATH)

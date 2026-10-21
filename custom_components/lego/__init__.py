@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_API_KEY, CONF_USERNAME, Platform
+from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -131,7 +131,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await async_refresh_panel(hass)
-    entry.async_on_unload(entry.add_update_listener(async_update_options))
     return True
 
 
@@ -162,8 +161,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> boo
     """Unload a config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        await entry.runtime_data.collection.async_shutdown()
-        await entry.runtime_data.feeds.async_shutdown()
         if entry.runtime_data.catalogue is not None:
             await entry.runtime_data.catalogue.async_save_if_dirty()
         await async_refresh_panel(hass)
@@ -175,11 +172,6 @@ async def async_remove_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> Non
     await async_refresh_panel(hass)
 
 
-async def async_update_options(hass: HomeAssistant, entry: LegoConfigEntry) -> None:
-    """Reload the entry so the coordinators pick up the new options."""
-    await hass.config_entries.async_reload(entry.entry_id)
-
-
 async def async_remove_config_entry_device(
     hass: HomeAssistant,
     entry: LegoConfigEntry,
@@ -187,8 +179,3 @@ async def async_remove_config_entry_device(
 ) -> bool:
     """Refuse removal; the entry owns its only device, so delete the entry."""
     return False
-
-
-def account_name(entry: ConfigEntry) -> str:
-    """Return the Brickset account label for an entry."""
-    return str(entry.data.get(CONF_USERNAME, "Brickset"))

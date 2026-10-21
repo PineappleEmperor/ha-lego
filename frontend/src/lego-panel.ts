@@ -3,7 +3,11 @@ import { customElement, property, state } from "lit/decorators.js";
 
 type Hass = {
   callWS<T>(msg: Record<string, unknown>): Promise<T>;
-  callService(domain: string, service: string, data: Record<string, unknown>): Promise<unknown>;
+  callService(
+    domain: string,
+    service: string,
+    data: Record<string, unknown>,
+  ): Promise<unknown>;
   formatEntityState?: unknown;
   locale?: { language: string };
 };
@@ -90,7 +94,10 @@ export function ownershipCall(
  * string would pass the schema and then fail to resolve to an entry. Omitting the
  * key is what makes the server fall back to the stored choice.
  */
-export function accountCall(type: string, entryId: string): Record<string, unknown> {
+export function accountCall(
+  type: string,
+  entryId: string,
+): Record<string, unknown> {
   return entryId ? { type, config_entry_id: entryId } : { type };
 }
 
@@ -131,7 +138,7 @@ export class LegoPanel extends LitElement {
   @state() private _accounts: Account[] = [];
   @state() private _account = "";
 
-  public connectedCallback(): void {
+  public override connectedCallback(): void {
     super.connectedCallback();
     void this._load();
   }
@@ -161,7 +168,10 @@ export class LegoPanel extends LitElement {
     await this._load();
     if (this._tab === "collection") await this._loadCollection();
     try {
-      await this.hass.callWS({ type: "lego/account/set", config_entry_id: entryId });
+      await this.hass.callWS({
+        type: "lego/account/set",
+        config_entry_id: entryId,
+      });
     } catch {
       // The switch has already been applied; it just will not survive a reload.
     }
@@ -170,7 +180,9 @@ export class LegoPanel extends LitElement {
   private async _load(): Promise<void> {
     try {
       if (!this._accounts.length) {
-        const list = await this.hass.callWS<AccountList>({ type: "lego/accounts" });
+        const list = await this.hass.callWS<AccountList>({
+          type: "lego/accounts",
+        });
         this._accounts = list.accounts;
         this._account = list.selected ?? "";
       }
@@ -258,7 +270,7 @@ export class LegoPanel extends LitElement {
     void this._saveRows(rows);
   }
 
-  protected render(): TemplateResult {
+  protected override render(): TemplateResult {
     return html`
       <div class="app">
         <header>
@@ -311,7 +323,10 @@ export class LegoPanel extends LitElement {
       >
         ${this._accounts.map(
           (item) => html`
-            <option value=${item.entry_id} ?selected=${item.entry_id === this._account}>
+            <option
+              value=${item.entry_id}
+              ?selected=${item.entry_id === this._account}
+            >
               ${item.name}
             </option>
           `,
@@ -364,7 +379,8 @@ export class LegoPanel extends LitElement {
     const themes = Object.keys(this._dash?.themes ?? {});
     if (!themes.length) {
       return html`<p class="muted">
-        No themes followed yet. Add one in the integration options to see new releases here.
+        No themes followed yet. Add one in the integration options to see new
+        releases here.
       </p>`;
     }
     const sets = this._dash?.themes[this._theme] ?? [];
@@ -405,13 +421,15 @@ export class LegoPanel extends LitElement {
           ?disabled=${this._refreshing || short}
           @click=${() => void this._refreshCollection()}
         >
-          <ha-icon icon=${this._refreshing ? "mdi:sync" : "mdi:cloud-sync"}></ha-icon>
+          <ha-icon
+            icon=${this._refreshing ? "mdi:sync" : "mdi:cloud-sync"}
+          ></ha-icon>
           ${this._refreshing ? "Updating…" : "Update now"}
         </button>
         <span class="quota ${short ? "bad" : tight ? "warn" : ""}">
           ${short
-            ? html`Daily budget spent, ${quota.calls_today} of ${quota.budget} used.
-              Resets at midnight UTC.`
+            ? html`Daily budget spent, ${quota.calls_today} of ${quota.budget}
+              used. Resets at midnight UTC.`
             : html`Costs ${cost} of ${quota.remaining} calls left today.`}
         </span>
       </div>
@@ -435,28 +453,34 @@ export class LegoPanel extends LitElement {
       <div class="stats">
         ${cells.map(
           ([n, label]) => html`
-            <div class="stat"><span class="n">${n}</span><span class="l">${label}</span></div>
+            <div class="stat">
+              <span class="n">${n}</span><span class="l">${label}</span>
+            </div>
           `,
         )}
       </div>
       ${this._renderRefresh()}
       ${stats.sets_missing_price
         ? html`<p class="caveat">
-            ${this._num(stats.sets_missing_price)} sets have no published price and are not
-            counted in the value.
+            ${this._num(stats.sets_missing_price)} sets have no published price
+            and are not counted in the value.
           </p>`
         : nothing}
-      <button class="link" @click=${() => {
-        this._tab = "collection";
-        void this._loadCollection();
-      }}>
+      <button
+        class="link"
+        @click=${() => {
+          this._tab = "collection";
+          void this._loadCollection();
+        }}
+      >
         Browse all sets ›
       </button>
     `;
   }
 
   private _renderCollection(): TemplateResult {
-    const showing = this._query.trim().length >= 2 ? this._results : this._collection;
+    const showing =
+      this._query.trim().length >= 2 ? this._results : this._collection;
     return html`
       <div class="rows">
         <section class="row">
@@ -466,7 +490,8 @@ export class LegoPanel extends LitElement {
             .value=${this._query}
             placeholder="Search your sets and the full catalogue…"
             aria-label="Search sets"
-            @input=${(ev: Event) => void this._search((ev.target as HTMLInputElement).value)}
+            @input=${(ev: Event) =>
+              void this._search((ev.target as HTMLInputElement).value)}
           />
           ${this._query.trim().length >= 2
             ? html`<p class="muted">${showing.length} matching sets</p>`
@@ -479,7 +504,9 @@ export class LegoPanel extends LitElement {
 
   private _carousel(sets: LegoSet[], empty: string): TemplateResult {
     if (!sets.length) return html`<p class="muted">${empty}</p>`;
-    return html`<div class="carousel">${sets.map((item) => this._card(item))}</div>`;
+    return html`<div class="carousel">
+      ${sets.map((item) => this._card(item))}
+    </div>`;
   }
 
   private _card(item: LegoSet): TemplateResult {
@@ -487,17 +514,30 @@ export class LegoPanel extends LitElement {
       <article class="card">
         ${item.image
           ? html`<img src=${item.image} alt="" loading="lazy" />`
-          : html`<img class="noart" src=${FALLBACK_ART} alt="" loading="lazy" />`}
+          : html`<img
+              class="noart"
+              src=${FALLBACK_ART}
+              alt=""
+              loading="lazy"
+            />`}
         <div class="meta">
           <span
             class=${isNamed(item) ? "name" : "name unnamed"}
-            title=${isNamed(item) ? item.name : "Brickset has not published a name yet"}
+            title=${isNamed(item)
+              ? item.name
+              : "Brickset has not published a name yet"}
             >${displayName(item)}</span
           >
           <span class="num">${item.set_number}</span>
           <span class="when">${this._when(item)}</span>
           <div class="foot">
-            <span class=${item.owned ? "state own" : item.wanted ? "state want" : "state"}>
+            <span
+              class=${item.owned
+                ? "state own"
+                : item.wanted
+                  ? "state want"
+                  : "state"}
+            >
               ${item.owned
                 ? item.qty_owned > 1
                   ? `Owned ×${item.qty_owned}`
@@ -508,8 +548,12 @@ export class LegoPanel extends LitElement {
             </span>
             <button
               class=${item.owned ? "act on" : "act"}
-              title=${item.owned ? "Remove from your collection" : "Add to your collection"}
-              aria-label=${item.owned ? "Remove from your collection" : "Add to your collection"}
+              title=${item.owned
+                ? "Remove from your collection"
+                : "Add to your collection"}
+              aria-label=${item.owned
+                ? "Remove from your collection"
+                : "Add to your collection"}
               @click=${() => void this._toggleOwned(item)}
             >
               <ha-icon icon=${item.owned ? "mdi:check" : "mdi:plus"}></ha-icon>
@@ -521,7 +565,8 @@ export class LegoPanel extends LitElement {
   }
 
   private _when(item: LegoSet): string {
-    if (item.available_until) return `Retires ${this._date(item.available_until)}`;
+    if (item.available_until)
+      return `Retires ${this._date(item.available_until)}`;
     if (item.available_from) return `Out ${this._date(item.available_from)}`;
     return isNamed(item) ? "Date unknown" : "Details tbd";
   }
@@ -540,7 +585,7 @@ export class LegoPanel extends LitElement {
     return value.toLocaleString(this.hass?.locale?.language ?? undefined);
   }
 
-  static styles = css`
+  static override styles = css`
     :host {
       --pu-text: var(--primary-text-color, #15181b);
       --pu-text-2: var(--secondary-text-color, #5b636c);

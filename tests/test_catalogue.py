@@ -6,6 +6,7 @@ import aiohttp
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -33,8 +34,9 @@ async def _seed(hass: HomeAssistant, entry: MockConfigEntry):
     return entry.runtime_data.catalogue
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_seed_downloads_and_filters_gear(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Keyrings are numbered like sets, so the index drops the Gear theme."""
     catalogue = await _seed(hass, mock_config_entry)
@@ -57,8 +59,9 @@ async def test_seed_costs_no_brickset_calls(
     assert len(billed) == 3  # owned, wanted, one theme feed
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_entry_carries_name_and_theme(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """A rich index answers with enough to render a search result."""
     catalogue = await _seed(hass, mock_config_entry)
@@ -70,8 +73,9 @@ async def test_entry_carries_name_and_theme(
     assert listed.theme == "Icons"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_search_matches_number_and_name(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Search covers both what people type: a number or a name."""
     catalogue = await _seed(hass, mock_config_entry)
@@ -81,8 +85,9 @@ async def test_search_matches_number_and_name(
     assert catalogue.search("") == []
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_brickset_ids_are_harvested_from_polls(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Rebrickable has no Brickset ID, so it is learned from records already fetched."""
     catalogue = await _seed(hass, mock_config_entry)
@@ -92,8 +97,9 @@ async def test_brickset_ids_are_harvested_from_polls(
     assert catalogue.set_id("00000-1") is None
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_slim_index_holds_numbers_only(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Turning names off keeps validation working and drops name search."""
     mock_config_entry.add_to_hass(hass)
@@ -109,8 +115,9 @@ async def test_slim_index_holds_numbers_only(
     assert [s.number for s in catalogue.search("10497")] == ["10497-1"]
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_catalogue_can_be_turned_off(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Opting out leaves the integration working without an index."""
     mock_config_entry.add_to_hass(hass)
@@ -140,9 +147,9 @@ async def test_a_download_failure_is_not_fatal(
     assert mock_config_entry.state is ConfigEntryState.LOADED
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_refresh_is_skipped_while_fresh(
     hass: HomeAssistant,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:
@@ -154,10 +161,10 @@ async def test_refresh_is_skipped_while_fresh(
     assert catalogue.stale is True
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_the_index_refreshes_without_a_restart(
     hass: HomeAssistant,
     aioclient_mock: AiohttpClientMocker,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:
@@ -173,9 +180,9 @@ async def test_the_index_refreshes_without_a_restart(
     assert catalogue.stale is False
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_refresh_interval_is_configurable(
     hass: HomeAssistant,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:
