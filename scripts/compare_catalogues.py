@@ -11,8 +11,6 @@ The key comes from the environment rather than an argument so it stays out of
 shell history and process listings.
 """
 
-from __future__ import annotations
-
 import argparse
 import csv
 import gzip

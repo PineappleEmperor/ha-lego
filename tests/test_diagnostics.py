@@ -1,7 +1,5 @@
 """Tests for LEGO diagnostics."""
 
-from __future__ import annotations
-
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 

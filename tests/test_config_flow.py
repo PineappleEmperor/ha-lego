@@ -1,7 +1,5 @@
 """Tests for the LEGO config, reauth, reconfigure and options flows."""
 
-from __future__ import annotations
-
 import aiohttp
 from homeassistant import config_entries
 from homeassistant.const import CONF_API_KEY, CONF_PASSWORD, CONF_USERNAME

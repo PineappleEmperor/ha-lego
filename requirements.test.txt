@@ -1,26 +1,24 @@
-# Test-only dependencies. Installed by .github/workflows/python_validate.yml
+# Test-only dependencies. Installed by ha-integration-ci's python-validate.yml
 # before the pytest step; also `pip install -r requirements.test.txt` locally.
 #
-# pytest-homeassistant-custom-component tracks Home Assistant releases 1:1 and
-# hard-pins `homeassistant==<that release>`, so the pin below decides which HA
-# version the suite runs against. A mismatched pin fails at import, not at test
-# time. Pick the release matching the HA you target, and keep its Python floor
-# in lockstep with the `python-version` matrix in python_validate.yml,
-# `target-version` in pyproject.toml, and pyrightconfig.json.
+# The pin below decides which Home Assistant release the suite runs against; why,
+# and how it must track the Python floor the CI declares, is the ha-integration
+# skill's reference/testing.md.
 #
-# Version map (verify at pypi.org/project/pytest-homeassistant-custom-component):
-#   0.13.354 -> homeassistant 2026.8.0, requires-python >=3.14
-pytest-homeassistant-custom-component==0.13.367
+# Which HA release a given pin carries, and its Python floor, is on
+# pypi.org/project/pytest-homeassistant-custom-component. No mapping is written
+# here on purpose: Dependabot moves the pin and never a comment beside it.
+pytest-homeassistant-custom-component==0.13.373
+
 
 # Add integration-specific test deps below (e.g. a fake transport, respx,
 # freezegun beyond what the plugin already pins).
-markdown-it-py
-ruff==0.16.9
-pyright==1.1.414
 
-# The panel makes `frontend` a manifest dependency, and the frontend component
-# has its own pip requirement that installing homeassistant does not pull in.
-# Without it every setup test fails with "No module named 'hass_frontend'".
-# Read the pin from homeassistant/components/frontend/manifest.json whenever the
-# pytest-homeassistant-custom-component pin above moves.
-home-assistant-frontend==20260826.7
+# --- Panel integrations only -------------------------------------------------
+# A panel declares `frontend` in manifest.json `dependencies`, and the frontend
+# component's own pip package is not pulled in by `pip install homeassistant`;
+# without the pin below every setup test fails in CI while passing locally. Why,
+# and how to pin it from core's own manifest for the HA release pinned above, is
+# the ha-integration skill's reference/panels.md. Re-derive it whenever the
+# pytest-homeassistant-custom-component pin moves.
+home-assistant-frontend==20260930.4

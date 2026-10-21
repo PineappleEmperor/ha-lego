@@ -1,7 +1,5 @@
 """Tests for LEGO config entry setup and teardown."""
 
-from __future__ import annotations
-
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_API_KEY, CONF_USERNAME
 from homeassistant.core import HomeAssistant

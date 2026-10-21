@@ -1,7 +1,5 @@
 """Tests for the events the LEGO coordinators fire."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from freezegun.api import FrozenDateTimeFactory

@@ -1,12 +1,10 @@
 """Data update coordinators for the LEGO integration."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import logging
 import math
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast, override
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -124,10 +122,15 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
                 err,
             )
             self._quota_warned = True
-        if self.data is None:
-            raise UpdateFailed(str(err)) from err
-        return self.data
+        if (previous := self._previous) is None:
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="api_error",
+                translation_placeholders={"error": str(err)},
+            ) from err
+        return previous
 
+    @override
     async def _async_update_data(self) -> DataT:
         """Poll Brickset, mapping API failures onto coordinator semantics."""
         try:
@@ -136,16 +139,29 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         except BricksetQuotaError as err:
             return self._handle_quota_exhausted(err)
         except (BricksetAuthError, BricksetUserHashError) as err:
-            raise ConfigEntryAuthFailed(str(err)) from err
+            raise ConfigEntryAuthFailed(
+                translation_domain=DOMAIN, translation_key="auth_expired"
+            ) from err
         except BricksetError as err:
-            raise UpdateFailed(str(err)) from err
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="api_error",
+                translation_placeholders={"error": str(err)},
+            ) from err
         self._quota_warned = False
         return data
 
     @property
+    def _previous(self) -> DataT | None:
+        """Return the last refresh's data, or None while the first is running."""
+        # DataUpdateCoordinator types data as always set, but it stays None until
+        # the first refresh returns, which is when these hooks first run.
+        return cast("DataT | None", self.data)
+
+    @property
     def region(self) -> str:
         """Return the pricing region chosen at setup."""
-        return self.config_entry.options.get(CONF_REGION, DEFAULT_REGION)
+        return str(self.config_entry.options.get(CONF_REGION, DEFAULT_REGION))
 
     async def _fetch(self) -> DataT:
         """Fetch this coordinator's data."""
@@ -181,10 +197,10 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
     def poll_cost(self) -> int:
         """Return the billed calls one refresh would spend."""
         # Owned and wanted are one call each until a list passes a page.
-        if self.data is None:
+        if (data := self._previous) is None:
             return 2
-        pages = math.ceil(len(self.data.owned) / PAGE_SIZE) + math.ceil(
-            len(self.data.wanted) / PAGE_SIZE
+        pages = math.ceil(len(data.owned) / PAGE_SIZE) + math.ceil(
+            len(data.wanted) / PAGE_SIZE
         )
         return max(pages, 2)
 
@@ -201,7 +217,7 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
         """Fold a write into the cached data instead of re-polling."""
         # Re-polling costs two of the hundred daily calls to learn what we just
         # sent, so correct the cache and let the next scheduled poll reconcile.
-        if self.data is None:
+        if (data := self._previous) is None:
             return
 
         status = lego_set.collection
@@ -217,8 +233,8 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
         if notes is not None:
             status.notes = notes
 
-        owned = [item for item in self.data.owned if item.number != lego_set.number]
-        wanted = [item for item in self.data.wanted if item.number != lego_set.number]
+        owned = [item for item in data.owned if item.number != lego_set.number]
+        wanted = [item for item in data.wanted if item.number != lego_set.number]
         if status.owned:
             owned.append(lego_set)
         if status.wanted:
@@ -232,6 +248,7 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
             )
         )
 
+    @override
     async def _fetch(self) -> CollectionData:
         """Fetch owned and wanted sets."""
         owned = await self.client.get_all_sets({"owned": 1, "extendedData": 1})
@@ -251,9 +268,9 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
 
     def _fire_wanted_events(self, new_data: CollectionData) -> None:
         """Fire an event when a wanted set's availability or price changes."""
-        if self.data is None:
+        if (data := self._previous) is None:
             return
-        previous = {lego_set.number: lego_set for lego_set in self.data.wanted}
+        previous = {lego_set.number: lego_set for lego_set in data.wanted}
         region = self.region
         for lego_set in new_data.wanted:
             before = previous.get(lego_set.number)
@@ -343,6 +360,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
             )
         return sets
 
+    @override
     async def _fetch(self) -> dict[str, list[LegoSet]]:
         """Fetch this year's sets for each watched theme."""
         year = dt_util.now().year
@@ -372,11 +390,11 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
 
     def _fire_new_set_events(self, feeds: dict[str, list[LegoSet]]) -> None:
         """Fire an event per set new since the previous poll, baselining the first."""
-        if self.data is None:
+        if (previous := self._previous) is None:
             return
         region = self.region
         for theme, sets in feeds.items():
-            seen = {lego_set.number for lego_set in self.data.get(theme, [])}
+            seen = {lego_set.number for lego_set in previous.get(theme, [])}
             for lego_set in sets:
                 if lego_set.number in seen:
                     continue

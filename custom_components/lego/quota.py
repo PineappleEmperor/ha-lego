@@ -4,8 +4,6 @@
 # so the tally kept between polls is reconciled against the authoritative
 # server-side figure from getKeyUsageStats.
 
-from __future__ import annotations
-
 from datetime import date
 
 from homeassistant.util import dt as dt_util

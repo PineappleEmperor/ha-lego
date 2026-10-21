@@ -1,7 +1,5 @@
 """Websocket commands, so a dashboard can search without spending quota."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.components.websocket_api import async_register_command
@@ -16,12 +14,14 @@ from homeassistant.components.websocket_api.decorators import (
 )
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
-import voluptuous as vol
+import probatio
 
 from .const import DOMAIN, PANEL_STORE
 from .panel import dashboard_payload, summarise
 
 if TYPE_CHECKING:
+    from homeassistant.auth.models import User
+
     from . import LegoConfigEntry
 
 
@@ -39,10 +39,12 @@ def async_setup_websocket(hass: HomeAssistant) -> None:
 @callback
 @websocket_command(
     {
-        vol.Required("type"): "lego/search",
-        vol.Optional("config_entry_id"): str,
-        vol.Required("query"): str,
-        vol.Optional("limit", default=10): vol.All(int, vol.Range(min=1, max=50)),
+        probatio.Required("type"): "lego/search",
+        probatio.Optional("config_entry_id"): str,
+        probatio.Required("query"): str,
+        probatio.Optional("limit", default=10): probatio.All(
+            int, probatio.Range(min=1, max=50)
+        ),
     }
 )
 def websocket_search(
@@ -82,8 +84,8 @@ def websocket_search(
 @callback
 @websocket_command(
     {
-        vol.Required("type"): "lego/dashboard",
-        vol.Optional("config_entry_id"): str,
+        probatio.Required("type"): "lego/dashboard",
+        probatio.Optional("config_entry_id"): str,
     }
 )
 def websocket_dashboard(
@@ -104,9 +106,11 @@ def websocket_dashboard(
 @callback
 @websocket_command(
     {
-        vol.Required("type"): "lego/collection",
-        vol.Optional("config_entry_id"): str,
-        vol.Optional("filter", default="owned"): vol.In(("owned", "wanted", "all")),
+        probatio.Required("type"): "lego/collection",
+        probatio.Optional("config_entry_id"): str,
+        probatio.Optional("filter", default="owned"): probatio.In(
+            ("owned", "wanted", "all")
+        ),
     }
 )
 def websocket_collection(
@@ -136,8 +140,8 @@ def websocket_collection(
 
 @websocket_command(
     {
-        vol.Required("type"): "lego/panel_config/set",
-        vol.Required("rows"): [str],
+        probatio.Required("type"): "lego/panel_config/set",
+        probatio.Required("rows"): [str],
     }
 )
 @async_response
@@ -147,17 +151,19 @@ async def websocket_set_rows(
     msg: dict[str, Any],
 ) -> None:
     """Save this user's row order and return what was stored."""
-    if connection.user is None:
+    # ActiveConnection types user as always set; keep the guard anyway, since a
+    # write keyed on a missing user would land in another user's slot.
+    if (user := cast("User | None", connection.user)) is None:
         connection.send_error(msg["id"], ERR_NOT_FOUND, "No signed-in user")
         return
 
     store = hass.data[PANEL_STORE]
-    rows = await store.async_set_rows(connection.user.id, msg["rows"])
+    rows = await store.async_set_rows(user.id, msg["rows"])
     connection.send_result(msg["id"], {"rows": rows})
 
 
 @callback
-@websocket_command({vol.Required("type"): "lego/accounts"})
+@websocket_command({probatio.Required("type"): "lego/accounts"})
 def websocket_accounts(
     hass: HomeAssistant,
     connection: ActiveConnection,
@@ -178,8 +184,8 @@ def websocket_accounts(
 
 @websocket_command(
     {
-        vol.Required("type"): "lego/account/set",
-        vol.Required("config_entry_id"): str,
+        probatio.Required("type"): "lego/account/set",
+        probatio.Required("config_entry_id"): str,
     }
 )
 @async_response
@@ -189,7 +195,9 @@ async def websocket_set_account(
     msg: dict[str, Any],
 ) -> None:
     """Remember which account this user's panel is showing."""
-    if connection.user is None:
+    # ActiveConnection types user as always set; keep the guard anyway, since a
+    # write keyed on a missing user would land in another user's slot.
+    if (user := cast("User | None", connection.user)) is None:
         connection.send_error(msg["id"], ERR_NOT_FOUND, "No signed-in user")
         return
 
@@ -198,7 +206,7 @@ async def websocket_set_account(
         connection.send_error(msg["id"], ERR_NOT_FOUND, "Unknown LEGO entry")
         return
 
-    await hass.data[PANEL_STORE].async_set_account(connection.user.id, entry_id)
+    await hass.data[PANEL_STORE].async_set_account(user.id, entry_id)
     connection.send_result(msg["id"], {"selected": entry_id})
 
 

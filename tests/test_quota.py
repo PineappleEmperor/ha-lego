@@ -1,7 +1,5 @@
 """Tests for the Brickset daily call budget."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from freezegun.api import FrozenDateTimeFactory

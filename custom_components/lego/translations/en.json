@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to Brickset",
-        "description": "This integration reads your LEGO collection from Brickset.com. Get a free API key from your Brickset account under {api_key_path}, then sign in below. Your password is used once to obtain a token and is never stored.",
+        "description": "This integration reads your LEGO collection from Brickset.com. Get a free API key from your Brickset account under {api_key_path}, then sign in below. Your password is used once to obtain a token and is never stored. This integration is unofficial and not affiliated with, authorised by or endorsed by the LEGO Group or Brickset.",
         "data": {
           "api_key": "Brickset API key",
           "username": "Brickset username",
@@ -21,6 +21,10 @@
         "data": {
           "api_key": "Brickset API key",
           "password": "Brickset password"
+        },
+        "data_description": {
+          "api_key": "Issued from your Brickset account under Tools, Web services.",
+          "password": "Exchanged for a new long-lived token; only the token is saved."
         }
       },
       "reconfigure": {
@@ -30,6 +34,11 @@
           "api_key": "Brickset API key",
           "username": "Brickset username",
           "password": "Brickset password"
+        },
+        "data_description": {
+          "api_key": "Issued from your Brickset account under Tools, Web services.",
+          "username": "Must be the account this entry already tracks.",
+          "password": "Exchanged for a long-lived token; only the token is saved."
         }
       },
       "region": {
@@ -51,9 +60,7 @@
     },
     "abort": {
       "already_configured": "That Brickset account is already set up.",
-      "account_mismatch": "That is a different Brickset account. Use a new entry instead of reconfiguring this one.",
-      "reauth_successful": "Reconnected to Brickset.",
-      "reconfigure_successful": "Brickset account updated."
+      "account_mismatch": "That is a different Brickset account. Use a new entry instead of reconfiguring this one."
     }
   },
   "options": {

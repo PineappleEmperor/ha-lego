@@ -1,11 +1,9 @@
 """Config, reauth, reconfigure and options flows for the LEGO integration."""
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 import logging
 import math
-from typing import Any
+from typing import Any, override
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_API_KEY, CONF_PASSWORD, CONF_USERNAME
@@ -23,7 +21,7 @@ from homeassistant.helpers.selector import (
     TextSelectorConfig,
     TextSelectorType,
 )
-import voluptuous as vol
+import probatio
 
 from .api import BricksetClient
 from .const import (
@@ -62,13 +60,13 @@ from .exceptions import (
 
 _LOGGER = logging.getLogger(__name__)
 
-STEP_USER_SCHEMA = vol.Schema(
+STEP_USER_SCHEMA = probatio.Schema(
     {
-        vol.Required(CONF_API_KEY): TextSelector(
+        probatio.Required(CONF_API_KEY): TextSelector(
             TextSelectorConfig(type=TextSelectorType.PASSWORD)
         ),
-        vol.Required(CONF_USERNAME): TextSelector(),
-        vol.Required(CONF_PASSWORD): TextSelector(
+        probatio.Required(CONF_USERNAME): TextSelector(),
+        probatio.Required(CONF_PASSWORD): TextSelector(
             TextSelectorConfig(type=TextSelectorType.PASSWORD)
         ),
     }
@@ -88,7 +86,7 @@ def estimated_daily_calls(options: Mapping[str, Any]) -> int:
     # Every watched theme rides in one comma-joined call, so the feed cost does not
     # grow with the theme count. A theme with no releases this year is confirmed
     # individually, which adds a call the steady state does not pay.
-    return collection_polls * 2 + feed_polls
+    return int(collection_polls * 2 + feed_polls)
 
 
 async def _validate(hass: Any, api_key: str, username: str, password: str) -> str:
@@ -129,6 +127,7 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
             errors["base"] = "unknown"
         return None
 
+    @override
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -174,13 +173,13 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
             SelectSelectorConfig(options=REGIONS, mode=SelectSelectorMode.DROPDOWN)
         )
         key = (
-            vol.Required(CONF_REGION, default=suggested)
+            probatio.Required(CONF_REGION, default=suggested)
             if suggested
-            else vol.Required(CONF_REGION)
+            else probatio.Required(CONF_REGION)
         )
         return self.async_show_form(
             step_id="region",
-            data_schema=vol.Schema({key: selector}),
+            data_schema=probatio.Schema({key: selector}),
             description_placeholders={"country": country or "not set"},
         )
 
@@ -215,12 +214,12 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema(
+            data_schema=probatio.Schema(
                 {
-                    vol.Required(CONF_API_KEY, default=entry.data[CONF_API_KEY]): (
+                    probatio.Required(CONF_API_KEY, default=entry.data[CONF_API_KEY]): (
                         TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
                     ),
-                    vol.Required(CONF_PASSWORD): TextSelector(
+                    probatio.Required(CONF_PASSWORD): TextSelector(
                         TextSelectorConfig(type=TextSelectorType.PASSWORD)
                     ),
                 }
@@ -264,6 +263,7 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @callback
+    @override
     def async_get_options_flow(config_entry: Any) -> LegoOptionsFlow:
         """Return the options flow."""
         return LegoOptionsFlow()
@@ -278,7 +278,7 @@ class LegoOptionsFlow(OptionsFlow):
         """Manage region, feeds, intervals and polling budget."""
         entry = self.config_entry
         if user_input is not None:
-            options = {
+            new_options = {
                 CONF_REGION: user_input[CONF_REGION],
                 CONF_THEMES: user_input.get(CONF_THEMES, []),
                 CONF_COLLECTION_INTERVAL: int(user_input[CONF_COLLECTION_INTERVAL]),
@@ -289,21 +289,21 @@ class LegoOptionsFlow(OptionsFlow):
                 CONF_CATALOGUE_RICH: user_input[CONF_CATALOGUE_RICH],
                 CONF_CATALOGUE_INTERVAL: int(user_input[CONF_CATALOGUE_INTERVAL]),
             }
-            return self.async_create_entry(data=options)
+            return self.async_create_entry(data=new_options)
 
         options = entry.options
         themes = await self._async_theme_options()
 
-        schema = vol.Schema(
+        schema = probatio.Schema(
             {
-                vol.Required(
+                probatio.Required(
                     CONF_REGION, default=options.get(CONF_REGION, DEFAULT_REGION)
                 ): SelectSelector(
                     SelectSelectorConfig(
                         options=REGIONS, mode=SelectSelectorMode.DROPDOWN
                     )
                 ),
-                vol.Optional(
+                probatio.Optional(
                     CONF_THEMES, default=list(options.get(CONF_THEMES, []))
                 ): SelectSelector(
                     SelectSelectorConfig(
@@ -313,7 +313,7 @@ class LegoOptionsFlow(OptionsFlow):
                         mode=SelectSelectorMode.DROPDOWN,
                     )
                 ),
-                vol.Required(
+                probatio.Required(
                     CONF_COLLECTION_INTERVAL,
                     default=options.get(
                         CONF_COLLECTION_INTERVAL, DEFAULT_COLLECTION_INTERVAL_HOURS
@@ -327,7 +327,7 @@ class LegoOptionsFlow(OptionsFlow):
                         unit_of_measurement="h",
                     )
                 ),
-                vol.Required(
+                probatio.Required(
                     CONF_FEEDS_INTERVAL,
                     default=options.get(
                         CONF_FEEDS_INTERVAL, DEFAULT_FEEDS_INTERVAL_HOURS
@@ -341,18 +341,18 @@ class LegoOptionsFlow(OptionsFlow):
                         unit_of_measurement="h",
                     )
                 ),
-                vol.Required(
+                probatio.Required(
                     CONF_PANEL, default=options.get(CONF_PANEL, DEFAULT_PANEL)
                 ): BooleanSelector(),
-                vol.Required(
+                probatio.Required(
                     CONF_CATALOGUE,
                     default=options.get(CONF_CATALOGUE, DEFAULT_CATALOGUE),
                 ): BooleanSelector(),
-                vol.Required(
+                probatio.Required(
                     CONF_CATALOGUE_RICH,
                     default=options.get(CONF_CATALOGUE_RICH, DEFAULT_CATALOGUE_RICH),
                 ): BooleanSelector(),
-                vol.Required(
+                probatio.Required(
                     CONF_CATALOGUE_INTERVAL,
                     default=options.get(
                         CONF_CATALOGUE_INTERVAL, DEFAULT_CATALOGUE_INTERVAL_DAYS
@@ -366,7 +366,7 @@ class LegoOptionsFlow(OptionsFlow):
                         unit_of_measurement="d",
                     )
                 ),
-                vol.Required(
+                probatio.Required(
                     CONF_DAILY_CALL_BUDGET,
                     default=options.get(
                         CONF_DAILY_CALL_BUDGET, DEFAULT_DAILY_CALL_BUDGET

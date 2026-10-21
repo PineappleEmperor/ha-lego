@@ -1,6 +1,4 @@
-"""Shared fixtures for the LEGO integration tests."""
-
-from __future__ import annotations
+"""Fixtures for the integration's tests."""
 
 from copy import deepcopy
 import gzip
@@ -18,6 +16,8 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMockResponse,
 )
 
+# Without this import, setup fails with "Integration not found".
+import custom_components  # noqa: F401
 from custom_components.lego.const import (
     CONF_REGION,
     CONF_THEMES,
@@ -26,6 +26,12 @@ from custom_components.lego.const import (
 )
 
 pytest_plugins = "pytest_homeassistant_custom_component"
+
+
+@pytest.fixture(autouse=True)
+def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
+    """Let Home Assistant load integrations from custom_components/ in every test."""
+
 
 SETS_CSV_URL = "https://cdn.rebrickable.com/media/downloads/sets.csv.gz"
 THEMES_CSV_URL = "https://cdn.rebrickable.com/media/downloads/themes.csv.gz"

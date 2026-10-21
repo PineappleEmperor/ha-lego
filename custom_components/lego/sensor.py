@@ -1,11 +1,9 @@
 """Sensor platform for the LEGO integration."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, override
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -50,7 +48,7 @@ def _wishlist_items(sets: list[LegoSet], region: str) -> list[dict[str, Any]]:
     today = dt_util.now().date().isoformat()
     # The full per-set payload is 16 fields, which a long wishlist would push to
     # every connected browser on each update. These are what a card needs.
-    items = [
+    items: list[dict[str, Any]] = [
         {
             "set_number": lego_set.number,
             "set_name": lego_set.name,
@@ -69,8 +67,8 @@ def _wishlist_items(sets: list[LegoSet], region: str) -> list[dict[str, Any]]:
         for lego_set in sets
     ]
     for item in items:
-        retirement = item["retirement_date"]
-        item["retired"] = retirement is not None and retirement < today
+        retires = item["retirement_date"]
+        item["retired"] = retires is not None and retires < today
     # A retired set is the least actionable thing on a wishlist, so it sinks
     # rather than floats. Brickset exposes no date a set was added, so set
     # number breaks the remaining ties.
@@ -166,17 +164,17 @@ class LegoSummarySensor(LegoCollectionEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{description.key}"
 
     @property
+    @override
     def native_value(self) -> int | float | None:
         """Return the total."""
-        if self.coordinator.data is None:
-            return None
         return self.entity_description.value_fn(self.coordinator.data.summary)
 
     @property
+    @override
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return the sets behind the total, for the sensors that carry them."""
         items_fn = self.entity_description.items_fn
-        if items_fn is None or self.coordinator.data is None:
+        if items_fn is None:
             return None
         return {"sets": items_fn(self.coordinator.data.wanted, self.coordinator.region)}
 
@@ -194,22 +192,21 @@ class LegoValueSensor(LegoCollectionEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_collection_value"
 
     @property
+    @override
     def native_unit_of_measurement(self) -> str | None:
         """Return the currency for the configured pricing region."""
         return REGION_CURRENCY.get(self.coordinator.region)
 
     @property
+    @override
     def native_value(self) -> float | None:
         """Return the summed RRP."""
-        if self.coordinator.data is None:
-            return None
         return self.coordinator.data.summary.value
 
     @property
+    @override
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return how much of the collection has no published price."""
-        if self.coordinator.data is None:
-            return None
         return {
             "region": self.coordinator.region,
             "sets_missing_price": self.coordinator.data.summary.sets_missing_price,
@@ -230,16 +227,19 @@ class LegoQuotaSensor(LegoCollectionEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_api_calls_today"
 
     @property
+    @override
     def available(self) -> bool:
         """Report quota even when a poll failed, since that is when it matters."""
         return True
 
     @property
+    @override
     def native_value(self) -> int:
         """Return calls used today."""
         return self.coordinator.quota.calls_today
 
     @property
+    @override
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return budget headroom and recent daily usage."""
         quota = self.coordinator.quota
@@ -292,8 +292,6 @@ class LegoNextRetirementSensor(LegoCollectionEntity, SensorEntity):
     @property
     def _next(self) -> tuple[date, LegoSet] | None:
         """Return the soonest wishlist retirement still to come."""
-        if self.coordinator.data is None:
-            return None
         today = dt_util.now().date()
         region = self.coordinator.region
         # Already-retired sets are excluded rather than reported as negative days;
@@ -309,6 +307,7 @@ class LegoNextRetirementSensor(LegoCollectionEntity, SensorEntity):
         return min(upcoming, key=lambda item: item[0])
 
     @property
+    @override
     def native_value(self) -> int | None:
         """Return days remaining until that retirement."""
         soonest = self._next
@@ -317,6 +316,7 @@ class LegoNextRetirementSensor(LegoCollectionEntity, SensorEntity):
         return (soonest[0] - dt_util.now().date()).days
 
     @property
+    @override
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return the full record of the set that is retiring."""
         soonest = self._next
@@ -347,12 +347,14 @@ class LegoLatestThemeSetSensor(LegoEntity[dict[str, list[LegoSet]]], SensorEntit
         return sets[0] if sets else None
 
     @property
+    @override
     def native_value(self) -> str | None:
         """Return the newest set's number."""
         lego_set = self._lego_set
         return lego_set.number if lego_set else None
 
     @property
+    @override
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return the newest set's details plus how many launched this year."""
         lego_set = self._lego_set

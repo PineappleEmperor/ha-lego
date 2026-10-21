@@ -1,7 +1,5 @@
 """Tests for the sidebar panel and its websocket commands."""
 
-from __future__ import annotations
-
 from http import HTTPStatus
 
 from homeassistant.components import frontend

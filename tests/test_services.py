@@ -1,7 +1,5 @@
 """Tests for the LEGO actions."""
 
-from __future__ import annotations
-
 import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError

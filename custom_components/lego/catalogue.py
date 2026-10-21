@@ -1,7 +1,5 @@
 """A local index of LEGO sets, so naming a set costs no Brickset calls."""
 
-from __future__ import annotations
-
 import csv
 from dataclasses import dataclass
 from datetime import date, timedelta

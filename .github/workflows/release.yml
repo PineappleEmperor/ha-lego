@@ -8,18 +8,5 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Create Release Asset
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Create ZIP file
-        run: |
-          cd custom_components/lego
-          zip -r "$GITHUB_WORKSPACE/lego.zip" . -x '*/__pycache__/*' '*.pyc'
-
-      - name: Upload release asset
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.event.release.tag_name }}" "$GITHUB_WORKSPACE/lego.zip" --clobber
+  release:
+    uses: PineappleEmperor/ha-integration-ci/.github/workflows/release.yml@9839ae2f8f15262a452d8cef38aac07b8b7098a8 # v3.0.0

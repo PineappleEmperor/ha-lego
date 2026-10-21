@@ -10,8 +10,6 @@ side. Run from the repo root:
     python3 scripts/generate_brand.py
 """
 
-from __future__ import annotations
-
 import io
 from pathlib import Path
 

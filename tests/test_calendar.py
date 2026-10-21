@@ -1,7 +1,5 @@
 """Tests for the LEGO calendars."""
 
-from __future__ import annotations
-
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util

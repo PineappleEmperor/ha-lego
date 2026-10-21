@@ -1,10 +1,8 @@
 """Checks that every translation key used in code actually resolves.
 
-hassfest validates the shape of strings.json but never runs the integration, so
+hassfest validates the shape of translations/en.json but never runs the integration, so
 a typo'd translation_key passes CI and only shows up as a raw key in the UI.
 """
-
-from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -13,8 +11,7 @@ import re
 import yaml
 
 PACKAGE = Path("custom_components/lego")
-STRINGS = json.loads((PACKAGE / "strings.json").read_text())
-EN = json.loads((PACKAGE / "translations" / "en.json").read_text())
+STRINGS = json.loads((PACKAGE / "translations" / "en.json").read_text())
 
 PY_FILES = sorted(PACKAGE.glob("*.py"))
 
@@ -22,11 +19,6 @@ PY_FILES = sorted(PACKAGE.glob("*.py"))
 def _source() -> str:
     """Return every Python source file concatenated."""
     return "\n".join(path.read_text() for path in PY_FILES)
-
-
-def test_english_translations_match_strings() -> None:
-    """translations/en.json is kept in step with strings.json."""
-    assert EN == STRINGS
 
 
 def test_exception_translation_keys_exist() -> None:
@@ -38,7 +30,7 @@ def test_exception_translation_keys_exist() -> None:
 
     unresolved = used - entity_keys - exception_keys - issue_keys
     assert not unresolved, (
-        f"translation keys with no entry in strings.json: {unresolved}"
+        f"translation keys with no entry in translations/en.json: {unresolved}"
     )
 
 
@@ -52,7 +44,7 @@ def test_entity_translation_keys_exist() -> None:
 
     unresolved = used - defined - exception_keys
     assert not unresolved, (
-        f"entity translation keys missing from strings.json: {unresolved}"
+        f"entity translation keys missing from translations/en.json: {unresolved}"
     )
 
 
@@ -66,7 +58,7 @@ def test_every_entity_string_has_an_icon() -> None:
 
 
 def test_services_yaml_matches_strings() -> None:
-    """Every action in strings.json exists in services.yaml, and vice versa."""
+    """Every action in translations/en.json exists in services.yaml, and vice versa."""
     services = yaml.safe_load((PACKAGE / "services.yaml").read_text())
 
     assert set(services) == set(STRINGS["services"])

@@ -1,7 +1,5 @@
 """Tests for the lego/search websocket command."""
 
-from __future__ import annotations
-
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator

@@ -1,7 +1,5 @@
 """The optional sidebar panel: registration and its per-user row order."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 

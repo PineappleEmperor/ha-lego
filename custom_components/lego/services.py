@@ -1,7 +1,5 @@
 """Actions for the LEGO integration."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
@@ -14,7 +12,7 @@ from homeassistant.core import (
 )
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, issue_registry as ir
-import voluptuous as vol
+import probatio
 
 from .const import (
     ATTR_CONFIG_ENTRY_ID,
@@ -42,38 +40,42 @@ from .models import LegoSet
 if TYPE_CHECKING:
     from . import LegoConfigEntry
 
-ENTRY_SCHEMA = {vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string}
+ENTRY_SCHEMA = {probatio.Required(ATTR_CONFIG_ENTRY_ID): cv.string}
 
-SET_COLLECTION_SCHEMA = vol.Schema(
+SET_COLLECTION_SCHEMA = probatio.Schema(
     {
         **ENTRY_SCHEMA,
-        vol.Required(ATTR_SET_NUMBER): cv.string,
-        vol.Optional(ATTR_OWNED): cv.boolean,
-        vol.Optional(ATTR_WANTED): cv.boolean,
-        vol.Optional(ATTR_QTY_OWNED): vol.All(
-            vol.Coerce(int), vol.Range(min=0, max=999)
+        probatio.Required(ATTR_SET_NUMBER): cv.string,
+        probatio.Optional(ATTR_OWNED): cv.boolean,
+        probatio.Optional(ATTR_WANTED): cv.boolean,
+        probatio.Optional(ATTR_QTY_OWNED): probatio.All(
+            probatio.Coerce(int), probatio.Range(min=0, max=999)
         ),
-        vol.Optional(ATTR_RATING): vol.All(vol.Coerce(int), vol.Range(min=1, max=5)),
-        vol.Optional(ATTR_NOTES): vol.All(cv.string, vol.Length(max=1000)),
+        probatio.Optional(ATTR_RATING): probatio.All(
+            probatio.Coerce(int), probatio.Range(min=1, max=5)
+        ),
+        probatio.Optional(ATTR_NOTES): probatio.All(
+            cv.string, probatio.Length(max=1000)
+        ),
     }
 )
 
-ENTRY_ONLY = vol.Schema(ENTRY_SCHEMA)
+ENTRY_ONLY = probatio.Schema(ENTRY_SCHEMA)
 
 NONE = SupportsResponse.NONE
 ONLY = SupportsResponse.ONLY
 OPTIONAL = SupportsResponse.OPTIONAL
 
-SEARCH_SCHEMA = vol.Schema(
+SEARCH_SCHEMA = probatio.Schema(
     {
         **ENTRY_SCHEMA,
-        vol.Optional(ATTR_QUERY): cv.string,
-        vol.Optional(ATTR_THEME): cv.string,
-        vol.Optional(ATTR_YEAR): vol.All(
-            vol.Coerce(int), vol.Range(min=1949, max=2100)
+        probatio.Optional(ATTR_QUERY): cv.string,
+        probatio.Optional(ATTR_THEME): cv.string,
+        probatio.Optional(ATTR_YEAR): probatio.All(
+            probatio.Coerce(int), probatio.Range(min=1949, max=2100)
         ),
-        vol.Optional(ATTR_LIMIT, default=10): vol.All(
-            vol.Coerce(int), vol.Range(min=1, max=50)
+        probatio.Optional(ATTR_LIMIT, default=10): probatio.All(
+            probatio.Coerce(int), probatio.Range(min=1, max=50)
         ),
     }
 )

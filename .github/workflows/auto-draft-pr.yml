@@ -1,0 +1,14 @@
+name: Draft PR
+
+on:
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  draft:
+    uses: PineappleEmperor/release-flow/.github/workflows/auto-draft-pr.yml@ca36eb9b5bae9840a119a2a6fc2f7628de90d1ba # v1.1.5
+    secrets:
+      release-token: ${{ secrets.RELEASE_TOKEN }}
