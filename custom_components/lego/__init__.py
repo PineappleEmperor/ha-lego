@@ -8,7 +8,7 @@ from homeassistant.const import CONF_API_KEY, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.device_registry import DeviceEntry
+from homeassistant.helpers.device_registry import AnyDeviceEntry
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 
@@ -183,7 +183,7 @@ async def async_update_options(hass: HomeAssistant, entry: LegoConfigEntry) -> N
 async def async_remove_config_entry_device(
     hass: HomeAssistant,
     entry: LegoConfigEntry,
-    device_entry: DeviceEntry,
+    device_entry: AnyDeviceEntry,
 ) -> bool:
     """Refuse removal; the entry owns its only device, so delete the entry."""
     return False

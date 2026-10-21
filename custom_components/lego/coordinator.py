@@ -6,6 +6,7 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any, cast, override
 
+from homeassistant.const import CONF_REGION
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -16,7 +17,6 @@ from .catalogue import SetCatalogue
 from .const import (
     CONF_COLLECTION_INTERVAL,
     CONF_FEEDS_INTERVAL,
-    CONF_REGION,
     CONF_THEMES,
     DEFAULT_COLLECTION_INTERVAL_HOURS,
     DEFAULT_FEEDS_INTERVAL_HOURS,

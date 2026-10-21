@@ -7,12 +7,8 @@ DOMAIN: Final = "lego"
 
 ATTRIBUTION: Final = "Data provided by Brickset.com"
 
-CONF_API_KEY: Final = "api_key"
-CONF_USERNAME: Final = "username"
-CONF_PASSWORD: Final = "password"
 CONF_USER_HASH: Final = "user_hash"
 
-CONF_REGION: Final = "region"
 CONF_THEMES: Final = "themes"
 CONF_COLLECTION_INTERVAL: Final = "collection_interval_hours"
 CONF_FEEDS_INTERVAL: Final = "feeds_interval_hours"
@@ -79,7 +75,6 @@ SERVICE_SEARCH_SETS: Final = "search_sets"
 SERVICE_REFRESH_CATALOGUE: Final = "refresh_catalogue"
 SERVICE_REFRESH_COLLECTION: Final = "refresh_collection"
 
-ATTR_CONFIG_ENTRY_ID: Final = "config_entry_id"
 ATTR_SET_NUMBER: Final = "set_number"
 ATTR_OWNED: Final = "owned"
 ATTR_WANTED: Final = "wanted"

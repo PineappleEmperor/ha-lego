@@ -1,18 +1,13 @@
 """Tests for LEGO config entry setup and teardown."""
 
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_API_KEY, CONF_USERNAME
+from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.lego import async_remove_config_entry_device
-from custom_components.lego.const import (
-    CONF_REGION,
-    CONF_THEMES,
-    CONF_USER_HASH,
-    DOMAIN,
-)
+from custom_components.lego.const import CONF_THEMES, CONF_USER_HASH, DOMAIN
 
 from .conftest import API_KEY, USER_HASH, USERNAME, BricksetServer, setup_integration
 

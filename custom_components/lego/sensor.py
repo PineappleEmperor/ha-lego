@@ -11,12 +11,12 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory, UnitOfTime
+from homeassistant.const import CONF_REGION, EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_REGION, DEFAULT_REGION, REGION_CURRENCY
+from .const import DEFAULT_REGION, REGION_CURRENCY
 from .coordinator import LegoCollectionCoordinator, LegoFeedsCoordinator
 from .entity import LegoCollectionEntity, LegoEntity
 from .models import CollectionSummary, LegoSet

@@ -3,14 +3,12 @@
 from datetime import timedelta
 
 from freezegun.api import FrozenDateTimeFactory
-from homeassistant.const import STATE_UNKNOWN
+from homeassistant.const import CONF_REGION, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
-
-from custom_components.lego.const import CONF_REGION
 
 from .conftest import BricksetServer, make_set, setup_integration
 

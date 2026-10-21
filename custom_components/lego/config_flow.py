@@ -5,8 +5,13 @@ import logging
 import math
 from typing import Any, override
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
-from homeassistant.const import CONF_API_KEY, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
+from homeassistant.const import CONF_API_KEY, CONF_PASSWORD, CONF_REGION, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
@@ -32,7 +37,6 @@ from .const import (
     CONF_DAILY_CALL_BUDGET,
     CONF_FEEDS_INTERVAL,
     CONF_PANEL,
-    CONF_REGION,
     CONF_THEMES,
     CONF_USER_HASH,
     COUNTRY_TO_REGION,
@@ -264,7 +268,7 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     @override
-    def async_get_options_flow(config_entry: Any) -> LegoOptionsFlow:
+    def async_get_options_flow(config_entry: ConfigEntry) -> LegoOptionsFlow:
         """Return the options flow."""
         return LegoOptionsFlow()
 

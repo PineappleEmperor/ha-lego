@@ -6,7 +6,7 @@ import json
 from typing import Any
 from unittest.mock import patch
 
-from homeassistant.const import CONF_API_KEY, CONF_USERNAME
+from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 import pytest
@@ -18,12 +18,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
 
 # Without this import, setup fails with "Integration not found".
 import custom_components  # noqa: F401
-from custom_components.lego.const import (
-    CONF_REGION,
-    CONF_THEMES,
-    CONF_USER_HASH,
-    DOMAIN,
-)
+from custom_components.lego.const import CONF_THEMES, CONF_USER_HASH, DOMAIN
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
@@ -205,6 +200,8 @@ class BricksetServer:
         self.get_sets_error: str | None = None
         # When set, every setCollection call fails with this message.
         self.set_collection_error: str | None = None
+        # When set, every getThemes call fails with this message.
+        self.themes_error: str | None = None
         # Clear this to act like a Brickset that stopped accepting comma-joined themes.
         self.themes_batchable = True
 
@@ -258,6 +255,8 @@ class BricksetServer:
         return self._ok({"hash": USER_HASH})
 
     async def _get_themes(self, method: str, url: str, data: Any) -> Any:
+        if self.themes_error is not None:
+            return self._error(self.themes_error)
         return self._ok(
             {
                 "matches": 2,

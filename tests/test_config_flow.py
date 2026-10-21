@@ -2,7 +2,7 @@
 
 import aiohttp
 from homeassistant import config_entries
-from homeassistant.const import CONF_API_KEY, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_API_KEY, CONF_PASSWORD, CONF_REGION, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 import pytest
@@ -13,7 +13,6 @@ from custom_components.lego.const import (
     CONF_COLLECTION_INTERVAL,
     CONF_DAILY_CALL_BUDGET,
     CONF_FEEDS_INTERVAL,
-    CONF_REGION,
     CONF_THEMES,
     CONF_USER_HASH,
     DOMAIN,
@@ -180,6 +179,27 @@ async def test_user_flow_cannot_connect(
     assert result["errors"] == {"base": "cannot_connect"}
 
 
+async def test_user_flow_unexpected_error(
+    hass: HomeAssistant, aioclient_mock, brickset: BricksetServer
+) -> None:
+    """An error Brickset does not classify maps to unknown."""
+    aioclient_mock.clear_requests()
+    aioclient_mock.post(
+        "https://brickset.com/api/v3.asmx/checkKey",
+        json={"status": "error", "message": "Service temporarily unavailable"},
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "unknown"}
+
+
 async def test_duplicate_account_aborts(
     hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
 ) -> None:
@@ -299,6 +319,24 @@ async def test_options_flow(
     assert mock_config_entry.options[CONF_REGION] == "US"
     assert mock_config_entry.options["catalogue_interval"] == 14
     assert mock_config_entry.options[CONF_THEMES] == ["Technic", "Icons"]
+
+
+async def test_options_flow_falls_back_to_saved_themes(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """The theme picker offers the saved themes when getThemes fails."""
+    await setup_integration(hass, mock_config_entry)
+    brickset.themes_error = "Service temporarily unavailable"
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+
+    assert result["type"] is FlowResultType.FORM
+    themes = next(
+        value
+        for key, value in result["data_schema"].schema.items()
+        if key == CONF_THEMES
+    )
+    assert themes.config["options"] == ["Technic"]
 
 
 def test_estimated_daily_calls() -> None:

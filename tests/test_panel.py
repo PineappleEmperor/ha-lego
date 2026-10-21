@@ -3,7 +3,7 @@
 from http import HTTPStatus
 
 from homeassistant.components import frontend
-from homeassistant.const import CONF_API_KEY, CONF_USERNAME
+from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import (
@@ -13,7 +13,6 @@ from pytest_homeassistant_custom_component.typing import (
 
 from custom_components.lego.const import (
     CONF_PANEL,
-    CONF_REGION,
     CONF_THEMES,
     CONF_USER_HASH,
     DOMAIN,

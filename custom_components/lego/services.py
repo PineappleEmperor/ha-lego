@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.const import ATTR_CONFIG_ENTRY_ID
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -15,7 +16,6 @@ from homeassistant.helpers import config_validation as cv, issue_registry as ir
 import probatio
 
 from .const import (
-    ATTR_CONFIG_ENTRY_ID,
     ATTR_LIMIT,
     ATTR_NOTES,
     ATTR_OWNED,
