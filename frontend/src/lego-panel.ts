@@ -586,91 +586,105 @@ export class LegoPanel extends LitElement {
   }
 
   static override styles = css`
+    /*
+     * Every colour, size, space and radius below comes from a Home Assistant
+     * theme variable or an --ha- token; each --ha- token carries the value the
+     * frontend lists for it, for an older frontend that lacks the token.
+     */
     :host {
-      --pu-text: var(--primary-text-color, #15181b);
-      --pu-text-2: var(--secondary-text-color, #5b636c);
-      --pu-surface: var(--card-background-color, #fff);
-      --pu-ground: var(--primary-background-color, #f4f6f8);
-      --pu-line: var(--divider-color, #d8dee4);
-      --pu-accent: var(--primary-color, #0288d1);
-      --pu-own: var(--success-color, #2e7d32);
-      --pu-want: var(--warning-color, #b26a00);
-      --pu-bad: var(--error-color, #b3261e);
-      --pu-radius: var(--ha-card-border-radius, 12px);
+      --lego-text: var(--primary-text-color, #141414);
+      --lego-text-2: var(--secondary-text-color, #5e5e5e);
+      --lego-surface: var(--card-background-color, #fff);
+      --lego-ground: var(--primary-background-color);
+      --lego-outline: var(--divider-color);
+      --lego-primary: var(--primary-color);
+      --lego-on-primary: var(--text-primary-color, #fff);
+      --lego-focus: var(--ha-color-focus, #989898);
+      /* Status text sits on the card surface, so it takes the on-* tokens. */
+      --lego-own: var(--ha-color-on-success-normal, #036730);
+      --lego-want: var(--ha-color-on-warning-normal, #9d3800);
+      --lego-bad: var(--ha-color-on-danger-normal, #b30532);
+      --lego-own-fill: var(--ha-color-fill-success-loud-resting, #00883c);
+      --lego-on-own-fill: var(--ha-color-on-success-loud, #fff);
+      --lego-radius: var(
+        --ha-card-border-radius,
+        var(--ha-border-radius-lg, 12px)
+      );
+      --lego-line: var(--ha-border-width-sm, 1px);
       display: block;
-      background: var(--pu-ground);
-      color: var(--pu-text);
+      background: var(--lego-ground);
+      color: var(--lego-text);
       min-height: 100vh;
     }
     .app {
       max-width: 1400px;
       margin: 0 auto;
-      padding: 0 0 32px;
+      padding: 0 0 var(--ha-space-8, 32px);
     }
     header {
       position: sticky;
       top: 0;
       z-index: 2;
-      background: var(--pu-surface);
-      border-bottom: 1px solid var(--pu-line);
-      padding: 0 16px;
+      background: var(--lego-surface);
+      border-bottom: var(--lego-line) solid var(--lego-outline);
+      padding: 0 var(--ha-space-4, 16px);
     }
     .bar {
       align-items: center;
       display: flex;
-      gap: 12px;
+      gap: var(--ha-space-3, 12px);
       justify-content: space-between;
+      min-height: var(--ha-space-16, 64px);
     }
     h1 {
-      font-size: 20px;
-      line-height: 64px;
-      font-weight: 500;
+      font-size: var(--ha-font-size-xl, 20px);
+      line-height: var(--ha-line-height-condensed, 1.2);
+      font-weight: var(--ha-font-weight-bold, 700);
       margin: 0;
     }
     .account {
-      background: var(--pu-ground);
-      border: 1px solid var(--pu-line);
-      border-radius: 10px;
+      background: var(--lego-ground);
+      border: var(--lego-line) solid var(--lego-outline);
+      border-radius: var(--ha-border-radius-md, 8px);
       color: inherit;
       font: inherit;
-      /* Material 3 body medium, matching the search field it sits above. */
-      font-size: 14px;
+      font-size: var(--ha-font-size-m, 14px);
       max-width: 50%;
       min-height: 48px;
-      padding: 0 12px;
+      padding: 0 var(--ha-space-3, 12px);
     }
     .tabs {
       display: flex;
-      gap: 2px;
+      gap: var(--ha-space-1, 4px);
     }
     .tab {
       appearance: none;
       background: none;
       border: 0;
-      border-bottom: 2px solid transparent;
-      color: var(--pu-text-2);
+      border-bottom: var(--ha-border-width-md, 2px) solid transparent;
+      color: var(--lego-text-2);
       font: inherit;
-      font-size: 14px;
-      font-weight: 500;
+      font-size: var(--ha-font-size-m, 14px);
+      font-weight: var(--ha-font-weight-medium, 500);
       min-height: 48px;
-      padding: 0 18px;
+      padding: 0 var(--ha-space-4, 16px);
       cursor: pointer;
     }
     .tab.on {
-      color: var(--pu-accent);
-      border-bottom-color: var(--pu-accent);
+      color: var(--lego-primary);
+      border-bottom-color: var(--lego-primary);
     }
     .rows {
       display: flex;
       flex-direction: column;
-      gap: 24px;
-      padding: 20px 16px 0;
+      gap: var(--ha-space-6, 24px);
+      padding: var(--ha-space-5, 20px) var(--ha-space-4, 16px) 0;
     }
     .row {
-      background: var(--pu-surface);
-      border: 1px solid var(--pu-line);
-      border-radius: var(--pu-radius);
-      padding: 16px;
+      background: var(--lego-surface);
+      border: var(--lego-line) solid var(--lego-outline);
+      border-radius: var(--lego-radius);
+      padding: var(--ha-space-4, 16px);
     }
     .row.dragging {
       opacity: 0.5;
@@ -678,57 +692,57 @@ export class LegoPanel extends LitElement {
     .rowhead {
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 12px;
+      gap: var(--ha-space-2, 8px);
+      margin-bottom: var(--ha-space-3, 12px);
     }
-    /* Material 3 title-large: section headers must outrank body text. */
+    /* Section headers outrank body text: xl at the heading weight. */
     h2 {
-      font-size: 22px;
-      line-height: 28px;
-      font-weight: 400;
+      font-size: var(--ha-font-size-xl, 20px);
+      line-height: var(--ha-line-height-condensed, 1.2);
+      font-weight: var(--ha-font-weight-bold, 700);
       margin: 0;
     }
     .drag {
       appearance: none;
       background: none;
       border: 0;
-      color: var(--pu-text-2);
+      color: var(--lego-text-2);
       cursor: grab;
       display: grid;
       place-items: center;
       min-width: 48px;
       min-height: 48px;
-      margin-left: -12px;
+      margin-left: calc(-1 * var(--ha-space-3, 12px));
     }
     .chips {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 12px;
+      gap: var(--ha-space-2, 8px);
+      margin-bottom: var(--ha-space-3, 12px);
     }
     .chip {
       appearance: none;
       background: none;
-      border: 1px solid var(--pu-line);
-      border-radius: 8px;
-      color: var(--pu-text-2);
+      border: var(--lego-line) solid var(--lego-outline);
+      border-radius: var(--ha-border-radius-pill, 9999px);
+      color: var(--lego-text-2);
       cursor: pointer;
       font: inherit;
-      font-size: 13px;
-      font-weight: 500;
+      font-size: var(--ha-font-size-m, 14px);
+      font-weight: var(--ha-font-weight-medium, 500);
       min-height: 40px;
-      padding: 0 14px;
+      padding: 0 var(--ha-space-4, 16px);
     }
     .chip.on {
-      background: var(--pu-accent);
-      border-color: var(--pu-accent);
-      color: var(--text-primary-color, #fff);
+      background: var(--lego-primary);
+      border-color: var(--lego-primary);
+      color: var(--lego-on-primary);
     }
     .carousel {
       display: flex;
-      gap: 12px;
+      gap: var(--ha-space-3, 12px);
       overflow-x: auto;
-      padding-bottom: 4px;
+      padding-bottom: var(--ha-space-1, 4px);
       scroll-snap-type: x proximity;
     }
     .carousel .card {
@@ -738,12 +752,12 @@ export class LegoPanel extends LitElement {
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
-      gap: 12px;
+      gap: var(--ha-space-3, 12px);
     }
     .card {
-      background: var(--pu-surface);
-      border: 1px solid var(--pu-line);
-      border-radius: var(--pu-radius);
+      background: var(--lego-surface);
+      border: var(--lego-line) solid var(--lego-outline);
+      border-radius: var(--lego-radius);
       overflow: hidden;
       display: flex;
       flex-direction: column;
@@ -752,144 +766,145 @@ export class LegoPanel extends LitElement {
       width: 100%;
       height: 104px;
       object-fit: contain;
-      background: var(--pu-ground);
+      background: var(--lego-ground);
     }
     /* Stand-in art, so it must read as absent rather than as the set. */
     .card img.noart {
-      padding: 26px;
+      padding: var(--ha-space-6, 24px);
       opacity: 0.35;
       box-sizing: border-box;
     }
     .meta {
       display: flex;
       flex-direction: column;
-      gap: 2px;
-      padding: 10px;
+      gap: var(--ha-space-1, 4px);
+      padding: var(--ha-space-3, 12px);
     }
     .name {
-      font-size: 14px;
-      line-height: 19px;
-      font-weight: 500;
+      font-size: var(--ha-font-size-m, 14px);
+      line-height: var(--ha-line-height-condensed, 1.2);
+      font-weight: var(--ha-font-weight-bold, 700);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     /* An unannounced set has no name worth reading, so the number leads. */
     .name.unnamed {
-      color: var(--pu-text-2);
+      color: var(--lego-text-2);
       font-style: italic;
-      font-weight: 400;
+      font-weight: var(--ha-font-weight-normal, 400);
     }
     .num {
-      font-size: 11px;
-      color: var(--pu-text-2);
+      font-size: var(--ha-font-size-s, 12px);
+      color: var(--lego-text-2);
       font-variant-numeric: tabular-nums;
     }
     .name.unnamed + .num {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--pu-text);
+      font-size: var(--ha-font-size-m, 14px);
+      font-weight: var(--ha-font-weight-bold, 700);
+      color: var(--lego-text);
     }
     .when {
-      font-size: 11px;
-      color: var(--pu-text-2);
+      font-size: var(--ha-font-size-s, 12px);
+      color: var(--lego-text-2);
     }
     .foot {
       align-items: center;
       display: flex;
-      gap: 6px;
-      margin-top: 6px;
+      gap: var(--ha-space-2, 8px);
+      margin-top: var(--ha-space-2, 8px);
     }
     .state {
-      font-size: 11px;
-      font-weight: 600;
+      font-size: var(--ha-font-size-s, 12px);
+      font-weight: var(--ha-font-weight-medium, 500);
       flex: 1;
-      color: var(--pu-text-2);
+      color: var(--lego-text-2);
     }
     .state.own {
-      color: var(--pu-own);
+      color: var(--lego-own);
     }
     .state.want {
-      color: var(--pu-want);
+      color: var(--lego-want);
     }
     .act {
       appearance: none;
       background: none;
-      border: 1px solid var(--pu-line);
-      border-radius: 50%;
-      color: var(--pu-text-2);
+      border: var(--lego-line) solid var(--lego-outline);
+      border-radius: var(--ha-border-radius-circle, 50%);
+      color: var(--lego-text-2);
       cursor: pointer;
       display: grid;
       place-items: center;
-      /* 32px of ink, 48px of target — the padding does the work. */
+      /* 32px of ink, 48px of target: the padding does the work. */
       width: 32px;
       height: 32px;
-      padding: 8px;
+      padding: var(--ha-space-2, 8px);
       box-sizing: content-box;
-      margin: -8px;
+      margin: calc(-1 * var(--ha-space-2, 8px));
       --mdc-icon-size: 18px;
     }
     .act.on {
-      background: var(--pu-own);
-      border-color: var(--pu-own);
-      color: var(--text-primary-color, #fff);
+      background: var(--lego-own-fill);
+      border-color: var(--lego-own-fill);
+      color: var(--lego-on-own-fill);
     }
     .stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 1px;
-      background: var(--pu-line);
-      border: 1px solid var(--pu-line);
-      border-radius: var(--pu-radius);
+      gap: var(--lego-line);
+      background: var(--lego-outline);
+      border: var(--lego-line) solid var(--lego-outline);
+      border-radius: var(--lego-radius);
       overflow: hidden;
     }
     .stat {
-      background: var(--pu-surface);
+      background: var(--lego-surface);
       display: flex;
       flex-direction: column;
-      gap: 2px;
-      padding: 14px;
+      gap: var(--ha-space-1, 4px);
+      padding: var(--ha-space-4, 16px);
     }
     .stat .n {
-      font-size: 26px;
-      font-weight: 600;
-      line-height: 1.15;
+      font-size: var(--ha-font-size-2xl, 24px);
+      font-weight: var(--ha-font-weight-bold, 700);
+      line-height: var(--ha-line-height-condensed, 1.2);
       font-variant-numeric: tabular-nums;
     }
     .stat .l {
-      font-size: 12px;
-      color: var(--pu-text-2);
+      font-size: var(--ha-font-size-s, 12px);
+      color: var(--lego-text-2);
     }
     .caveat {
-      font-size: 12px;
-      color: var(--pu-text-2);
-      margin: 8px 0 0;
+      font-size: var(--ha-font-size-s, 12px);
+      line-height: var(--ha-line-height-normal, 1.6);
+      color: var(--lego-text-2);
+      margin: var(--ha-space-2, 8px) 0 0;
     }
     .caveat.bad {
-      color: var(--pu-bad);
+      color: var(--lego-bad);
     }
     .refresh {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 8px 12px;
-      margin: 12px 0 0;
+      gap: var(--ha-space-2, 8px) var(--ha-space-3, 12px);
+      margin: var(--ha-space-3, 12px) 0 0;
     }
     .refreshbtn {
       appearance: none;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--ha-space-2, 8px);
       min-height: 48px;
-      padding: 0 20px;
+      padding: 0 var(--ha-space-5, 20px);
       border: 0;
-      border-radius: var(--pu-radius);
-      background: var(--pu-accent);
-      color: var(--text-primary-color, #fff);
-      /* Material 3 label large */
-      font-size: 14px;
-      line-height: 20px;
-      font-weight: 500;
+      border-radius: var(--ha-border-radius-pill, 9999px);
+      background: var(--lego-primary);
+      color: var(--lego-on-primary);
+      font: inherit;
+      font-size: var(--ha-font-size-m, 14px);
+      line-height: var(--ha-line-height-condensed, 1.2);
+      font-weight: var(--ha-font-weight-medium, 500);
       cursor: pointer;
     }
     .refreshbtn ha-icon {
@@ -899,60 +914,56 @@ export class LegoPanel extends LitElement {
       opacity: 0.55;
       cursor: not-allowed;
     }
-    .refreshbtn:focus-visible {
-      outline: 2px solid var(--pu-accent);
-      outline-offset: 2px;
-    }
     .quota {
-      /* Material 3 label medium */
-      font-size: 12px;
-      line-height: 16px;
-      color: var(--pu-text-2);
+      font-size: var(--ha-font-size-s, 12px);
+      line-height: var(--ha-line-height-normal, 1.6);
+      color: var(--lego-text-2);
     }
     .quota.warn {
-      color: var(--pu-want);
+      color: var(--lego-want);
     }
     .quota.bad {
-      color: var(--pu-bad);
+      color: var(--lego-bad);
     }
     .link {
       appearance: none;
       background: none;
       border: 0;
-      color: var(--pu-accent);
+      color: var(--lego-primary);
       cursor: pointer;
       font: inherit;
-      font-size: 14px;
-      font-weight: 500;
-      margin-top: 8px;
+      font-size: var(--ha-font-size-m, 14px);
+      font-weight: var(--ha-font-weight-medium, 500);
+      margin-top: var(--ha-space-2, 8px);
       min-height: 48px;
       padding: 0;
     }
     .search {
-      background: var(--pu-ground);
-      border: 1px solid var(--pu-line);
-      border-radius: 10px;
+      background: var(--lego-ground);
+      border: var(--lego-line) solid var(--lego-outline);
+      border-radius: var(--ha-border-radius-md, 8px);
       color: inherit;
       font: inherit;
-      font-size: 14px;
+      font-size: var(--ha-font-size-m, 14px);
       min-height: 48px;
-      padding: 0 14px;
+      padding: 0 var(--ha-space-3, 12px);
       width: 100%;
       box-sizing: border-box;
     }
     .muted {
-      color: var(--pu-text-2);
-      font-size: 14px;
-      margin: 12px 0 0;
+      color: var(--lego-text-2);
+      font-size: var(--ha-font-size-m, 14px);
+      margin: var(--ha-space-3, 12px) 0 0;
     }
     .error {
-      color: var(--error-color, #c62828);
-      padding: 20px 16px;
+      color: var(--lego-bad);
+      padding: var(--ha-space-5, 20px) var(--ha-space-4, 16px);
     }
     button:focus-visible,
-    input:focus-visible {
-      outline: 2px solid var(--pu-accent);
-      outline-offset: 2px;
+    input:focus-visible,
+    select:focus-visible {
+      outline: var(--ha-border-width-md, 2px) solid var(--lego-focus);
+      outline-offset: var(--ha-border-width-md, 2px);
     }
     @media (prefers-reduced-motion: reduce) {
       * {
