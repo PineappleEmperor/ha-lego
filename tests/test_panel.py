@@ -22,7 +22,7 @@ from custom_components.lego.const import (
     PANEL_URL_PATH,
 )
 
-from .conftest import API_KEY, BricksetServer, setup_integration
+from .conftest import API_KEY, BricksetServer, lego_device_id, setup_integration
 
 
 async def _second_account(hass: HomeAssistant) -> MockConfigEntry:
@@ -82,6 +82,8 @@ async def test_dashboard_serves_two_accounts(
         message = await client.receive_json()
         assert message["success"], message
         assert message["result"]["entry_id"] == entry.entry_id
+        # The panel's actions target the account's device, so it must arrive too.
+        assert message["result"]["device_id"] == lego_device_id(hass, entry)
 
 
 @pytest.mark.usefixtures("brickset")

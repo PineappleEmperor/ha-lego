@@ -133,6 +133,10 @@ exceeded rather than failing at the API.
 `lego.set_collection` spends a call only for a set no poll has returned; the local index
 remembers the Brickset ID of everything already seen.
 
+Every action targets an account by its **Brickset device** (`device_id`), picked from a
+device list in the action editor. Automations written for 0.4.0 or 1.0.0rc1 passed
+`config_entry_id` instead and need that field swapped for the device.
+
 ## Data updates
 
 Brickset allows **100 `getSets` calls per API key per day**; no other method counts. The

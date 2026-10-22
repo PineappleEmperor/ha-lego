@@ -59,6 +59,7 @@ interface AccountList {
 
 interface Dashboard {
   entry_id: string;
+  device_id: string | null;
   rows: string[];
   region: string;
   quota: Quota;
@@ -74,23 +75,29 @@ const UNNAMED = "{?}";
 /**
  * The data a set_collection call needs. Exported because the required fields are
  * declared in Python and nothing here can check them: callService takes a plain
- * record, so omitting config_entry_id type-checks cleanly and fails at runtime,
- * in the browser, where nobody is watching. That shipped in four releases.
+ * record, so omitting the target type-checks cleanly and fails at runtime, in the
+ * browser, where nobody is watching. That shipped in four releases. Actions target
+ * the account's Brickset device, so the target is its device_id.
  */
 export function ownershipCall(
-  entryId: string,
+  deviceId: string,
   item: Pick<LegoSet, "set_number" | "owned">,
 ): Record<string, unknown> {
   return {
-    config_entry_id: entryId,
+    device_id: deviceId,
     set_number: item.set_number,
     owned: !item.owned,
   };
 }
 
+/** The data a refresh_collection call needs, exported for the same reason. */
+export function refreshCall(deviceId: string): Record<string, unknown> {
+  return { device_id: deviceId };
+}
+
 /**
  * Address a websocket command at one account. Exported for the same reason as
- * ownershipCall: config_entry_id is vol.Optional on the Python side, so an empty
+ * ownershipCall: config_entry_id is optional on the Python side, so an empty
  * string would pass the schema and then fail to resolve to an entry. Omitting the
  * key is what makes the server fall back to the stored choice.
  */
@@ -147,9 +154,11 @@ export class LegoPanel extends LitElement {
     this._refreshing = true;
     this._refreshError = "";
     try {
-      await this.hass.callService("lego", "refresh_collection", {
-        config_entry_id: this._dash?.entry_id ?? "",
-      });
+      await this.hass.callService(
+        "lego",
+        "refresh_collection",
+        refreshCall(this._dash?.device_id ?? ""),
+      );
       await this._load();
     } catch (err) {
       this._refreshError = err instanceof Error ? err.message : String(err);
@@ -236,7 +245,7 @@ export class LegoPanel extends LitElement {
       await this.hass.callService(
         "lego",
         "set_collection",
-        ownershipCall(this._dash?.entry_id ?? "", item),
+        ownershipCall(this._dash?.device_id ?? "", item),
       );
     } catch (err) {
       // A rejected write used to fail only in the console, which read as a

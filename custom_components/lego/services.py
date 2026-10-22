@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.const import ATTR_CONFIG_ENTRY_ID
+from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -13,6 +13,9 @@ from homeassistant.core import (
 )
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, issue_registry as ir
+from homeassistant.helpers.device_registry import (
+    async_get_device_and_config_entry_for_domain,
+)
 import probatio
 
 from .const import (
@@ -40,7 +43,7 @@ from .models import LegoSet
 if TYPE_CHECKING:
     from . import LegoConfigEntry
 
-ENTRY_SCHEMA = {probatio.Required(ATTR_CONFIG_ENTRY_ID): cv.string}
+ENTRY_SCHEMA = {probatio.Required(ATTR_DEVICE_ID): cv.string}
 
 SET_COLLECTION_SCHEMA = probatio.Schema(
     {
@@ -82,14 +85,16 @@ SEARCH_SCHEMA = probatio.Schema(
 
 
 def _get_entry(hass: HomeAssistant, call: ServiceCall) -> LegoConfigEntry:
-    """Resolve and validate the targeted config entry."""
-    entry_id = call.data[ATTR_CONFIG_ENTRY_ID]
-    entry = hass.config_entries.async_get_entry(entry_id)
-    if entry is None or entry.domain != DOMAIN:
+    """Resolve the targeted Brickset device to its loaded config entry."""
+    device_id = call.data[ATTR_DEVICE_ID]
+    _, entry = async_get_device_and_config_entry_for_domain(
+        hass, device_id, domain=DOMAIN
+    )
+    if entry is None:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
-            translation_key="entry_not_found",
-            translation_placeholders={"entry_id": entry_id},
+            translation_key="device_not_found",
+            translation_placeholders={"device_id": device_id},
         )
     if entry.state is not ConfigEntryState.LOADED:
         raise ServiceValidationError(

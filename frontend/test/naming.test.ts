@@ -5,6 +5,7 @@ import {
   displayName,
   isNamed,
   ownershipCall,
+  refreshCall,
 } from "../src/lego-panel";
 
 describe("set naming", () => {
@@ -35,13 +36,13 @@ describe("set naming", () => {
 });
 
 describe("ownership call", () => {
-  it("always sends config_entry_id, which the action requires", () => {
+  it("always sends device_id, which the action requires", () => {
     const data = ownershipCall("abc123", {
       set_number: "10497-1",
       owned: false,
     });
 
-    expect(data).toHaveProperty("config_entry_id", "abc123");
+    expect(data).toHaveProperty("device_id", "abc123");
     expect(data).toHaveProperty("set_number", "10497-1");
   });
 
@@ -54,13 +55,18 @@ describe("ownership call", () => {
     );
   });
 
-  it("never omits the entry id, even when the dashboard has not loaded", () => {
+  it("never omits the device id, even when the dashboard has not loaded", () => {
     // The panel passes "" in that case; the key must still be present, since a
     // missing key is a schema rejection while an empty one is a clear error.
     expect(
-      "config_entry_id" in
-        ownershipCall("", { set_number: "1-1", owned: false }),
+      "device_id" in ownershipCall("", { set_number: "1-1", owned: false }),
     ).toBe(true);
+  });
+});
+
+describe("refresh call", () => {
+  it("targets the account's device", () => {
+    expect(refreshCall("dev1")).toEqual({ device_id: "dev1" });
   });
 });
 

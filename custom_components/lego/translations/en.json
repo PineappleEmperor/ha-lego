@@ -118,8 +118,8 @@
     "catalogue_unavailable": {
       "message": "Could not download the set list. Check Home Assistant's internet access and try again."
     },
-    "entry_not_found": {
-      "message": "No LEGO configuration entry with ID {entry_id}."
+    "device_not_found": {
+      "message": "{device_id} is not a Brickset device of the LEGO integration."
     },
     "entry_not_loaded": {
       "message": "The LEGO entry {title} is not loaded."
@@ -173,9 +173,9 @@
     "refresh_catalogue": {
       "description": "Re-downloads the local LEGO set list now, rather than waiting for the next scheduled refresh. Uses no Brickset API calls.",
       "fields": {
-        "config_entry_id": {
-          "description": "Which Brickset account to refresh the index for.",
-          "name": "Account"
+        "device_id": {
+          "description": "The Brickset device whose set index to refresh.",
+          "name": "Brickset account"
         }
       },
       "name": "Refresh set index"
@@ -183,9 +183,9 @@
     "refresh_collection": {
       "description": "Poll Brickset now instead of waiting for the next scheduled update. Spends billed calls.",
       "fields": {
-        "config_entry_id": {
-          "description": "Which Brickset account to refresh the collection for.",
-          "name": "Account"
+        "device_id": {
+          "description": "The Brickset device whose collection to refresh.",
+          "name": "Brickset account"
         }
       },
       "name": "Refresh collection"
@@ -193,8 +193,8 @@
     "search_sets": {
       "description": "Searches the Brickset catalogue and returns matching sets. Uses one of your daily API calls.",
       "fields": {
-        "config_entry_id": {
-          "description": "The LEGO configuration entry to act on.",
+        "device_id": {
+          "description": "The Brickset device to search with.",
           "name": "Brickset account"
         },
         "limit": {
@@ -219,8 +219,8 @@
     "set_collection": {
       "description": "Marks a set as owned or wanted on Brickset, or updates its quantity, rating or notes.",
       "fields": {
-        "config_entry_id": {
-          "description": "The LEGO configuration entry to act on.",
+        "device_id": {
+          "description": "The Brickset device whose collection to change.",
           "name": "Brickset account"
         },
         "notes": {

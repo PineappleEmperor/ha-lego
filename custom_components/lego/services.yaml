@@ -1,9 +1,9 @@
 set_collection:
   fields:
-    config_entry_id:
+    device_id:
       required: true
       selector:
-        config_entry:
+        device:
           integration: lego
     set_number:
       required: true
@@ -35,10 +35,10 @@ set_collection:
 
 search_sets:
   fields:
-    config_entry_id:
+    device_id:
       required: true
       selector:
-        config_entry:
+        device:
           integration: lego
     query:
       example: millennium falcon
@@ -65,15 +65,15 @@ search_sets:
 
 refresh_catalogue:
   fields:
-    config_entry_id:
+    device_id:
       required: true
       selector:
-        config_entry:
+        device:
           integration: lego
 refresh_collection:
   fields:
-    config_entry_id:
+    device_id:
       required: true
       selector:
-        config_entry:
+        device:
           integration: lego
