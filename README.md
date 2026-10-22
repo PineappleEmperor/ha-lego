@@ -81,9 +81,7 @@ Reachable via **Configure** on the integration entry.
 |--------|---------|-------|
 | Pricing region | from HA's country | Which LEGO.com market supplies prices and availability dates (`UK`, `US`, `CA`, `DE`). |
 | Themes to watch | none | Which themes to follow for new releases. However many you pick, they ride in one call per refresh. |
-| Collection refresh interval | 1 h | How often owned and wanted sets are re-fetched. Each refresh costs two calls. |
-| New release refresh interval | 12 h | How often watched themes are checked. Each refresh costs one call. |
-| Daily call budget | 80 | How many calls polling may spend before it pauses, leaving headroom for anything you ask for by hand. |
+| Daily call budget | 80 | The most calls Home Assistant spends a day. The refresh intervals are set from it (see [Data updates](#data-updates)), and polling pauses until midnight UTC once it is spent. |
 | Show the LEGO panel in the sidebar | on | Whether to add the sidebar page for browsing your collection, your wishlist and new releases. |
 | Keep a local set index | on | Whether to keep a local copy of Rebrickable's set list, so looking a set up costs no Brickset calls. |
 | Include set names in the index | on | Whether that index stores names as well as numbers, which is what searching by name needs. Takes roughly 1.8 MB on disk instead of 450 KB. |
@@ -138,10 +136,14 @@ remembers the Brickset ID of everything already seen.
 ## Data updates
 
 Brickset allows **100 `getSets` calls per API key per day**; no other method counts. The
-integration polls on two schedules and self-limits:
+integration polls on two schedules, which it sets itself from the daily call budget:
 
-- **Collection** (default every 1 h): one call for owned sets and one for wanted.
-- **Themes** (default every 12 h): one call for all of them, comma joined. A theme with
+- **Collection**: one call for owned sets and one for wanted, plus one per extra page of
+  500. It polls as often as fits in three quarters of the budget, stepping from every
+  hour through 2, 3, 4, 6, 8 and 12 hours to once a day. The default budget of 80 polls
+  hourly; a budget of 20 polls every 4 hours. The rest of the budget is kept for actions
+  such as a manual refresh.
+- **Themes** (every 12 h): one call for all of them, comma joined. A theme with
   no releases this year is confirmed separately, which costs one more.
 - `getKeyUsageStats` does not count against the 100. It is polled at most every 30
   minutes to reconcile the local tally with Brickset's own count, which also catches
@@ -154,9 +156,10 @@ is configurable; Rebrickable publishes whole snapshots rather than deltas, so a 
 is always a full 511 KB download.
 
 The options dialog shows the estimated calls/day for your current settings. When the
-budget is spent, polling pauses and entities keep serving the last successful poll rather
-than going unavailable. `sensor.brickset_*_brickset_calls_today` shows usage, budget and
-remaining headroom.
+budget is spent, polling pauses until Brickset's day resets at midnight UTC, and the
+collection and theme entities show as unavailable rather than presenting stale data as
+current. `sensor.brickset_*_brickset_calls_today` stays available throughout and shows
+usage, budget and remaining headroom.
 
 ## Removal
 

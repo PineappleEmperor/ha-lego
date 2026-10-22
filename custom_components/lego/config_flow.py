@@ -3,10 +3,11 @@
 from collections.abc import Mapping
 import logging
 import math
-from typing import Any, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 from homeassistant.config_entries import (
     ConfigEntry,
+    ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
     OptionsFlowWithReload,
@@ -33,9 +34,7 @@ from .const import (
     CONF_CATALOGUE,
     CONF_CATALOGUE_INTERVAL,
     CONF_CATALOGUE_RICH,
-    CONF_COLLECTION_INTERVAL,
     CONF_DAILY_CALL_BUDGET,
-    CONF_FEEDS_INTERVAL,
     CONF_PANEL,
     CONF_THEMES,
     CONF_USER_HASH,
@@ -43,16 +42,13 @@ from .const import (
     DEFAULT_CATALOGUE,
     DEFAULT_CATALOGUE_INTERVAL_DAYS,
     DEFAULT_CATALOGUE_RICH,
-    DEFAULT_COLLECTION_INTERVAL_HOURS,
     DEFAULT_DAILY_CALL_BUDGET,
-    DEFAULT_FEEDS_INTERVAL_HOURS,
     DEFAULT_PANEL,
     DEFAULT_REGION,
     DOMAIN,
     MAX_CATALOGUE_INTERVAL_DAYS,
-    MAX_INTERVAL_HOURS,
     MIN_CATALOGUE_INTERVAL_DAYS,
-    MIN_INTERVAL_HOURS,
+    MIN_COLLECTION_POLL_COST,
     REGIONS,
 )
 from .exceptions import (
@@ -61,6 +57,10 @@ from .exceptions import (
     BricksetError,
     BricksetUserHashError,
 )
+from .quota import collection_interval, feeds_calls_per_day
+
+if TYPE_CHECKING:
+    from . import LegoConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,20 +77,28 @@ STEP_USER_SCHEMA = probatio.Schema(
 )
 
 
-def estimated_daily_calls(options: Mapping[str, Any]) -> int:
-    """Estimate billed getSets calls per day for a set of options."""
-    collection_hours = options.get(
-        CONF_COLLECTION_INTERVAL, DEFAULT_COLLECTION_INTERVAL_HOURS
+def collection_hours(
+    options: Mapping[str, Any], poll_cost: int = MIN_COLLECTION_POLL_COST
+) -> int:
+    """Return the hours between collection polls that a set of options yields."""
+    interval = collection_interval(
+        options.get(CONF_DAILY_CALL_BUDGET, DEFAULT_DAILY_CALL_BUDGET),
+        poll_cost,
+        bool(options.get(CONF_THEMES)),
     )
-    feeds_hours = options.get(CONF_FEEDS_INTERVAL, DEFAULT_FEEDS_INTERVAL_HOURS)
-    themes = len(options.get(CONF_THEMES, []))
+    return int(interval.total_seconds() // 3600)
 
-    collection_polls = math.ceil(24 / max(collection_hours, 1))
-    feed_polls = math.ceil(24 / max(feeds_hours, 1)) if themes else 0
-    # Every watched theme rides in one comma-joined call, so the feed cost does not
-    # grow with the theme count. A theme with no releases this year is confirmed
-    # individually, which adds a call the steady state does not pay.
-    return int(collection_polls * 2 + feed_polls)
+
+def estimated_daily_calls(
+    options: Mapping[str, Any], poll_cost: int = MIN_COLLECTION_POLL_COST
+) -> int:
+    """Estimate billed getSets calls per day for a set of options."""
+    collection_polls = math.ceil(24 / collection_hours(options, poll_cost))
+    # A theme with no releases this year is confirmed individually, which adds a
+    # call the steady state does not pay.
+    return collection_polls * poll_cost + feeds_calls_per_day(
+        bool(options.get(CONF_THEMES))
+    )
 
 
 async def _validate(
@@ -281,14 +289,12 @@ class LegoOptionsFlow(OptionsFlowWithReload):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage region, feeds, intervals and polling budget."""
+        """Manage region, feeds, the panel, the set index and the call budget."""
         entry = self.config_entry
         if user_input is not None:
             new_options = {
                 CONF_REGION: user_input[CONF_REGION],
                 CONF_THEMES: user_input.get(CONF_THEMES, []),
-                CONF_COLLECTION_INTERVAL: int(user_input[CONF_COLLECTION_INTERVAL]),
-                CONF_FEEDS_INTERVAL: int(user_input[CONF_FEEDS_INTERVAL]),
                 CONF_DAILY_CALL_BUDGET: int(user_input[CONF_DAILY_CALL_BUDGET]),
                 CONF_PANEL: user_input[CONF_PANEL],
                 CONF_CATALOGUE: user_input[CONF_CATALOGUE],
@@ -317,34 +323,6 @@ class LegoOptionsFlow(OptionsFlowWithReload):
                         multiple=True,
                         custom_value=True,
                         mode=SelectSelectorMode.DROPDOWN,
-                    )
-                ),
-                probatio.Required(
-                    CONF_COLLECTION_INTERVAL,
-                    default=options.get(
-                        CONF_COLLECTION_INTERVAL, DEFAULT_COLLECTION_INTERVAL_HOURS
-                    ),
-                ): NumberSelector(
-                    NumberSelectorConfig(
-                        min=MIN_INTERVAL_HOURS,
-                        max=MAX_INTERVAL_HOURS,
-                        step=1,
-                        mode=NumberSelectorMode.BOX,
-                        unit_of_measurement="h",
-                    )
-                ),
-                probatio.Required(
-                    CONF_FEEDS_INTERVAL,
-                    default=options.get(
-                        CONF_FEEDS_INTERVAL, DEFAULT_FEEDS_INTERVAL_HOURS
-                    ),
-                ): NumberSelector(
-                    NumberSelectorConfig(
-                        min=MIN_INTERVAL_HOURS,
-                        max=MAX_INTERVAL_HOURS,
-                        step=1,
-                        mode=NumberSelectorMode.BOX,
-                        unit_of_measurement="h",
                     )
                 ),
                 probatio.Required(
@@ -389,12 +367,21 @@ class LegoOptionsFlow(OptionsFlowWithReload):
             step_id="init",
             data_schema=schema,
             description_placeholders={
-                "estimated_calls": str(estimated_daily_calls(options)),
+                "collection_hours": str(collection_hours(options, self._poll_cost)),
+                "estimated_calls": str(estimated_daily_calls(options, self._poll_cost)),
                 "budget": str(
                     options.get(CONF_DAILY_CALL_BUDGET, DEFAULT_DAILY_CALL_BUDGET)
                 ),
             },
         )
+
+    @property
+    def _poll_cost(self) -> int:
+        """Return what a collection poll costs now, or the minimum if not loaded."""
+        entry = self.config_entry
+        if entry.state is not ConfigEntryState.LOADED:
+            return MIN_COLLECTION_POLL_COST
+        return cast("LegoConfigEntry", entry).runtime_data.collection.poll_cost
 
     async def _async_theme_options(self) -> list[str]:
         """Fetch the unbilled theme list, falling back to free text if it fails."""

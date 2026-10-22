@@ -15,15 +15,13 @@ from homeassistant.util import dt as dt_util
 from .api import BricksetClient
 from .catalogue import SetCatalogue
 from .const import (
-    CONF_COLLECTION_INTERVAL,
-    CONF_FEEDS_INTERVAL,
     CONF_THEMES,
-    DEFAULT_COLLECTION_INTERVAL_HOURS,
-    DEFAULT_FEEDS_INTERVAL_HOURS,
     DEFAULT_REGION,
     DOMAIN,
     EVENT_NEW_SET,
     EVENT_WANTED_CHANGED,
+    FEEDS_INTERVAL_HOURS,
+    MIN_COLLECTION_POLL_COST,
     MIN_TIME_BETWEEN_QUOTA_CHECKS,
     PAGE_SIZE,
 )
@@ -34,7 +32,7 @@ from .exceptions import (
     BricksetUserHashError,
 )
 from .models import CollectionSummary, LegoSet
-from .quota import QuotaManager
+from .quota import QuotaManager, collection_interval
 
 if TYPE_CHECKING:
     from . import LegoConfigEntry
@@ -62,6 +60,17 @@ class CollectionData:
         for lego_set in (*self.owned, *self.wanted):
             merged[lego_set.number] = lego_set
         return merged
+
+
+def _collection_poll_cost(data: CollectionData | None) -> int:
+    """Return the billed calls a collection poll spends, given the last result."""
+    # Owned and wanted are one call each until a list passes a page.
+    if data is None:
+        return MIN_COLLECTION_POLL_COST
+    pages = math.ceil(len(data.owned) / PAGE_SIZE) + math.ceil(
+        len(data.wanted) / PAGE_SIZE
+    )
+    return max(pages, MIN_COLLECTION_POLL_COST)
 
 
 class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
@@ -92,7 +101,6 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         self.client = client
         self.quota = quota
         self.catalogue = catalogue
-        self._quota_warned = False
         self._last_quota_sync: datetime | None = None
 
     async def _sync_quota(self) -> None:
@@ -111,25 +119,6 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         self._last_quota_sync = now
         self.quota.sync(usage)
 
-    def _handle_quota_exhausted(self, err: BricksetQuotaError) -> DataT:
-        """Keep serving the last poll's data instead of going unavailable."""
-        if not self._quota_warned:
-            _LOGGER.warning(
-                "Brickset daily call budget spent (%s of %s used); "
-                "serving cached data until it resets: %s",
-                self.quota.calls_today,
-                self.quota.budget,
-                err,
-            )
-            self._quota_warned = True
-        if (previous := self._previous) is None:
-            raise UpdateFailed(
-                translation_domain=DOMAIN,
-                translation_key="api_error",
-                translation_placeholders={"error": str(err)},
-            ) from err
-        return previous
-
     @override
     async def _async_update_data(self) -> DataT:
         """Poll Brickset, mapping API failures onto coordinator semantics."""
@@ -137,7 +126,18 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
             await self._sync_quota()
             data = await self._fetch()
         except BricksetQuotaError as err:
-            return self._handle_quota_exhausted(err)
+            # Polling again before the reset would only fail the same way, and the
+            # cached data would read as current while it goes stale.
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="quota_spent",
+                translation_placeholders={
+                    "cost": str(self.poll_cost),
+                    "calls_today": str(self.quota.calls_today),
+                    "budget": str(self.quota.budget),
+                },
+                retry_after=self.quota.seconds_until_reset,
+            ) from err
         except (BricksetAuthError, BricksetUserHashError) as err:
             raise ConfigEntryAuthFailed(
                 translation_domain=DOMAIN, translation_key="auth_expired"
@@ -148,8 +148,12 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
                 translation_key="api_error",
                 translation_placeholders={"error": str(err)},
             ) from err
-        self._quota_warned = False
         return data
+
+    @property
+    def poll_cost(self) -> int:
+        """Return the billed calls one refresh would spend."""
+        return 1
 
     @property
     def _previous(self) -> DataT | None:
@@ -180,9 +184,6 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
         catalogue: SetCatalogue | None = None,
     ) -> None:
         """Initialise the collection coordinator."""
-        hours = config_entry.options.get(
-            CONF_COLLECTION_INTERVAL, DEFAULT_COLLECTION_INTERVAL_HOURS
-        )
         super().__init__(
             hass,
             config_entry,
@@ -190,19 +191,18 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
             quota,
             catalogue,
             name=f"{DOMAIN} collection",
-            update_interval=timedelta(hours=hours),
+            update_interval=collection_interval(
+                quota.budget,
+                MIN_COLLECTION_POLL_COST,
+                bool(config_entry.options.get(CONF_THEMES)),
+            ),
         )
 
     @property
+    @override
     def poll_cost(self) -> int:
         """Return the billed calls one refresh would spend."""
-        # Owned and wanted are one call each until a list passes a page.
-        if (data := self._previous) is None:
-            return 2
-        pages = math.ceil(len(data.owned) / PAGE_SIZE) + math.ceil(
-            len(data.wanted) / PAGE_SIZE
-        )
-        return max(pages, 2)
+        return _collection_poll_cost(self._previous)
 
     def apply_collection_change(
         self,
@@ -264,6 +264,13 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
             summary=CollectionSummary.from_sets(owned, wanted, self.region),
         )
         self._fire_wanted_events(data)
+        # A collection that grows past a page costs more per poll, so the interval
+        # stretches to keep the polls inside the budget.
+        self.update_interval = collection_interval(
+            self.quota.budget,
+            _collection_poll_cost(data),
+            bool(self.config_entry.options.get(CONF_THEMES)),
+        )
         return data
 
     def _fire_wanted_events(self, new_data: CollectionData) -> None:
@@ -309,9 +316,6 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
         catalogue: SetCatalogue | None = None,
     ) -> None:
         """Initialise the feeds coordinator."""
-        hours = config_entry.options.get(
-            CONF_FEEDS_INTERVAL, DEFAULT_FEEDS_INTERVAL_HOURS
-        )
         super().__init__(
             hass,
             config_entry,
@@ -319,7 +323,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
             quota,
             catalogue,
             name=f"{DOMAIN} feeds",
-            update_interval=timedelta(hours=hours),
+            update_interval=timedelta(hours=FEEDS_INTERVAL_HOURS),
         )
         self._batching_warned = False
 

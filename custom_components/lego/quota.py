@@ -2,14 +2,39 @@
 
 # Brickset allows 100 getSets calls per key per day and counts no other method,
 # so the tally kept between polls is reconciled against the authoritative
-# server-side figure from getKeyUsageStats.
+# server-side figure from getKeyUsageStats. The day is Brickset's, which rolls
+# over at midnight UTC whatever the Home Assistant time zone.
 
-from datetime import date
+from datetime import UTC, date, datetime, time, timedelta
+import math
 
 from homeassistant.util import dt as dt_util
 
-from .const import BRICKSET_DAILY_CALL_LIMIT
+from .const import (
+    BRICKSET_DAILY_CALL_LIMIT,
+    COLLECTION_INTERVAL_STEPS_HOURS,
+    FEEDS_INTERVAL_HOURS,
+    POLL_SHARE_OF_BUDGET,
+)
 from .exceptions import BricksetQuotaError
+
+
+def feeds_calls_per_day(watching_themes: bool) -> int:
+    """Return the billed calls the theme feeds spend a day."""
+    # Every watched theme rides in one comma-joined call, so the cost does not grow
+    # with the theme count.
+    return math.ceil(24 / FEEDS_INTERVAL_HOURS) if watching_themes else 0
+
+
+def collection_interval(
+    budget: int, poll_cost: int, watching_themes: bool
+) -> timedelta:
+    """Return the shortest collection interval whose polls fit the budget."""
+    available = budget * POLL_SHARE_OF_BUDGET - feeds_calls_per_day(watching_themes)
+    for hours in COLLECTION_INTERVAL_STEPS_HOURS:
+        if math.ceil(24 / hours) * poll_cost <= available:
+            return timedelta(hours=hours)
+    return timedelta(hours=COLLECTION_INTERVAL_STEPS_HOURS[-1])
 
 
 class QuotaManager:
@@ -18,7 +43,7 @@ class QuotaManager:
     def __init__(self, budget: int) -> None:
         """Initialise the manager with a daily call budget."""
         self._budget = min(budget, BRICKSET_DAILY_CALL_LIMIT)
-        self._day: date = dt_util.now().date()
+        self._day: date = dt_util.utcnow().date()
         self._calls_today = 0
         self._server_usage: dict[date, int] = {}
 
@@ -48,9 +73,16 @@ class QuotaManager:
         """Return the last known per-day usage reported by Brickset."""
         return dict(self._server_usage)
 
+    @property
+    def seconds_until_reset(self) -> float:
+        """Return the seconds left until the budget resets at midnight UTC."""
+        now = dt_util.utcnow()
+        reset = datetime.combine(now.date() + timedelta(days=1), time(), UTC)
+        return (reset - now).total_seconds()
+
     def _roll_day(self) -> None:
-        """Reset the local tally when the local day changes."""
-        today = dt_util.now().date()
+        """Reset the tally when Brickset's day changes."""
+        today = dt_util.utcnow().date()
         if today != self._day:
             self._day = today
             self._calls_today = 0

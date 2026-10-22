@@ -1,5 +1,7 @@
 """Tests for the LEGO config, reauth, reconfigure and options flows."""
 
+from datetime import timedelta
+
 import aiohttp
 from homeassistant import config_entries
 from homeassistant.const import CONF_API_KEY, CONF_PASSWORD, CONF_REGION, CONF_USERNAME
@@ -11,9 +13,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 
 from custom_components.lego.config_flow import estimated_daily_calls
 from custom_components.lego.const import (
-    CONF_COLLECTION_INTERVAL,
     CONF_DAILY_CALL_BUDGET,
-    CONF_FEEDS_INTERVAL,
     CONF_THEMES,
     CONF_USER_HASH,
     DOMAIN,
@@ -306,15 +306,17 @@ async def test_options_flow(
 
     result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
     assert result["type"] is FlowResultType.FORM
-    assert result["description_placeholders"]["budget"] == "80"
+    assert result["description_placeholders"] == {
+        "budget": "80",
+        "collection_hours": "1",
+        "estimated_calls": "50",
+    }
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
             CONF_REGION: "US",
             CONF_THEMES: ["Technic", "Icons"],
-            CONF_COLLECTION_INTERVAL: 8,
-            CONF_FEEDS_INTERVAL: 24,
             CONF_DAILY_CALL_BUDGET: 50,
             "catalogue": True,
             "catalogue_rich": True,
@@ -327,6 +329,21 @@ async def test_options_flow(
     assert mock_config_entry.options[CONF_REGION] == "US"
     assert mock_config_entry.options["catalogue_interval"] == 14
     assert mock_config_entry.options[CONF_THEMES] == ["Technic", "Icons"]
+    # A smaller budget stretches the collection interval on the reload.
+    collection = mock_config_entry.runtime_data.collection
+    assert collection.update_interval == timedelta(hours=2)
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_options_flow_estimates_an_unloaded_entry(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """An entry that is not loaded is estimated at the cheapest poll."""
+    mock_config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+
+    assert result["description_placeholders"]["estimated_calls"] == "50"
 
 
 async def test_options_flow_falls_back_to_saved_themes(
@@ -348,31 +365,20 @@ async def test_options_flow_falls_back_to_saved_themes(
 
 
 def test_estimated_daily_calls() -> None:
-    """The estimate accounts for both coordinators."""
-    # 4 collection polls x (owned + wanted) = 8, plus 2 feed polls of one call each.
-    assert (
-        estimated_daily_calls(
-            {
-                CONF_COLLECTION_INTERVAL: 6,
-                CONF_FEEDS_INTERVAL: 12,
-                CONF_THEMES: ["Technic"],
-            }
-        )
-        == 10
-    )
+    """The estimate follows the schedule the budget yields."""
+    themes = {CONF_THEMES: ["Technic"]}
+    # 24 hourly polls of owned + wanted, plus 2 feed polls of one call each.
+    assert estimated_daily_calls(themes) == 50
     # Themes ride in one comma-joined call, so five cost the same as one.
     assert (
         estimated_daily_calls(
-            {
-                CONF_COLLECTION_INTERVAL: 6,
-                CONF_FEEDS_INTERVAL: 12,
-                CONF_THEMES: ["Technic", "Icons", "City", "Star Wars", "Botanicals"],
-            }
+            {CONF_THEMES: ["Technic", "Icons", "City", "Star Wars", "Botanicals"]}
         )
-        == 10
+        == 50
     )
     # No themes means no feed polls at all.
-    assert (
-        estimated_daily_calls({CONF_COLLECTION_INTERVAL: 24, CONF_FEEDS_INTERVAL: 12})
-        == 2
-    )
+    assert estimated_daily_calls({}) == 48
+    # A tighter budget polls less often: every 4 h is 6 polls of 2, plus the feeds.
+    assert estimated_daily_calls({**themes, CONF_DAILY_CALL_BUDGET: 20}) == 14
+    # A collection past a page costs more a poll, so it is polled every 2 h.
+    assert estimated_daily_calls(themes, poll_cost=4) == 50
