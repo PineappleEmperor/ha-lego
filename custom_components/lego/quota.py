@@ -74,11 +74,10 @@ class QuotaManager:
         return dict(self._server_usage)
 
     @property
-    def seconds_until_reset(self) -> float:
-        """Return the seconds left until the budget resets at midnight UTC."""
-        now = dt_util.utcnow()
-        reset = datetime.combine(now.date() + timedelta(days=1), time(), UTC)
-        return (reset - now).total_seconds()
+    def resets_at(self) -> datetime:
+        """Return when the budget next resets, at midnight UTC."""
+        tomorrow = dt_util.utcnow().date() + timedelta(days=1)
+        return datetime.combine(tomorrow, time(), UTC)
 
     def _roll_day(self) -> None:
         """Reset the tally when Brickset's day changes."""

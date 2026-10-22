@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, cast, override
 from homeassistant.const import CONF_REGION
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -102,6 +103,10 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         self.quota = quota
         self.catalogue = catalogue
         self._last_quota_sync: datetime | None = None
+        # When Brickset last answered a poll, so a dashboard can show how old the
+        # data is while the budget is spent.
+        self.last_synced: datetime | None = None
+        self._quota_paused = False
 
     async def _sync_quota(self) -> None:
         """Refresh the unbilled server-side call count, rate limited separately."""
@@ -126,18 +131,7 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
             await self._sync_quota()
             data = await self._fetch()
         except BricksetQuotaError as err:
-            # Polling again before the reset would only fail the same way, and the
-            # cached data would read as current while it goes stale.
-            raise UpdateFailed(
-                translation_domain=DOMAIN,
-                translation_key="quota_spent",
-                translation_placeholders={
-                    "cost": str(self.poll_cost),
-                    "calls_today": str(self.quota.calls_today),
-                    "budget": str(self.quota.budget),
-                },
-                retry_after=self.quota.seconds_until_reset,
-            ) from err
+            return self._serve_cached(err)
         except (BricksetAuthError, BricksetUserHashError) as err:
             raise ConfigEntryAuthFailed(
                 translation_domain=DOMAIN, translation_key="auth_expired"
@@ -148,7 +142,45 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
                 translation_key="api_error",
                 translation_placeholders={"error": str(err)},
             ) from err
+        if self._quota_paused:
+            _LOGGER.info("Brickset call budget reset; %s is polling again", self.name)
+            self._quota_paused = False
+        self.last_synced = dt_util.utcnow()
+        # Listeners hear only about changed data, and most polls change nothing, so
+        # the sync time goes out on its own signal.
+        async_dispatcher_send(self.hass, self.signal_synced)
         return data
+
+    @property
+    def signal_synced(self) -> str:
+        """Return the dispatcher signal sent after every successful poll."""
+        return f"{DOMAIN}_{self.config_entry.entry_id}_{self.name}_synced"
+
+    def _serve_cached(self, err: BricksetQuotaError) -> DataT:
+        """Keep the last poll's data while the budget is spent, saying so once."""
+        # Going unavailable would blank every dashboard for the rest of the day over
+        # a self-imposed limit; last_synced tells anyone who asks how old it is.
+        if (previous := self._previous) is None:
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="quota_spent",
+                translation_placeholders={
+                    "cost": str(self.poll_cost),
+                    "calls_today": str(self.quota.calls_today),
+                    "budget": str(self.quota.budget),
+                },
+            ) from err
+        if not self._quota_paused:
+            _LOGGER.warning(
+                "Brickset daily call budget spent (%s of %s used); %s is serving "
+                "data last synced at %s until it resets at midnight UTC",
+                self.quota.calls_today,
+                self.quota.budget,
+                self.name,
+                self.last_synced,
+            )
+            self._quota_paused = True
+        return previous
 
     @property
     def poll_cost(self) -> int:

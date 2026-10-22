@@ -6,6 +6,7 @@ import {
   isNamed,
   ownershipCall,
   refreshCall,
+  syncedAgo,
 } from "../src/lego-panel";
 
 describe("set naming", () => {
@@ -95,5 +96,22 @@ describe("addressing an account", () => {
       config_entry_id: "e1",
       filter: "owned",
     });
+  });
+});
+
+describe("sync age", () => {
+  const now = new Date("2026-08-05T15:30:00Z");
+
+  it("says so when nothing has synced yet", () => {
+    expect(syncedAgo(null, now)).toBe("Not synced yet");
+  });
+
+  it("reads naturally from a minute to days", () => {
+    expect(syncedAgo("2026-08-05T15:29:40Z", now)).toBe("Updated just now");
+    expect(syncedAgo("2026-08-05T15:25:00Z", now)).toBe(
+      "Updated 5 minutes ago",
+    );
+    expect(syncedAgo("2026-08-05T12:00:00Z", now)).toBe("Updated 3 hours ago");
+    expect(syncedAgo("2026-08-02T15:30:00Z", now)).toBe("Updated 3 days ago");
   });
 });

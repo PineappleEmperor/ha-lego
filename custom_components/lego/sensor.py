@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, override
 
 from homeassistant.components.sensor import (
@@ -13,6 +13,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import CONF_REGION, EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
@@ -137,6 +138,7 @@ async def async_setup_entry(
     ]
     entities.append(LegoValueSensor(collection))
     entities.append(LegoQuotaSensor(collection))
+    entities.append(LegoLastSyncedSensor(collection))
     entities.append(LegoNextRetirementSensor(collection))
     entities.extend(
         LegoLatestThemeSetSensor(runtime.feeds, theme) for theme in runtime.feeds.themes
@@ -252,6 +254,41 @@ class LegoQuotaSensor(LegoCollectionEntity, SensorEntity):
                 for day, count in sorted(quota.server_usage.items(), reverse=True)
             },
         }
+
+
+class LegoLastSyncedSensor(LegoCollectionEntity, SensorEntity):
+    """When Brickset last answered a collection poll."""
+
+    _attr_translation_key = "last_synced"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(self, coordinator: LegoCollectionCoordinator) -> None:
+        """Initialise the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_last_synced"
+
+    @override
+    async def async_added_to_hass(self) -> None:
+        """Follow every successful poll, not only the ones that changed data."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, self.coordinator.signal_synced, self.async_write_ha_state
+            )
+        )
+
+    @property
+    @override
+    def available(self) -> bool:
+        """Stay up while polls fail, since that is when the age of the data matters."""
+        return True
+
+    @property
+    @override
+    def native_value(self) -> datetime | None:
+        """Return when the collection was last synced."""
+        return self.coordinator.last_synced
 
 
 def _set_attributes(lego_set: LegoSet, region: str) -> dict[str, Any]:

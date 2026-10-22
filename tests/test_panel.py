@@ -84,6 +84,9 @@ async def test_dashboard_serves_two_accounts(
         assert message["result"]["entry_id"] == entry.entry_id
         # The panel's actions target the account's device, so it must arrive too.
         assert message["result"]["device_id"] == lego_device_id(hass, entry)
+        # So the panel can say how old the data is once the budget is spent.
+        assert message["result"]["last_synced"] is not None
+        assert message["result"]["quota"]["resets_at"].endswith("T00:00:00+00:00")
 
 
 @pytest.mark.usefixtures("brickset")

@@ -82,6 +82,9 @@
       "collection_value": {
         "name": "Collection value"
       },
+      "last_synced": {
+        "name": "Last synced"
+      },
       "latest_theme_set": {
         "name": "Latest {theme} set"
       },

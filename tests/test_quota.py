@@ -3,7 +3,6 @@
 from datetime import timedelta
 
 from freezegun.api import FrozenDateTimeFactory
-from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 import pytest
@@ -63,47 +62,61 @@ def test_tally_resets_on_a_new_day(freezer: FrozenDateTimeFactory) -> None:
     assert quota.remaining == 80
 
 
-async def test_spent_budget_pauses_polling_until_the_reset(
+async def test_spent_budget_keeps_cached_data_with_its_age(
     hass: HomeAssistant,
     brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:
-    """A spent budget makes entities unavailable and holds polls until midnight UTC."""
+    """A spent budget keeps the last sync's data, and Last synced shows its age."""
     freezer.move_to("2026-08-05 10:00:00+00:00")
     await setup_integration(hass, mock_config_entry)
-    coordinator = mock_config_entry.runtime_data.collection
     owned = "sensor.brickset_brickfan_sets_owned"
-    calls = "sensor.brickset_brickfan_brickset_calls_today"
-    assert hass.states.get(owned).state == "4"
+    synced = "sensor.brickset_brickfan_last_synced"
+    assert hass.states.get(synced).state == "2026-08-05T10:00:00+00:00"
 
     # Pretend the key has been hammered by something else today.
     mock_config_entry.runtime_data.quota.record(100)
+    brickset.owned = []
+
+    freezer.tick(timedelta(hours=3))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    # The entities keep the last good data rather than going unavailable, and the
+    # sync time stays where it was, which is how a dashboard tells it is stale.
+    assert mock_config_entry.runtime_data.collection.last_update_success
+    assert hass.states.get(owned).state == "4"
+    assert hass.states.get(synced).state == "2026-08-05T10:00:00+00:00"
+
+    freezer.move_to("2026-08-06 00:30:00+00:00")
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    # After the reset the next poll lands, even though nothing it returned is
+    # news to the sets sensors, and the sync time moves with it.
+    assert hass.states.get(owned).state == "0"
+    assert hass.states.get(synced).state == "2026-08-06T00:30:00+00:00"
+
+
+async def test_unchanged_poll_still_moves_last_synced(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A poll that changes nothing still counts as a sync."""
+    freezer.move_to("2026-08-05 10:00:00+00:00")
+    await setup_integration(hass, mock_config_entry)
+    calls = len(brickset.get_sets_calls)
 
     freezer.tick(timedelta(hours=1))
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
 
-    # Cached data would read as current, so the entities go unavailable instead,
-    # while the calls sensor stays up to say why.
-    assert not coordinator.last_update_success
-    assert hass.states.get(owned).state == STATE_UNAVAILABLE
-    assert hass.states.get(calls).state != STATE_UNAVAILABLE
-
-    # Hourly polls would fail the same way, so none is made before the reset.
-    made = len(brickset.get_sets_calls)
-    freezer.tick(timedelta(hours=6))
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
-    assert len(brickset.get_sets_calls) == made
-    assert hass.states.get(owned).state == STATE_UNAVAILABLE
-
-    freezer.move_to("2026-08-06 00:00:30+00:00")
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
-
-    assert coordinator.last_update_success
-    assert hass.states.get(owned).state == "4"
+    assert len(brickset.get_sets_calls) > calls
+    state = hass.states.get("sensor.brickset_brickfan_last_synced")
+    assert state.state == "2026-08-05T11:00:00+00:00"
 
 
 @pytest.mark.parametrize(
@@ -127,9 +140,7 @@ def test_collection_interval_fits_the_budget(
     )
 
 
-def test_seconds_until_reset_counts_to_midnight_utc(
-    freezer: FrozenDateTimeFactory,
-) -> None:
+def test_resets_at_midnight_utc(freezer: FrozenDateTimeFactory) -> None:
     """Brickset's day ends at midnight UTC."""
     freezer.move_to("2026-08-05 22:30:00+00:00")
-    assert QuotaManager(80).seconds_until_reset == 90 * 60
+    assert QuotaManager(80).resets_at.isoformat() == "2026-08-06T00:00:00+00:00"

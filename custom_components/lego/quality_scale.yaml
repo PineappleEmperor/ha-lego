@@ -32,7 +32,12 @@ rules:
   # Silver
   config-entry-unloading: done
   log-when-unavailable: done
-  entity-unavailable: done
+  entity-unavailable:
+    status: done
+    comment: >-
+      A failed poll makes the entities unavailable. A spent daily call budget is a
+      limit the integration sets itself, not a failure, so the last sync's data is
+      kept and the Last synced sensor and the panel show its age.
   action-exceptions: done
   reauthentication-flow: done
   parallel-updates: done

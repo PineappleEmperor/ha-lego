@@ -18,6 +18,9 @@
       "collection_value": {
         "default": "mdi:cash-multiple"
       },
+      "last_synced": {
+        "default": "mdi:cloud-check-outline"
+      },
       "latest_theme_set": {
         "default": "mdi:new-box"
       },

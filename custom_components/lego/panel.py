@@ -195,7 +195,13 @@ def dashboard_payload(entry: LegoConfigEntry, rows: list[str]) -> dict[str, Any]
             "budget": quota.budget,
             "remaining": quota.remaining,
             "refresh_cost": entry.runtime_data.collection.poll_cost,
+            "resets_at": quota.resets_at.isoformat(),
         },
+        # The panel shows how old the data is, which matters once the budget is spent
+        # and polls keep serving the last sync.
+        "last_synced": (
+            collection.last_synced.isoformat() if collection.last_synced else None
+        ),
         "stats": {
             "sets_owned": summary.sets_owned if summary else 0,
             "sets_distinct": summary.sets_distinct if summary else 0,

@@ -117,6 +117,7 @@ exceeded rather than failing at the API.
 | Sets wanted | Size of your Brickset wishlist. A `sets` attribute lists them, soonest to retire first with already-retired sets last, carrying your Brickset priority, and is kept out of the recorder. |
 | Collection value | Sum of LEGO.com RRP × quantity in the chosen region. |
 | Brickset calls today | Diagnostic; usage against the daily limit. |
+| Last synced | Diagnostic timestamp of the last time Brickset answered a poll. Stays available, so a dashboard can show how old the data is. |
 | Next wishlist retirement | Days until the soonest set on your wishlist leaves sale, with that set's full record in attributes. Sets already gone are excluded. |
 | Latest *theme* set | One per watched theme; newest set number, with details in attributes. |
 | Set retirements / releases / anniversaries | Three calendar entities. |
@@ -160,10 +161,12 @@ is configurable; Rebrickable publishes whole snapshots rather than deltas, so a 
 is always a full 511 KB download.
 
 The options dialog shows the estimated calls/day for your current settings. When the
-budget is spent, polling pauses until Brickset's day resets at midnight UTC, and the
-collection and theme entities show as unavailable rather than presenting stale data as
-current. `sensor.brickset_*_brickset_calls_today` stays available throughout and shows
-usage, budget and remaining headroom.
+budget is spent, polling pauses until Brickset's day resets at midnight UTC and the
+entities keep serving the last successful poll rather than going unavailable. To tell
+how old that data is, `sensor.brickset_*_last_synced` holds the time of the last sync,
+and the panel shows it beside **Update now** ("Updated 3 hours ago") along with when
+updates resume. `sensor.brickset_*_brickset_calls_today` shows usage, budget and
+remaining headroom.
 
 ## Removal
 

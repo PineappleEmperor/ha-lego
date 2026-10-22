@@ -45,6 +45,7 @@ interface Quota {
   budget: number;
   remaining: number;
   refresh_cost: number;
+  resets_at: string;
 }
 
 interface Account {
@@ -63,6 +64,7 @@ interface Dashboard {
   rows: string[];
   region: string;
   quota: Quota;
+  last_synced: string | null;
   stats: Stats;
   wishlist: LegoSet[];
   themes: Record<string, LegoSet[]>;
@@ -106,6 +108,24 @@ export function accountCall(
   entryId: string,
 ): Record<string, unknown> {
   return entryId ? { type, config_entry_id: entryId } : { type };
+}
+
+/**
+ * How long ago Brickset last answered a poll. Once the daily budget is spent the
+ * panel keeps showing the last sync's data, so its age is what says how far to
+ * trust it. Exported so a test can pin the wording.
+ */
+export function syncedAgo(lastSynced: string | null, now: Date): string {
+  if (!lastSynced) return "Not synced yet";
+  const minutes = Math.floor(
+    (now.getTime() - new Date(lastSynced).getTime()) / 60_000,
+  );
+  if (minutes < 1) return "Updated just now";
+  const ago = new Intl.RelativeTimeFormat("en", { numeric: "always" });
+  if (minutes < 60) return `Updated ${ago.format(-minutes, "minute")}`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `Updated ${ago.format(-hours, "hour")}`;
+  return `Updated ${ago.format(-Math.floor(hours / 24), "day")}`;
 }
 
 export function isNamed(item: Pick<LegoSet, "name">): boolean {
@@ -435,10 +455,20 @@ export class LegoPanel extends LitElement {
           ></ha-icon>
           ${this._refreshing ? "Updating…" : "Update now"}
         </button>
-        <span class="quota ${short ? "bad" : tight ? "warn" : ""}">
+        <span
+          class="quota ${short ? "bad" : tight ? "warn" : ""}"
+          title=${this._dash?.last_synced
+            ? new Date(this._dash.last_synced).toLocaleString()
+            : nothing}
+        >
+          ${syncedAgo(this._dash?.last_synced ?? null, new Date())}.
           ${short
             ? html`Daily budget spent, ${quota.calls_today} of ${quota.budget}
-              used. Resets at midnight UTC.`
+              used, so this is the last sync's data. Updates resume at
+              ${new Date(quota.resets_at).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}.`
             : html`Costs ${cost} of ${quota.remaining} calls left today.`}
         </span>
       </div>
