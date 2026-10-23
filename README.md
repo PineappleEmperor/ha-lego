@@ -94,6 +94,7 @@ Reachable via **Configure** on the integration entry.
 | Themes to watch | none | Which themes to follow for new releases. However many you pick, they ride in one call per refresh. |
 | Daily call budget | 80 | The most calls Home Assistant spends a day. The refresh intervals are set from it (see [Data updates](#data-updates)), and polling pauses until midnight UTC once it is spent. |
 | Show the LEGO panel in the sidebar | on | Whether to add the sidebar page for browsing your collection, your wishlist and new releases. |
+| Follow releases across all themes | on for new setups | Fills the panel's **Out recently** and **Coming soon** rows with every set out in the last four weeks or due in the next four, whatever its theme. About 3 calls a day, 4 from September. Off for entries set up before it existed, so upgrading spends nothing new until you turn it on. |
 | Keep a local set index | on | Whether to keep a local copy of Rebrickable's set list, so looking a set up costs no Brickset calls. |
 | Include set names in the index | on | Whether that index stores names as well as numbers, which is what searching by name needs. Takes roughly 1.8 MB on disk instead of 450 KB. |
 | Set index refresh interval | 7 days | How often the local list is re-downloaded, from 1 to 90 days. Costs no Brickset calls, and a set missing from it still works at the price of one lookup. |
@@ -106,6 +107,10 @@ A **LEGO** entry appears in the sidebar unless you turn it off in options. It ha
   to come, newest first), your wishlist with release and retirement dates, and your
   collection totals. Each row has a drag handle, and the order
   is remembered per Home Assistant user.
+- **Out recently** and **Coming soon** list every set, in any theme, out in the last four
+  weeks (newest first) or due in the next four (soonest first). They need **Follow
+  releases across all themes** in options, and can be hidden from **Customise** like any
+  other row.
 - **Collection value** and **Pieces** show today's total, a line of the last year from
   Home Assistant's recorded statistics (it fills in week by week after you install), and
   a bar per theme. Pieces starts hidden.
@@ -252,7 +257,7 @@ entities:
 ## Data updates
 
 Brickset allows **100 `getSets` calls per API key per day**; no other method counts. The
-integration polls on two schedules, which it sets itself from the daily call budget:
+integration polls on up to three schedules, which it sets itself from the daily call budget:
 
 - **Collection**: one call for owned sets and one for wanted, plus one per extra page of
   500. It polls as often as fits in three quarters of the budget, stepping from every
@@ -263,6 +268,10 @@ integration polls on two schedules, which it sets itself from the daily call bud
   no releases this year is confirmed separately, which costs one more. From September,
   when LEGO announces its January wave, a second call adds next year's sets, so the
   feeds cost 4 calls a day instead of 2 until the year turns.
+- **Releases across all themes** (once a day, when followed): `getSets` has no date
+  filter, so this pages through every set of the year, about 3 calls, plus one for next
+  year from September. Its cost comes out of the collection's share, so on a small budget
+  the collection polls a step less often. It fetches in the background after setup.
 - `getKeyUsageStats` does not count against the 100. It is polled at most every 30
   minutes to reconcile the local tally with Brickset's own count, which also catches
   calls made by other tools sharing the key.
@@ -291,6 +300,9 @@ remaining headroom.
   publishes: UK, US, Canada and Germany.
 - **Theme feeds cover this year, and next year from September.** A set Brickset files
   under next year before September appears in September.
+- **Out recently misses last December's sets in early January**, since the release
+  feed covers this year and next, and a second year of pages every day would cost too
+  much.
 - **A set Brickset lists before its name is announced** shows as "Name tbd" until the
   name is published.
 - **A Brickset password change invalidates the saved token**, so Home Assistant asks you

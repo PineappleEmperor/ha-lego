@@ -79,6 +79,7 @@ def make_set(
     exit_date: str | None = None,
     priority: int = 1,
     released: bool = True,
+    category: str = "Normal",
 ) -> dict[str, Any]:
     """Build a getSets record shaped like Brickset's own payloads."""
     uk: dict[str, Any] = {}
@@ -105,7 +106,7 @@ def make_set(
         "theme": theme,
         "themeGroup": "Model making",
         "subtheme": "",
-        "category": "Normal",
+        "category": category,
         "released": released,
         "pieces": pieces,
         "minifigs": minifigs,
@@ -202,6 +203,8 @@ class BricksetServer:
         self.owned = deepcopy(OWNED_SETS)
         self.wanted = deepcopy(WANTED_SETS)
         self.theme_sets = deepcopy(THEME_SETS)
+        # Every set of a year, answered a page at a time to a year-only query.
+        self.year_sets: list[dict[str, Any]] = []
         self.usage_today = 0
         self.get_sets_calls: list[dict[str, Any]] = []
         self.set_collection_calls: list[dict[str, Any]] = []
@@ -330,6 +333,11 @@ class BricksetServer:
             needle = str(params["query"]).lower()
             pool = [*self.owned, *self.wanted, *self.theme_sets]
             sets = [item for item in pool if needle in item["name"].lower()]
+        elif "year" in params:
+            pool = [item for item in self.year_sets if item["year"] == params["year"]]
+            size = int(params.get("pageSize", 20))
+            start = (int(params.get("pageNumber", 1)) - 1) * size
+            sets = pool[start : start + size]
         else:
             sets = []
 

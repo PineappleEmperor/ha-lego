@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 from custom_components.lego.config_flow import estimated_daily_calls
 from custom_components.lego.const import (
     CONF_DAILY_CALL_BUDGET,
+    CONF_RELEASES,
     CONF_THEMES,
     CONF_USER_HASH,
     DOMAIN,
@@ -57,6 +58,8 @@ async def test_user_flow(hass: HomeAssistant) -> None:
     }
     assert CONF_PASSWORD not in result["data"]
     assert result["options"][CONF_REGION] == "UK"
+    # New entries start with the all-themes release rows switched on.
+    assert result["options"][CONF_RELEASES] is True
 
 
 @pytest.mark.usefixtures("brickset")
@@ -384,3 +387,10 @@ def test_estimated_daily_calls() -> None:
     assert estimated_daily_calls(themes, poll_cost=4) == 50
     # From September next year's sets cost a second call a feed poll.
     assert estimated_daily_calls(themes, today=date(2026, 10, 1)) == 52
+    # The release rows page through the year once a day, next year too in autumn.
+    releases = {**themes, CONF_RELEASES: True}
+    assert estimated_daily_calls(releases) == 53
+    assert estimated_daily_calls(releases, today=date(2026, 10, 1)) == 56
+    # Their pages come out of the collection's share on a tight budget: 15 calls
+    # less 2 for the feeds and 3 for releases leaves 10, so polls every 6 h.
+    assert estimated_daily_calls({**releases, CONF_DAILY_CALL_BUDGET: 20}) == 13

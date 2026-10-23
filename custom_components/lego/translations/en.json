@@ -156,6 +156,7 @@
           "daily_call_budget": "Daily call budget",
           "panel": "Show the LEGO panel in the sidebar",
           "region": "Pricing region",
+          "releases": "Follow releases across all themes",
           "themes": "Themes to watch for new releases"
         },
         "data_description": {
@@ -165,9 +166,10 @@
           "daily_call_budget": "The most calls Home Assistant spends a day. Refresh intervals are set from it, and polling pauses until midnight UTC once it is spent.",
           "panel": "Adds a page for browsing your collection, your wishlist and new releases in the themes you follow. Turning it off removes the sidebar entry.",
           "region": "Which LEGO.com market supplies recommended retail prices and retirement dates.",
+          "releases": "Fills the panel's Out recently and Coming soon rows with every set out in the last four weeks or due in the next four, whatever its theme. Checks once a day, paging through the year's sets at about 3 calls, 4 from September.",
           "themes": "However many themes you pick, they are fetched together in one API call per refresh."
         },
-        "description": "Brickset allows 100 catalogue calls per API key per day. Within your budget of {budget}, your collection refreshes every {collection_hours} h and watched themes every 12 h, about {estimated_calls} calls a day. A quarter of the budget is kept free for actions such as a manual refresh.",
+        "description": "Brickset allows 100 catalogue calls per API key per day. Within your budget of {budget}, your collection refreshes every {collection_hours} h, watched themes every 12 h and releases across all themes once a day if followed, about {estimated_calls} calls a day. A quarter of the budget is kept free for actions such as a manual refresh.",
         "title": "LEGO options"
       }
     }

@@ -82,7 +82,11 @@ interface Dashboard {
   hidden: string[];
   by_theme: ThemeTotal[];
   history: { value: string | null; pieces: string | null };
-  releases?: { recent: LegoSet[]; upcoming: LegoSet[] } | null;
+  releases?: {
+    recent: LegoSet[];
+    upcoming: LegoSet[];
+    fetched: boolean;
+  } | null;
   stats: Stats;
   wishlist: LegoSet[];
   themes: Record<string, LegoSet[]>;
@@ -683,8 +687,26 @@ export class LegoPanel extends LitElement {
             `,
           )}
         </ul>
+        ${this._dash?.releases
+          ? nothing
+          : html`<p class="muted">
+              For Out recently and Coming soon, turn on Follow releases across
+              all themes in the integration's options.
+            </p>`}
       </section>
     `;
+  }
+
+  /** A release row, which says so while its first daily fetch is still running. */
+  private _renderReleases(
+    key: "recent" | "upcoming",
+    empty: string,
+  ): TemplateResult {
+    const releases = this._dash?.releases;
+    if (releases && !releases.fetched) {
+      return html`<p class="muted">Fetching this year's releases…</p>`;
+    }
+    return this._carousel(releases?.[key] ?? [], empty);
   }
 
   private _renderRow(row: string): TemplateResult {
@@ -694,13 +716,13 @@ export class LegoPanel extends LitElement {
         : row === "wishlist"
           ? this._renderWishlist()
           : row === "recent"
-            ? this._carousel(
-                this._dash?.releases?.recent ?? [],
+            ? this._renderReleases(
+                "recent",
                 "Nothing out in the last four weeks.",
               )
             : row === "upcoming"
-              ? this._carousel(
-                  this._dash?.releases?.upcoming ?? [],
+              ? this._renderReleases(
+                  "upcoming",
                   "Nothing due in the next four weeks.",
                 )
               : row === "value"

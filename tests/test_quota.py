@@ -17,6 +17,7 @@ from custom_components.lego.quota import (
     QuotaManager,
     collection_interval,
     feeds_calls_per_day,
+    releases_calls_per_day,
 )
 
 from .conftest import BricksetServer, setup_integration
@@ -161,3 +162,17 @@ def test_resets_at_midnight_utc(freezer: FrozenDateTimeFactory) -> None:
     """Brickset's day ends at midnight UTC."""
     freezer.move_to("2026-08-05 22:30:00+00:00")
     assert QuotaManager(80).resets_at.isoformat() == "2026-08-06T00:00:00+00:00"
+
+
+def test_releases_calls_per_day() -> None:
+    """The release feed costs its pages once a day, plus next year in autumn."""
+    assert releases_calls_per_day(False, date(2026, 5, 15)) == 0
+    assert releases_calls_per_day(True, date(2026, 5, 15)) == 3
+    assert releases_calls_per_day(True, date(2026, 9, 1)) == 4
+    assert releases_calls_per_day(True, date(2026, 5, 15), pages=1) == 1
+    # Its calls come out of the collection's share: 60 less 3 still fits hourly,
+    # while 18 less 3 leaves room for polls every 4 h instead of every 3 h.
+    spring = date(2026, 5, 15)
+    assert collection_interval(80, 2, False, spring, 3) == timedelta(hours=1)
+    assert collection_interval(24, 2, False, spring) == timedelta(hours=3)
+    assert collection_interval(24, 2, False, spring, 3) == timedelta(hours=4)

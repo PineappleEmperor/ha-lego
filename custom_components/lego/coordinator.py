@@ -18,8 +18,10 @@ from homeassistant.util import dt as dt_util
 from .api import BricksetClient
 from .catalogue import SetCatalogue
 from .const import (
+    CONF_RELEASES,
     CONF_THEMES,
     DEFAULT_REGION,
+    DEFAULT_RELEASES,
     DOMAIN,
     EVENT_NEW_SET,
     EVENT_WANTED_CHANGED,
@@ -28,6 +30,9 @@ from .const import (
     MIN_TIME_BETWEEN_QUOTA_CHECKS,
     NEXT_YEAR_FROM_MONTH,
     PAGE_SIZE,
+    RELEASES_INTERVAL_HOURS,
+    RELEASES_MAX_PAGES,
+    RELEASES_PAGES_ESTIMATE,
 )
 from .exceptions import (
     BricksetAuthError,
@@ -36,7 +41,13 @@ from .exceptions import (
     BricksetUserHashError,
 )
 from .models import CollectionSummary, LegoSet
-from .quota import QuotaManager, collection_interval, feeds_poll_cost
+from .quota import (
+    QuotaManager,
+    collection_interval,
+    feeds_poll_cost,
+    releases_calls_per_day,
+    releases_poll_cost,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,6 +83,21 @@ def _collection_poll_cost(data: CollectionData | None) -> int:
         len(data.wanted) / PAGE_SIZE
     )
     return max(pages, MIN_COLLECTION_POLL_COST)
+
+
+def _collection_interval(
+    config_entry: LegoConfigEntry, quota: QuotaManager, poll_cost: int
+) -> timedelta:
+    """Return the collection interval left over by the entry's other polls."""
+    options = config_entry.options
+    today = dt_util.now().date()
+    return collection_interval(
+        quota.budget,
+        poll_cost,
+        bool(options.get(CONF_THEMES)),
+        today,
+        releases_calls_per_day(options.get(CONF_RELEASES, DEFAULT_RELEASES), today),
+    )
 
 
 class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
@@ -231,11 +257,8 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
             quota,
             catalogue,
             name=f"{DOMAIN} collection",
-            update_interval=collection_interval(
-                quota.budget,
-                MIN_COLLECTION_POLL_COST,
-                bool(config_entry.options.get(CONF_THEMES)),
-                dt_util.now().date(),
+            update_interval=_collection_interval(
+                config_entry, quota, MIN_COLLECTION_POLL_COST
             ),
         )
 
@@ -307,11 +330,8 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
         self._fire_wanted_events(data)
         # A collection that grows past a page costs more per poll, so the interval
         # stretches to keep the polls inside the budget.
-        self.update_interval = collection_interval(
-            self.quota.budget,
-            _collection_poll_cost(data),
-            bool(self.config_entry.options.get(CONF_THEMES)),
-            dt_util.now().date(),
+        self.update_interval = _collection_interval(
+            self.config_entry, self.quota, _collection_poll_cost(data)
         )
         return data
 
@@ -491,6 +511,60 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
                 )
 
 
+class LegoReleasesCoordinator(LegoBaseCoordinator[list[LegoSet]]):
+    """Poll every set of the year for the panel's all-themes release rows."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: LegoConfigEntry,
+        client: BricksetClient,
+        quota: QuotaManager,
+        catalogue: SetCatalogue | None = None,
+    ) -> None:
+        """Initialise the releases coordinator."""
+        super().__init__(
+            hass,
+            config_entry,
+            client,
+            quota,
+            catalogue,
+            name=f"{DOMAIN} releases",
+            update_interval=timedelta(hours=RELEASES_INTERVAL_HOURS),
+        )
+        self._pages = RELEASES_PAGES_ESTIMATE
+
+    @property
+    @override
+    def poll_cost(self) -> int:
+        """Return the billed calls one refresh would spend."""
+        return releases_poll_cost(dt_util.now().date(), self._pages)
+
+    async def _year(self, year: int) -> list[LegoSet]:
+        """Fetch every set Brickset lists for a year, a billed call per page."""
+        return await self.client.get_all_sets(
+            {"year": year, "orderBy": "NumberDESC"}, max_pages=RELEASES_MAX_PAGES
+        )
+
+    @override
+    async def _fetch(self) -> list[LegoSet]:
+        """Fetch this year's sets, and next year's once LEGO starts announcing them."""
+        # getSets has no date filter, so the window either side of today is cut
+        # when the panel asks. In early January last December's sets are missed,
+        # which a second year of pages every day would cost too much to cover.
+        now = dt_util.now()
+        sets = await self._year(now.year)
+        # Paging stops at the first short page, so a full last page costs one more.
+        self._pages = min(len(sets) // PAGE_SIZE + 1, RELEASES_MAX_PAGES)
+        if now.month >= NEXT_YEAR_FROM_MONTH:
+            known = {lego_set.number for lego_set in sets}
+            sets += [s for s in await self._year(now.year + 1) if s.number not in known]
+        if self.catalogue is not None:
+            self.catalogue.remember(sets)
+            await self.catalogue.async_save_if_dirty()
+        return sets
+
+
 @dataclass(slots=True)
 class LegoRuntimeData:
     """Everything a config entry needs at runtime."""
@@ -500,6 +574,8 @@ class LegoRuntimeData:
     collection: LegoCollectionCoordinator
     feeds: LegoFeedsCoordinator
     catalogue: SetCatalogue | None
+    # Only while the all-themes release rows are switched on.
+    releases: LegoReleasesCoordinator | None = None
 
 
 type LegoConfigEntry = ConfigEntry[LegoRuntimeData]

@@ -26,6 +26,7 @@ from .const import (
     PANEL_STORAGE_KEY,
     PANEL_URL_PATH,
     REGION_CURRENCY,
+    RELEASES_WINDOW_DAYS,
     STORAGE_VERSION,
 )
 
@@ -240,6 +241,32 @@ def _new_in_theme(sets: list[LegoSet], region: str, today: date) -> list[LegoSet
     return sorted(filter(is_new, sets), key=newest_first)
 
 
+def _releases(
+    sets: list[LegoSet], region: str, today: date
+) -> dict[str, list[LegoSet]]:
+    """Split the year's sets into out recently, newest first, and due soon."""
+    window = timedelta(days=RELEASES_WINDOW_DAYS)
+    recent: list[tuple[date, LegoSet]] = []
+    upcoming: list[tuple[date, LegoSet]] = []
+    for item in sets:
+        # Keyrings, magnets and books share the year's list with the sets.
+        if item.category not in ("", "Normal"):
+            continue
+        released = item.release_date(region)
+        if released is None:
+            continue
+        if today - window <= released <= today:
+            recent.append((released, item))
+        elif today < released <= today + window:
+            upcoming.append((released, item))
+    recent.sort(key=lambda pair: (-pair[0].toordinal(), pair[1].number))
+    upcoming.sort(key=lambda pair: (pair[0], pair[1].number))
+    return {
+        "recent": [item for _, item in recent],
+        "upcoming": [item for _, item in upcoming],
+    }
+
+
 def _by_theme(owned: list[LegoSet], region: str) -> list[dict[str, Any]]:
     """Total the owned collection per theme, most valuable first."""
     themes: dict[str, dict[str, Any]] = {}
@@ -289,6 +316,16 @@ def dashboard_payload(
         data.wanted if data else [],
         key=lambda item: _wishlist_key(item, region, today),
     )
+    # None tells the panel the option is off, so it offers no release rows at all.
+    releases = entry.runtime_data.releases
+    release_rows: dict[str, Any] | None = None
+    if releases is not None:
+        release_rows = {
+            key: [summarise(item, region) for item in sets]
+            for key, sets in _releases(releases.data or [], region, today).items()
+        }
+        # Fetched in the background after setup, so empty may only mean not yet.
+        release_rows["fetched"] = releases.data is not None
     return {
         "entry_id": entry.entry_id,
         "device_id": device.id if device else None,
@@ -323,6 +360,7 @@ def dashboard_payload(
             "sets_missing_price": summary.sets_missing_price if summary else 0,
         },
         "wishlist": [summarise(item, region) for item in wanted],
+        "releases": release_rows,
         "themes": {
             theme: [
                 summarise(item, region) for item in _new_in_theme(sets, region, today)

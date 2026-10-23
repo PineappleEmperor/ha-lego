@@ -16,6 +16,8 @@ from .const import (
     FEEDS_INTERVAL_HOURS,
     NEXT_YEAR_FROM_MONTH,
     POLL_SHARE_OF_BUDGET,
+    RELEASES_INTERVAL_HOURS,
+    RELEASES_PAGES_ESTIMATE,
 )
 from .exceptions import BricksetQuotaError
 
@@ -34,12 +36,33 @@ def feeds_calls_per_day(watching_themes: bool, today: date) -> int:
     return math.ceil(24 / FEEDS_INTERVAL_HOURS) * feeds_poll_cost(today)
 
 
+def releases_poll_cost(today: date, pages: int = RELEASES_PAGES_ESTIMATE) -> int:
+    """Return the billed calls one all-themes release poll spends."""
+    # One call per page of this year's sets, and next year's in the autumn.
+    return pages + (1 if today.month >= NEXT_YEAR_FROM_MONTH else 0)
+
+
+def releases_calls_per_day(
+    enabled: bool, today: date, pages: int = RELEASES_PAGES_ESTIMATE
+) -> int:
+    """Return the billed calls the all-themes release feed spends a day."""
+    if not enabled:
+        return 0
+    return math.ceil(24 / RELEASES_INTERVAL_HOURS) * releases_poll_cost(today, pages)
+
+
 def collection_interval(
-    budget: int, poll_cost: int, watching_themes: bool, today: date
+    budget: int,
+    poll_cost: int,
+    watching_themes: bool,
+    today: date,
+    releases_calls: int = 0,
 ) -> timedelta:
     """Return the shortest collection interval whose polls fit the budget."""
-    available = budget * POLL_SHARE_OF_BUDGET - feeds_calls_per_day(
-        watching_themes, today
+    available = (
+        budget * POLL_SHARE_OF_BUDGET
+        - feeds_calls_per_day(watching_themes, today)
+        - releases_calls
     )
     for hours in COLLECTION_INTERVAL_STEPS_HOURS:
         if math.ceil(24 / hours) * poll_cost <= available:

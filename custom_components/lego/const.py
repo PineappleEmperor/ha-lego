@@ -30,6 +30,18 @@ COUNTRY_TO_REGION: Final = {"GB": "UK", "US": "US", "CA": "CA", "DE": "DE"}
 # sets a week, so twice a day is plenty.
 COLLECTION_INTERVAL_STEPS_HOURS: Final = (1, 2, 3, 4, 6, 8, 12, 24)
 FEEDS_INTERVAL_HOURS: Final = 12
+# The all-themes release feed behind the panel's "Out recently" and "Coming soon"
+# rows: one daily poll of every set Brickset lists for the year, kept only within
+# this many days either side of today. Off for entries made before it existed, so
+# an upgrade spends no new calls; the config flow turns it on for new entries.
+CONF_RELEASES: Final = "releases"
+DEFAULT_RELEASES: Final = False
+RELEASES_INTERVAL_HOURS: Final = 24
+RELEASES_WINDOW_DAYS: Final = 28
+# A year passes a thousand entries once gear and books count, three pages of 500;
+# the budget plans on that until a poll says otherwise, and the cap bounds a bad day.
+RELEASES_PAGES_ESTIMATE: Final = 3
+RELEASES_MAX_PAGES: Final = 4
 # LEGO announces its January wave in the autumn, so from this month the feeds also
 # ask for next year's sets, in one more batched call a poll.
 NEXT_YEAR_FROM_MONTH: Final = 9
