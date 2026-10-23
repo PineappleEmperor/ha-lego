@@ -1,6 +1,6 @@
 """Tests for the sidebar panel and its websocket commands."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 from http import HTTPStatus
 from typing import Any
 
@@ -24,7 +24,7 @@ from custom_components.lego.const import (
     PANEL_ROWS,
     PANEL_URL_PATH,
 )
-from custom_components.lego.panel import PanelStore, dashboard_payload
+from custom_components.lego.panel import PanelStore, dashboard_payload, releases_payload
 
 from .conftest import (
     API_KEY,
@@ -187,16 +187,16 @@ async def test_setting_an_unknown_account_is_rejected(
     assert message["error"]["code"] == "not_found"
 
 
-async def test_theme_rows_show_only_new_sets_newest_first(
+async def test_release_spans_pick_and_order_the_followed_themes(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
     brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
-    """Sets out for months drop off the row; the rest run newest release first."""
+    """Behind today runs newest first, ahead soonest first, undated only in All coming."""
     today = dt_util.now().date()
 
-    def dated(set_id: int, name: str, days: int) -> dict[str, Any]:
+    def dated(set_id: int, name: str, days: int, **kwargs: Any) -> dict[str, Any]:
         """A Technic set that went, or goes, on sale this many days from today."""
         return make_set(
             set_id,
@@ -204,14 +204,15 @@ async def test_theme_rows_show_only_new_sets_newest_first(
             name,
             theme="Technic",
             first_available=f"{(today + timedelta(days=days)).isoformat()}T00:00:00Z",
+            **kwargs,
         )
 
-    # Kept for 90 days after release, the last of them included.
     brickset.theme_sets[:] = [
-        dated(1, "Out 91 days ago", -91),
-        dated(2, "Out 90 days ago", -90),
+        dated(1, "Out 92 days ago", -92),
+        dated(2, "Out 91 days ago", -91),
         dated(3, "Out 30 days ago", -30),
         dated(4, "Due in a month", 30),
+        dated(7, "Due in 100 days", 100),
         make_set(
             5,
             "42205-1",
@@ -221,20 +222,90 @@ async def test_theme_rows_show_only_new_sets_newest_first(
             released=False,
         ),
         dated(6, "Out today", 0),
+        dated(8, "A keyring", -5, category="Gear"),
     ]
     await setup_integration(hass, mock_config_entry)
-
     client = await hass_ws_client(hass)
-    await client.send_json_auto_id({"type": "lego/dashboard"})
-    result = (await client.receive_json())["result"]
 
-    assert [item["name"] for item in result["themes"]["Technic"]] == [
+    async def names(span: str) -> list[str]:
+        await client.send_json_auto_id({"type": "lego/releases", "span": span})
+        message = await client.receive_json()
+        assert message["success"], message
+        assert message["result"]["status"] == "ready"
+        return [item["name"] for item in message["result"]["sets"]]
+
+    # Thirteen weeks back, the last day included; gear filed beside sets is not one.
+    assert await names("past3") == ["Out today", "Out 30 days ago", "Out 91 days ago"]
+    assert await names("next3") == ["Due in a month"]
+    assert await names("coming") == [
         "Due in a month",
-        "Out today",
-        "Out 30 days ago",
-        "Out 90 days ago",
+        "Due in 100 days",
         "Announced Set",
     ]
+
+
+async def test_release_timeline_and_theme_filter(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """The timeline dots every dated set of the picked themes, oldest first."""
+    today = dt_util.now().date()
+    brickset.theme_sets[:] = [
+        make_set(
+            1,
+            "42001-1",
+            "Later",
+            theme="Technic",
+            first_available=f"{today.isoformat()}T00:00:00Z",
+        ),
+        make_set(
+            2,
+            "42002-1",
+            "Earlier",
+            theme="Technic",
+            first_available=f"{date(today.year, 1, 1).isoformat()}T00:00:00Z",
+        ),
+    ]
+    await setup_integration(hass, mock_config_entry)
+    client = await hass_ws_client(hass)
+
+    await client.send_json_auto_id(
+        {"type": "lego/releases", "themes": ["technic"], "span": "year"}
+    )
+    result = (await client.receive_json())["result"]
+    assert result["timeline"] == [
+        {"date": date(today.year, 1, 1).isoformat(), "theme": "Technic"},
+        {"date": today.isoformat(), "theme": "Technic"},
+    ]
+    assert result["span"] == {
+        "from": date(today.year, 1, 1).isoformat(),
+        "to": today.isoformat(),
+    }
+
+    # A theme nobody follows matches nothing, rather than falling back to them all.
+    await client.send_json_auto_id(
+        {"type": "lego/releases", "themes": ["Ninjago"], "span": "year"}
+    )
+    assert (await client.receive_json())["result"]["sets"] == []
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_releases_rejects_an_unknown_span(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """The span is one of the panel's own, never a free-form window."""
+    await setup_integration(hass, mock_config_entry)
+    client = await hass_ws_client(hass)
+
+    await client.send_json_auto_id({"type": "lego/releases", "span": "decade"})
+    message = await client.receive_json()
+
+    assert not message["success"]
+    assert message["error"]["code"] == "invalid_format"
 
 
 @pytest.mark.usefixtures("brickset")
@@ -332,7 +403,8 @@ async def test_dashboard_returns_the_home_view(
     assert result["stats"]["sets_distinct"] == 3
     assert result["stats"]["pieces_owned"] == 7122
     assert [item["set_number"] for item in result["wishlist"]] == ["10294-1"]
-    assert list(result["themes"]) == ["Technic"]
+    assert result["followed"] == ["Technic"]
+    assert result["release_status"] == {"all": None, "mine": "ready"}
     # Cards show LEGO.com RRP, so the panel needs the region's currency.
     assert result["currency"] == "GBP"
     # The value and pieces rows: totals per theme, most valuable first, and the
@@ -585,9 +657,9 @@ async def test_an_undated_set_already_out_is_not_new(
     ]
     await setup_integration(hass, mock_config_entry)
 
-    themes = dashboard_payload(mock_config_entry, [], [])["themes"]
+    coming = releases_payload(mock_config_entry, "mine", [], "coming")["sets"]
 
-    assert [item["name"] for item in themes["Technic"]] == ["Announced"]
+    assert [item["name"] for item in coming] == ["Announced"]
 
 
 @pytest.mark.usefixtures("brickset")

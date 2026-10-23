@@ -96,6 +96,9 @@ PANEL_ROWS: Final = (
 )
 # Rows a user starts without; the panel's Customise list adds them.
 PANEL_DEFAULT_HIDDEN: Final = ("pieces",)
+# A release row shows every LEGO theme or the followed ones, over one of these spans.
+RELEASE_SCOPES: Final = ("all", "mine")
+RELEASE_SPANS: Final = ("year", "past3", "past1", "next1", "next3", "coming")
 
 MIN_TIME_BETWEEN_QUOTA_CHECKS: Final = timedelta(minutes=30)
 

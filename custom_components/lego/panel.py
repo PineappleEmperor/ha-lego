@@ -32,12 +32,11 @@ from .const import (
 
 if TYPE_CHECKING:
     from .catalogue import CatalogueEntry
-    from .coordinator import LegoConfigEntry
+    from .coordinator import FeedsData, LegoConfigEntry
     from .models import LegoSet
 
-# The feeds hold a whole year of sets; the panel's "New in my themes" row shows only
-# those out within this window, or still to come.
-NEW_FOR = timedelta(days=90)
+# "Past 3 months" and "Next 3 months": thirteen weeks.
+QUARTER_DAYS = 91
 
 REGISTERED: HassKey[bool] = HassKey(f"{DOMAIN}_panel_registered")
 
@@ -228,46 +227,112 @@ def _wishlist_key(
     )
 
 
-def _new_in_theme(sets: list[LegoSet], region: str, today: date) -> list[LegoSet]:
-    """Keep what is still news: upcoming or out within NEW_FOR, newest first."""
+def span_window(span: str, today: date) -> tuple[date, date]:
+    """Return the first and last release day a span covers."""
+    month = timedelta(days=RELEASES_WINDOW_DAYS)
+    quarter = timedelta(days=QUARTER_DAYS)
+    tomorrow = today + timedelta(days=1)
+    windows = {
+        "year": (date(today.year, 1, 1), today),
+        "past3": (today - quarter, today),
+        "past1": (today - month, today),
+        "next1": (tomorrow, today + month),
+        "next3": (tomorrow, today + quarter),
+    }
+    return windows.get(span, (tomorrow, date.max))
 
-    def is_new(item: LegoSet) -> bool:
+
+def _is_set(item: LegoSet) -> bool:
+    """Whether an entry is a set, not a keyring, magnet or book filed beside it."""
+    return item.category in ("", "Normal")
+
+
+def release_sets(
+    sets: list[LegoSet], region: str, span: str, today: date
+) -> list[LegoSet]:
+    """Pick the sets out within a span: newest first behind today, soonest ahead."""
+    start, end = span_window(span, today)
+    dated: list[tuple[date, LegoSet]] = []
+    undated: list[LegoSet] = []
+    for item in filter(_is_set, sets):
         released = item.release_date(region)
         if released is None:
-            # Announced without a date yet is news; released without one is not.
-            return not item.released
-        return released >= today - NEW_FOR
+            # Announced without a date is still to come; out without one is not news.
+            if span == "coming" and not item.released:
+                undated.append(item)
+            continue
+        if start <= released <= end:
+            dated.append((released, item))
+    if start > today:
+        dated.sort(key=lambda pair: (pair[0], pair[1].number))
+    else:
+        dated.sort(key=lambda pair: (-pair[0].toordinal(), pair[1].number))
+    return [item for _, item in dated] + sorted(undated, key=lambda item: item.number)
 
-    def newest_first(item: LegoSet) -> tuple[bool, int, str]:
-        released = item.release_date(region)
-        return (released is None, -(released or date.min).toordinal(), item.number)
 
-    return sorted(filter(is_new, sets), key=newest_first)
-
-
-def _releases(
+def release_timeline(
     sets: list[LegoSet], region: str, today: date
-) -> dict[str, list[LegoSet]]:
-    """Split the year's sets into out recently, newest first, and due soon."""
-    window = timedelta(days=RELEASES_WINDOW_DAYS)
-    recent: list[tuple[date, LegoSet]] = []
-    upcoming: list[tuple[date, LegoSet]] = []
-    for item in sets:
-        # Keyrings, magnets and books share the year's list with the sets.
-        if item.category not in ("", "Normal"):
-            continue
-        released = item.release_date(region)
-        if released is None:
-            continue
-        if today - window <= released <= today:
-            recent.append((released, item))
-        elif today < released <= today + window:
-            upcoming.append((released, item))
-    recent.sort(key=lambda pair: (-pair[0].toordinal(), pair[1].number))
-    upcoming.sort(key=lambda pair: (pair[0], pair[1].number))
+) -> list[dict[str, str]]:
+    """Every dated set from 1 January to the end of next March, oldest first."""
+    start, end = date(today.year, 1, 1), date(today.year + 1, 3, 31)
+    points = [
+        (released, item.theme)
+        for item in filter(_is_set, sets)
+        if (released := item.release_date(region)) is not None
+        and start <= released <= end
+    ]
+    return [{"date": day.isoformat(), "theme": theme} for day, theme in sorted(points)]
+
+
+def _release_status(entry: LegoConfigEntry, scope: str) -> str | None:
+    """Say whether a scope's sets are in, still coming, failed, or not followed."""
+    feeds = entry.runtime_data.feeds
+    feed = feeds.data
+    if scope == "all" and not feeds.releases:
+        return None
+    if scope == "mine" and not feeds.themes:
+        return None
+    have = feed is not None and (scope == "mine" or feed.releases is not None)
+    # Fetched in the background after setup, so empty may only mean not yet.
+    if have:
+        return "ready"
+    return "fetching" if feeds.last_update_success else "failed"
+
+
+def _scope_sets(entry: LegoConfigEntry, scope: str, themes: list[str]) -> list[LegoSet]:
+    """Return every set a scope covers: all of LEGO, or the followed themes picked."""
+    # Typed as always present, but None until the first poll lands.
+    feed: FeedsData | None = entry.runtime_data.feeds.data
+    if feed is None:
+        return []
+    if scope == "all":
+        return list(feed.releases or [])
+    picked = {theme.casefold() for theme in themes}
+    found: dict[str, LegoSet] = {}
+    for theme, theme_sets in feed.themes.items():
+        if not picked or theme.casefold() in picked:
+            found.update({item.number: item for item in theme_sets})
+    return list(found.values())
+
+
+def releases_payload(
+    entry: LegoConfigEntry, scope: str, themes: list[str], span: str
+) -> dict[str, Any]:
+    """Build one release row: its sets for the span and the year's timeline."""
+    region = entry.runtime_data.collection.region
+    today = dt_util.now().date()
+    sets = _scope_sets(entry, scope, themes)
+    start, end = span_window(span, today)
     return {
-        "recent": [item for _, item in recent],
-        "upcoming": [item for _, item in upcoming],
+        "status": _release_status(entry, scope),
+        "span": {
+            "from": start.isoformat(),
+            "to": None if end == date.max else end.isoformat(),
+        },
+        "sets": [
+            summarise(item, region) for item in release_sets(sets, region, span, today)
+        ],
+        "timeline": release_timeline(sets, region, today),
     }
 
 
@@ -329,25 +394,6 @@ def dashboard_payload(
         data.wanted if data else [],
         key=lambda item: _wishlist_key(item, region, today),
     )
-    # None tells the panel the option is off, so it offers no release rows at all.
-    feeds = entry.runtime_data.feeds
-    feed = feeds.data
-    release_rows: dict[str, Any] | None = None
-    if feeds.releases:
-        release_rows = {
-            key: [summarise(item, region) for item in sets]
-            for key, sets in _releases(
-                (feed.releases if feed else None) or [], region, today
-            ).items()
-        }
-        # Fetched in the background after setup, so empty may only mean not yet.
-        release_rows["status"] = (
-            "ready"
-            if feed is not None and feed.releases is not None
-            else "fetching"
-            if feeds.last_update_success
-            else "failed"
-        )
     return {
         "entry_id": entry.entry_id,
         "device_id": device.id if device else None,
@@ -382,11 +428,11 @@ def dashboard_payload(
             "sets_missing_price": summary.sets_missing_price if summary else 0,
         },
         "wishlist": [summarise(item, region) for item in wanted],
-        "releases": release_rows,
-        "themes": {
-            theme: [
-                summarise(item, region) for item in _new_in_theme(sets, region, today)
-            ]
-            for theme, sets in (feed.themes if feed else {}).items()
+        # The release rows fetch their own sets through lego/releases; the home view
+        # says only which scopes exist and whether their data is in. None means off.
+        "release_status": {
+            "all": _release_status(entry, "all"),
+            "mine": _release_status(entry, "mine"),
         },
+        "followed": list(entry.runtime_data.feeds.themes),
     }

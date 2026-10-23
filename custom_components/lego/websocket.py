@@ -7,8 +7,14 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 import probatio
 
-from .const import DOMAIN
-from .panel import PANEL_STORE, dashboard_payload, summarise, summarise_entry
+from .const import DOMAIN, RELEASE_SCOPES, RELEASE_SPANS
+from .panel import (
+    PANEL_STORE,
+    dashboard_payload,
+    releases_payload,
+    summarise,
+    summarise_entry,
+)
 
 if TYPE_CHECKING:
     from homeassistant.auth.models import User
@@ -21,6 +27,7 @@ def async_setup_websocket(hass: HomeAssistant) -> None:
     """Register the websocket commands."""
     websocket_api.async_register_command(hass, websocket_search)
     websocket_api.async_register_command(hass, websocket_dashboard)
+    websocket_api.async_register_command(hass, websocket_releases)
     websocket_api.async_register_command(hass, websocket_collection)
     websocket_api.async_register_command(hass, websocket_set_rows)
     websocket_api.async_register_command(hass, websocket_accounts)
@@ -94,6 +101,32 @@ def websocket_dashboard(
     connection.send_result(
         msg["id"],
         dashboard_payload(entry, store.rows(user_id), store.hidden(user_id)),
+    )
+
+
+@callback
+@websocket_api.websocket_command(
+    {
+        probatio.Required("type"): "lego/releases",
+        probatio.Optional("config_entry_id"): str,
+        probatio.Optional("scope", default="mine"): probatio.In(RELEASE_SCOPES),
+        probatio.Optional("themes", default=list): [str],
+        probatio.Optional("span", default="past3"): probatio.In(RELEASE_SPANS),
+    }
+)
+def websocket_releases(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return one release row's sets for a span; read from the feeds, never billed."""
+    entry = _loaded_entry(hass, connection, msg)
+    if entry is None:
+        return
+
+    connection.send_result(
+        msg["id"],
+        releases_payload(entry, msg["scope"], msg["themes"], msg["span"]),
     )
 
 
