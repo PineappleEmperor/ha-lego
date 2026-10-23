@@ -6,6 +6,7 @@ from freezegun.api import FrozenDateTimeFactory
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import CONF_REGION, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -232,11 +233,16 @@ async def test_wishlist_sets_get_no_sensor_of_their_own(
     assert hass.states.get(f"{PREFIX}_set_10497_1_retires_in") is None
 
 
-@pytest.mark.usefixtures("brickset")
 async def test_latest_theme_sensor(
-    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
 ) -> None:
-    """The theme feed surfaces the newest set number."""
+    """The theme feed surfaces the newest set number, and counts this year's."""
+    year = dt_util.now().year
+    brickset.theme_sets[:] = [
+        make_set(5, "42200-1", "New Technic Thing", theme="Technic", year=year),
+        make_set(6, "42199-1", "Older Technic Thing", theme="Technic", year=year),
+        make_set(7, "42150-1", "Last Year's Technic", theme="Technic", year=year - 1),
+    ]
     await setup_integration(hass, mock_config_entry)
 
     state = hass.states.get(f"{PREFIX}_latest_technic_set")
