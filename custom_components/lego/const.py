@@ -37,9 +37,11 @@ FEEDS_INTERVAL_HOURS: Final = 12
 CONF_RELEASES: Final = "releases"
 DEFAULT_RELEASES: Final = False
 RELEASES_INTERVAL_HOURS: Final = 24
+# Until the first fetch lands the rows are empty, so a failed one is retried sooner.
+RELEASES_RETRY_HOURS: Final = 3
 RELEASES_WINDOW_DAYS: Final = 28
 # A year passes a thousand entries once gear and books count, three pages of 500;
-# the budget plans on that until a poll says otherwise, and the cap bounds a bad day.
+# the budget plans on that until a poll measures it, and the cap bounds a bad day.
 RELEASES_PAGES_ESTIMATE: Final = 3
 RELEASES_MAX_PAGES: Final = 4
 # LEGO announces its January wave in the autumn, so from this month the feeds also

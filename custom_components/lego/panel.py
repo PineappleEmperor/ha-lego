@@ -159,6 +159,8 @@ async def async_refresh_panel(hass: HomeAssistant) -> None:
 def summarise(lego_set: Any, region: str) -> dict[str, Any]:
     """Reduce a set to what the panel draws."""
     pricing = lego_set.pricing.get(region)
+    released = lego_set.release_date(region)
+    retires = lego_set.retirement_date(region)
     return {
         "set_number": lego_set.number,
         "name": lego_set.name,
@@ -173,16 +175,9 @@ def summarise(lego_set: Any, region: str) -> dict[str, Any]:
         "qty_owned": lego_set.collection.qty_owned,
         "retail_price": pricing.retail_price if pricing else None,
         "released": lego_set.released,
-        "available_from": (
-            pricing.date_first_available.isoformat()
-            if pricing and pricing.date_first_available
-            else None
-        ),
-        "available_until": (
-            pricing.date_last_available.isoformat()
-            if pricing and pricing.date_last_available
-            else None
-        ),
+        # The region's own dates, else Brickset's set-wide ones, as the rows sort by.
+        "available_from": released.isoformat() if released else None,
+        "available_until": retires.isoformat() if retires else None,
     }
 
 
@@ -325,7 +320,13 @@ def dashboard_payload(
             for key, sets in _releases(releases.data or [], region, today).items()
         }
         # Fetched in the background after setup, so empty may only mean not yet.
-        release_rows["fetched"] = releases.data is not None
+        release_rows["status"] = (
+            "ready"
+            if releases.data is not None
+            else "fetching"
+            if releases.last_update_success
+            else "failed"
+        )
     return {
         "entry_id": entry.entry_id,
         "device_id": device.id if device else None,

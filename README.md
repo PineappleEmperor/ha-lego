@@ -270,8 +270,12 @@ integration polls on up to three schedules, which it sets itself from the daily 
   feeds cost 4 calls a day instead of 2 until the year turns.
 - **Releases across all themes** (once a day, when followed): `getSets` has no date
   filter, so this pages through every set of the year, about 3 calls, plus one for next
-  year from September. Its cost comes out of the collection's share, so on a small budget
-  the collection polls a step less often. It fetches in the background after setup.
+  year from September; once a poll has counted the pages, the budget plans on that count.
+  Its cost comes out of the collection's share, so on a small budget the collection polls
+  a step less often. A poll reserves all its pages first, so it never spends calls it
+  cannot finish. It fetches in the background after setup, so each Home Assistant restart
+  or options save spends one more poll than the daily estimate shows; a failed first
+  fetch is retried every 3 hours.
 - `getKeyUsageStats` does not count against the 100. It is polled at most every 30
   minutes to reconcile the local tally with Brickset's own count, which also catches
   calls made by other tools sharing the key.

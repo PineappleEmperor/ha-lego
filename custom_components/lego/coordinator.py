@@ -32,7 +32,7 @@ from .const import (
     PAGE_SIZE,
     RELEASES_INTERVAL_HOURS,
     RELEASES_MAX_PAGES,
-    RELEASES_PAGES_ESTIMATE,
+    RELEASES_RETRY_HOURS,
 )
 from .exceptions import (
     BricksetAuthError,
@@ -91,12 +91,19 @@ def _collection_interval(
     """Return the collection interval left over by the entry's other polls."""
     options = config_entry.options
     today = dt_util.now().date()
+    # Runtime data is set after the first collection poll, which uses the estimate.
+    runtime: LegoRuntimeData | None = getattr(config_entry, "runtime_data", None)
+    releases = runtime.releases if runtime is not None else None
     return collection_interval(
         quota.budget,
         poll_cost,
         bool(options.get(CONF_THEMES)),
         today,
-        releases_calls_per_day(options.get(CONF_RELEASES, DEFAULT_RELEASES), today),
+        releases_calls_per_day(
+            options.get(CONF_RELEASES, DEFAULT_RELEASES),
+            today,
+            releases.measured_cost if releases is not None else None,
+        ),
     )
 
 
@@ -532,33 +539,66 @@ class LegoReleasesCoordinator(LegoBaseCoordinator[list[LegoSet]]):
             name=f"{DOMAIN} releases",
             update_interval=timedelta(hours=RELEASES_INTERVAL_HOURS),
         )
-        self._pages = RELEASES_PAGES_ESTIMATE
+        # Pages each year took at the last poll; None until one has measured them.
+        self._pages_this_year: int | None = None
+        self._pages_next_year = 1
+
+    @property
+    def measured_cost(self) -> int | None:
+        """Return what a poll costs by the last one's page counts, if it ran."""
+        if self._pages_this_year is None:
+            return None
+        autumn = dt_util.now().month >= NEXT_YEAR_FROM_MONTH
+        return self._pages_this_year + (self._pages_next_year if autumn else 0)
 
     @property
     @override
     def poll_cost(self) -> int:
         """Return the billed calls one refresh would spend."""
-        return releases_poll_cost(dt_util.now().date(), self._pages)
-
-    async def _year(self, year: int) -> list[LegoSet]:
-        """Fetch every set Brickset lists for a year, a billed call per page."""
-        return await self.client.get_all_sets(
-            {"year": year, "orderBy": "NumberDESC"}, max_pages=RELEASES_MAX_PAGES
+        measured = self.measured_cost
+        return (
+            measured
+            if measured is not None
+            else releases_poll_cost(dt_util.now().date())
         )
+
+    async def _year(self, year: int) -> tuple[list[LegoSet], int]:
+        """Fetch every set Brickset lists for a year and the pages it took."""
+        # Ascending, so if the cap ever bites it drops gear numbered in the
+        # millions rather than the sets the rows are for.
+        sets = await self.client.get_all_sets(
+            {"year": year, "orderBy": "Number"}, max_pages=RELEASES_MAX_PAGES
+        )
+        # Paging stops at the first short page, so a full last page costs one more.
+        return sets, min(len(sets) // PAGE_SIZE + 1, RELEASES_MAX_PAGES)
+
+    @override
+    async def _async_update_data(self) -> list[LegoSet]:
+        """Poll daily, or retry sooner while there is nothing to show yet."""
+        try:
+            data = await super()._async_update_data()
+        except UpdateFailed:
+            if self._previous is None:
+                self.update_interval = timedelta(hours=RELEASES_RETRY_HOURS)
+            raise
+        self.update_interval = timedelta(hours=RELEASES_INTERVAL_HOURS)
+        return data
 
     @override
     async def _fetch(self) -> list[LegoSet]:
         """Fetch this year's sets, and next year's once LEGO starts announcing them."""
+        # Every page is reserved up front: a poll that ran out of budget part way
+        # would spend its pages and keep none of them.
+        self.quota.reserve(self.poll_cost)
         # getSets has no date filter, so the window either side of today is cut
         # when the panel asks. In early January last December's sets are missed,
         # which a second year of pages every day would cost too much to cover.
         now = dt_util.now()
-        sets = await self._year(now.year)
-        # Paging stops at the first short page, so a full last page costs one more.
-        self._pages = min(len(sets) // PAGE_SIZE + 1, RELEASES_MAX_PAGES)
+        sets, self._pages_this_year = await self._year(now.year)
         if now.month >= NEXT_YEAR_FROM_MONTH:
             known = {lego_set.number for lego_set in sets}
-            sets += [s for s in await self._year(now.year + 1) if s.number not in known]
+            upcoming, self._pages_next_year = await self._year(now.year + 1)
+            sets += [s for s in upcoming if s.number not in known]
         if self.catalogue is not None:
             self.catalogue.remember(sets)
             await self.catalogue.async_save_if_dirty()

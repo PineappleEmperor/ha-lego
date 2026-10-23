@@ -85,6 +85,7 @@ def collection_hours(
     options: Mapping[str, Any],
     poll_cost: int = MIN_COLLECTION_POLL_COST,
     today: date | None = None,
+    releases_cost: int | None = None,
 ) -> int:
     """Return the hours between collection polls that a set of options yields."""
     today = today or dt_util.now().date()
@@ -93,7 +94,9 @@ def collection_hours(
         poll_cost,
         bool(options.get(CONF_THEMES)),
         today,
-        releases_calls_per_day(options.get(CONF_RELEASES, DEFAULT_RELEASES), today),
+        releases_calls_per_day(
+            options.get(CONF_RELEASES, DEFAULT_RELEASES), today, releases_cost
+        ),
     )
     return int(interval.total_seconds() // 3600)
 
@@ -102,16 +105,21 @@ def estimated_daily_calls(
     options: Mapping[str, Any],
     poll_cost: int = MIN_COLLECTION_POLL_COST,
     today: date | None = None,
+    releases_cost: int | None = None,
 ) -> int:
     """Estimate billed getSets calls per day for a set of options."""
     today = today or dt_util.now().date()
-    collection_polls = math.ceil(24 / collection_hours(options, poll_cost, today))
+    collection_polls = math.ceil(
+        24 / collection_hours(options, poll_cost, today, releases_cost)
+    )
     # A theme with no releases this year is confirmed individually, which adds a
     # call the steady state does not pay.
     return (
         collection_polls * poll_cost
         + feeds_calls_per_day(bool(options.get(CONF_THEMES)), today)
-        + releases_calls_per_day(options.get(CONF_RELEASES, DEFAULT_RELEASES), today)
+        + releases_calls_per_day(
+            options.get(CONF_RELEASES, DEFAULT_RELEASES), today, releases_cost
+        )
     )
 
 
@@ -388,8 +396,16 @@ class LegoOptionsFlow(OptionsFlowWithReload):
             step_id="init",
             data_schema=schema,
             description_placeholders={
-                "collection_hours": str(collection_hours(options, self._poll_cost)),
-                "estimated_calls": str(estimated_daily_calls(options, self._poll_cost)),
+                "collection_hours": str(
+                    collection_hours(
+                        options, self._poll_cost, releases_cost=self._releases_cost
+                    )
+                ),
+                "estimated_calls": str(
+                    estimated_daily_calls(
+                        options, self._poll_cost, releases_cost=self._releases_cost
+                    )
+                ),
                 "budget": str(
                     options.get(CONF_DAILY_CALL_BUDGET, DEFAULT_DAILY_CALL_BUDGET)
                 ),
@@ -403,6 +419,15 @@ class LegoOptionsFlow(OptionsFlowWithReload):
         if entry.state is not ConfigEntryState.LOADED:
             return MIN_COLLECTION_POLL_COST
         return cast("LegoConfigEntry", entry).runtime_data.collection.poll_cost
+
+    @property
+    def _releases_cost(self) -> int | None:
+        """Return what the last release poll measured, if one has run."""
+        entry = self.config_entry
+        if entry.state is not ConfigEntryState.LOADED:
+            return None
+        releases = cast("LegoConfigEntry", entry).runtime_data.releases
+        return releases.measured_cost if releases is not None else None
 
     async def _async_theme_options(self) -> list[str]:
         """Fetch the unbilled theme list, falling back to free text if it fails."""

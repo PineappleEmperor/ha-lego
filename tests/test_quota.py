@@ -169,7 +169,8 @@ def test_releases_calls_per_day() -> None:
     assert releases_calls_per_day(False, date(2026, 5, 15)) == 0
     assert releases_calls_per_day(True, date(2026, 5, 15)) == 3
     assert releases_calls_per_day(True, date(2026, 9, 1)) == 4
-    assert releases_calls_per_day(True, date(2026, 5, 15), pages=1) == 1
+    # Once a poll has measured its pages, that replaces the estimate.
+    assert releases_calls_per_day(True, date(2026, 5, 15), measured=1) == 1
     # Its calls come out of the collection's share: 60 less 3 still fits hourly,
     # while 18 less 3 leaves room for polls every 4 h instead of every 3 h.
     spring = date(2026, 5, 15)

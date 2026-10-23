@@ -85,7 +85,7 @@ interface Dashboard {
   releases?: {
     recent: LegoSet[];
     upcoming: LegoSet[];
-    fetched: boolean;
+    status: "fetching" | "failed" | "ready";
   } | null;
   stats: Stats;
   wishlist: LegoSet[];
@@ -390,9 +390,11 @@ export class LegoPanel extends LitElement {
       const dash = await this.hass.callWS<Dashboard>(
         accountCall("lego/dashboard", this._account),
       );
+      // Charts belong to an account: keep them across a reload of the same one, so
+      // an ownership toggle does not refetch a year of statistics.
+      if (dash.entry_id !== this._dash?.entry_id) this._history = {};
       this._dash = dash;
       this._error = "";
-      this._history = {};
       if (!this._theme || !(this._theme in dash.themes)) {
         this._theme = Object.keys(dash.themes)[0] ?? "";
       }
@@ -703,8 +705,14 @@ export class LegoPanel extends LitElement {
     empty: string,
   ): TemplateResult {
     const releases = this._dash?.releases;
-    if (releases && !releases.fetched) {
+    if (releases?.status === "fetching") {
       return html`<p class="muted">Fetching this year's releases…</p>`;
+    }
+    if (releases?.status === "failed") {
+      return html`<p class="muted">
+        Couldn't fetch this year's releases. They're tried again every few hours
+        until they arrive.
+      </p>`;
     }
     return this._carousel(releases?.[key] ?? [], empty);
   }
@@ -932,8 +940,11 @@ export class LegoPanel extends LitElement {
 
   private async _loadHistory(key: "value" | "pieces"): Promise<void> {
     const id = this._dash?.history?.[key];
+    const entry = this._dash?.entry_id;
     if (!id || this._history[key]) return;
     this._history = { ...this._history, [key]: "loading" };
+    // An account switch mid-fetch must not draw this account's line on the next.
+    const current = () => this._dash?.entry_id === entry;
     try {
       const res = await this.hass.callWS<
         Record<string, { start: number; state?: number; mean?: number }[]>
@@ -946,13 +957,14 @@ export class LegoPanel extends LitElement {
         period: "week",
         types: key === "value" ? ["state"] : ["mean"],
       });
+      if (!current()) return;
       const points = statisticPoints(res[id] ?? []);
       this._history = {
         ...this._history,
         [key]: points.length >= 2 ? points : "none",
       };
     } catch {
-      this._history = { ...this._history, [key]: "none" };
+      if (current()) this._history = { ...this._history, [key]: "none" };
     }
   }
 

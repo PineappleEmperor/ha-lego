@@ -36,19 +36,20 @@ def feeds_calls_per_day(watching_themes: bool, today: date) -> int:
     return math.ceil(24 / FEEDS_INTERVAL_HOURS) * feeds_poll_cost(today)
 
 
-def releases_poll_cost(today: date, pages: int = RELEASES_PAGES_ESTIMATE) -> int:
-    """Return the billed calls one all-themes release poll spends."""
-    # One call per page of this year's sets, and next year's in the autumn.
-    return pages + (1 if today.month >= NEXT_YEAR_FROM_MONTH else 0)
+def releases_poll_cost(today: date) -> int:
+    """Estimate the billed calls an all-themes release poll spends, before one has."""
+    # One call per page of this year's sets, and a page of next year's in the autumn.
+    return RELEASES_PAGES_ESTIMATE + (1 if today.month >= NEXT_YEAR_FROM_MONTH else 0)
 
 
 def releases_calls_per_day(
-    enabled: bool, today: date, pages: int = RELEASES_PAGES_ESTIMATE
+    enabled: bool, today: date, measured: int | None = None
 ) -> int:
     """Return the billed calls the all-themes release feed spends a day."""
     if not enabled:
         return 0
-    return math.ceil(24 / RELEASES_INTERVAL_HOURS) * releases_poll_cost(today, pages)
+    cost = measured if measured is not None else releases_poll_cost(today)
+    return math.ceil(24 / RELEASES_INTERVAL_HOURS) * cost
 
 
 def collection_interval(

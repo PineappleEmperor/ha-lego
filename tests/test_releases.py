@@ -1,5 +1,7 @@
 """Tests for the all-themes release feed behind the panel's release rows."""
 
+from datetime import timedelta
+
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.const import CONF_REGION
 from homeassistant.core import HomeAssistant
@@ -7,7 +9,11 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
-from custom_components.lego.const import CONF_RELEASES, CONF_THEMES
+from custom_components.lego.const import (
+    CONF_DAILY_CALL_BUDGET,
+    CONF_RELEASES,
+    CONF_THEMES,
+)
 from custom_components.lego.panel import dashboard_payload
 
 from .conftest import BricksetServer, make_set, setup_integration
@@ -86,6 +92,15 @@ async def test_rows_split_out_recently_and_coming_soon(
         _dated(6, "Due next week", "2026-05-20"),
         _dated(7, "Due in August", "2026-08-01"),
         _dated(8, "A keyring", "2026-05-10", category="Gear"),
+        # No UK date yet, so Brickset's set-wide launch date stands in.
+        make_set(
+            10,
+            "10-1",
+            "Due worldwide",
+            year=2026,
+            first_available=None,
+            launch_date="2026-05-25T00:00:00Z",
+        ),
         make_set(9, "9-1", "Undated", year=2026, first_available=None),
     ]
     entry = await setup_integration(hass, _with_releases(mock_config_entry))
@@ -100,9 +115,12 @@ async def test_rows_split_out_recently_and_coming_soon(
     ]
     assert [item["name"] for item in releases["upcoming"]] == [
         "Due next week",
+        "Due worldwide",
         "Due in June",
     ]
-    assert releases["fetched"] is True
+    # The card shows the date the row was sorted by, not "Date unknown".
+    assert releases["upcoming"][1]["available_from"] == "2026-05-25"
+    assert releases["status"] == "ready"
     assert entry.runtime_data.releases is not None
 
 
@@ -122,6 +140,12 @@ async def test_feed_pages_through_the_year(
     assert releases is not None
     assert len(releases.data) == 600
     assert releases.poll_cost == 2
+    assert releases.measured_cost == 2
+
+    # The options dialog counts the measured pages, not the estimate of three:
+    # 24 hourly collection polls of 2, plus 2 for releases.
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["description_placeholders"]["estimated_calls"] == "50"
 
 
 async def test_autumn_adds_next_year(
@@ -168,4 +192,32 @@ async def test_rows_say_when_not_yet_fetched(
 
     rows = dashboard_payload(entry, [], [])["releases"]
 
-    assert rows == {"recent": [], "upcoming": [], "fetched": False}
+    assert rows == {"recent": [], "upcoming": [], "status": "fetching"}
+
+
+async def test_feed_spends_nothing_it_cannot_finish(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A poll that would run out of budget part way spends none of it."""
+    brickset.year_sets[:] = [_dated(1, "Out today", "2026-05-15")]
+    entry = _with_releases(mock_config_entry)
+    # The collection's 2 calls leave 2 of 4, short of the 3 pages estimated.
+    entry = MockConfigEntry(
+        domain=entry.domain,
+        title=entry.title,
+        unique_id=entry.unique_id,
+        version=entry.version,
+        data=dict(entry.data),
+        options={**entry.options, CONF_DAILY_CALL_BUDGET: 4},
+    )
+    await setup_integration(hass, entry)
+
+    assert _year_calls(brickset) == []
+    releases = entry.runtime_data.releases
+    assert releases is not None
+    # Nothing to show yet, so it tries again in hours rather than tomorrow.
+    assert releases.update_interval == timedelta(hours=3)
+    rows = dashboard_payload(entry, [], [])["releases"]
+    assert rows == {"recent": [], "upcoming": [], "status": "failed"}
