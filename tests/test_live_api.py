@@ -211,11 +211,14 @@ async def test_theme_still_accepts_a_comma_separated_list() -> None:
     )
 
 
-async def test_theme_years_say_whether_next_year_is_announced() -> None:
+async def test_theme_years_never_miss_an_announced_year() -> None:
     """The feeds ask getThemes, unbilled, before spending a call on next year.
 
-    yearTo has to move as soon as Brickset files a set under next year, or the
-    feeds would skip a wave that has been announced.
+    Live in October 2026 it claimed 2027 for Technic and Icons while getSets
+    returned nothing for either, so it can say yes too early; the feeds then spend
+    one call and remember the empty answer. What must never happen is the other
+    way: sets filed under next year while getThemes says the theme stops sooner,
+    which would leave them out of the feeds.
     """
     year = dt_util.utcnow().year + 1
     async with aiohttp.ClientSession() as session:
@@ -226,21 +229,22 @@ async def test_theme_years_say_whether_next_year_is_announced() -> None:
         )
 
     print(  # noqa: T201
-        f"\nsets announced for {year}: {len(sets)}; yearTo "
-        f"{ {theme: theme_years.get(theme) for theme in THEMES} }; latest of any "
-        f"theme {max(theme_years.values(), default=None)}"
+        f"\nsets filed for {year}: {len(sets)}; getThemes says "
+        f"{ {theme: theme_years.get(theme) for theme in THEMES} }"
     )
     assert theme_years, "getThemes no longer carries yearTo"
     assert all(lego_set.year == year for lego_set in sets), (
         f"asked for {year} and got {sorted({s.year for s in sets})}"
     )
     for theme in THEMES:
-        announced = theme_years.get(theme, 0) >= year
+        span = theme_years.get(theme)
+        claimed = span is not None and span.year_to >= year
         filed = any(lego_set.theme == theme for lego_set in sets)
-        assert announced == filed, (
-            f"{theme}: yearTo says {year} is {'' if announced else 'not '}"
-            f"announced, but getSets {'found' if filed else 'found nothing'}; the "
-            "free check no longer predicts the billed one"
+        if claimed and not filed:
+            print(f"{theme}: claimed {year} early, costing one call")  # noqa: T201
+        assert claimed or not filed, (
+            f"{theme} has {year} sets but getThemes says it ends sooner; the "
+            "feeds would leave them out"
         )
 
 

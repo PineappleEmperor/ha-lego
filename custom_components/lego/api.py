@@ -16,7 +16,7 @@ from .exceptions import (
     BricksetQuotaError,
     BricksetUserHashError,
 )
-from .models import LegoSet
+from .models import LegoSet, ThemeSpan
 from .quota import QuotaManager
 
 _LOGGER = logging.getLogger(__name__)
@@ -143,17 +143,20 @@ class BricksetClient:
             if theme.get("theme")
         ]
 
-    async def get_theme_years(self) -> dict[str, int]:
-        """Return the latest year each theme has a set filed under, unbilled."""
-        # getThemes is free where getSets is not, so it answers whether a year has
-        # anything announced before a billed call goes to look.
+    async def get_theme_years(self) -> dict[str, ThemeSpan]:
+        """Return each theme's latest year and set count, unbilled."""
+        # getThemes is free where getSets is not, so it says whether a year may
+        # have anything before a billed call goes to look.
         result = await self._request("getThemes", {})
-        years: dict[str, int] = {}
+        years: dict[str, ThemeSpan] = {}
         for theme in result.get("themes") or []:
             name = theme.get("theme")
             year_to = theme.get("yearTo")
+            set_count = theme.get("setCount")
             if name and isinstance(year_to, int):
-                years[str(name)] = year_to
+                years[str(name)] = ThemeSpan(
+                    year_to, set_count if isinstance(set_count, int) else 0
+                )
         return years
 
     async def get_sets(self, params: dict[str, Any]) -> list[LegoSet]:

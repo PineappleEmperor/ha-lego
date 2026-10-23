@@ -275,9 +275,11 @@ integration polls on two schedules, which it sets itself from the daily call bud
     this year alone for most of it, last year as well until 28 January, and next year
     from 4 December. A year is about 1,000 entries once gear and books count, so 3
     calls. The watched themes are cut from the same read, so they cost nothing more.
-  - **Next year** is asked for only once Brickset has a set filed under it, which
-    `getThemes` says without spending a call. Until then a poll does not spend one on
-    an empty year.
+  - **Next year** is asked for only once `getThemes`, which costs nothing, says a
+    theme reaches it. It can say so before `getSets` returns anything (it did for
+    Technic and Icons in October 2026), so an empty answer is remembered and next
+    year is skipped until that theme's year or set count changes. A restart forgets
+    it, at the cost of one call.
   - Once a poll has counted its pages, the budget plans on that count, and what the
     feeds spend comes out of the collection's share. A poll reserves all its pages
     first, so it never spends calls it cannot finish. Following all themes fetches in

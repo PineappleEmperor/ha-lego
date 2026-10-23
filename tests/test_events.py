@@ -444,3 +444,41 @@ async def test_new_set_event_prices_in_the_chosen_region(
     assert [event.data["retail_price"] for event in events] == [119.99]
     assert events[0].data["region"] == "US"
     assert events[0].data["release_date"] == "2025-03-01"
+
+
+async def test_an_empty_next_year_is_not_asked_for_again_until_the_claim_changes(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """GetThemes claimed 2027 for Technic while getSets had nothing, live, in 2026."""
+    freezer.move_to("2026-10-23 12:00:00+00:00")
+    brickset.filter_theme_year = True
+    brickset.theme_claims["Technic"] = (2027, 900)
+    await setup_integration(hass, mock_config_entry)
+    feeds = mock_config_entry.runtime_data.feeds
+
+    def next_year_calls() -> int:
+        return sum(
+            1 for c in brickset.get_sets_calls if "theme" in c and c["year"] == 2027
+        )
+
+    # The claim is believed once; the empty answer is remembered.
+    assert next_year_calls() == 1
+    await feeds.async_refresh()
+    assert next_year_calls() == 1
+    assert feeds.poll_cost == 1
+
+    # A set filed in the theme changes the count, which is worth one more look.
+    brickset.theme_claims["Technic"] = (2027, 901)
+    brickset.theme_sets.append(
+        make_set(70, "42250-1", "January Technic", theme="Technic", year=2027)
+    )
+    await feeds.async_refresh()
+    assert next_year_calls() == 2
+    assert "42250-1" in {s.number for s in feeds.data.themes["Technic"]}
+
+    # Now it holds sets, so it is asked for every poll.
+    await feeds.async_refresh()
+    assert next_year_calls() == 3

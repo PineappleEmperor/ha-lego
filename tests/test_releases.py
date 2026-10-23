@@ -431,3 +431,21 @@ async def test_new_set_events_fire_when_following_every_theme(
 
     assert [event.data["name"] for event in events] == ["New Technic"]
     assert events[0].data["theme"] == "Technic"
+
+
+async def test_december_stops_asking_for_an_empty_next_year(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A claimed next year that reads empty is skipped until getThemes changes."""
+    freezer.move_to("2026-12-20 12:00:00+00:00")
+    brickset.year_sets[:] = [_on(date(2026, 12, 1), 1, "December set")]
+    brickset.theme_claims["Icons"] = (2027, 50)
+    entry = await setup_integration(hass, _with_releases(mock_config_entry))
+    assert [call["year"] for call in _year_calls(brickset)] == [2026, 2027]
+
+    await entry.runtime_data.feeds.async_refresh()
+
+    assert [call["year"] for call in _year_calls(brickset)] == [2026, 2027, 2026]

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any
+from typing import Any, NamedTuple
 
 from homeassistant.util import dt as dt_util
 
@@ -69,6 +69,13 @@ class RegionPricing:
             date_first_available=_parse_date(data.get("dateFirstAvailable")),
             date_last_available=_parse_date(data.get("dateLastAvailable")),
         )
+
+
+class ThemeSpan(NamedTuple):
+    """How far a theme reaches, as getThemes reports it without a billed call."""
+
+    year_to: int
+    set_count: int
 
 
 @dataclass(slots=True)

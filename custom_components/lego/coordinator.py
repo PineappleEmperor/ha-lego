@@ -37,7 +37,7 @@ from .exceptions import (
     BricksetQuotaError,
     BricksetUserHashError,
 )
-from .models import CollectionSummary, LegoSet
+from .models import CollectionSummary, LegoSet, ThemeSpan
 from .quota import (
     QuotaManager,
     collection_interval,
@@ -451,7 +451,15 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         self._measured: int | None = None
         # getThemes' last good answer, so one failure does not drop next year
         # from a poll and bring it back, as new sets, in the one after.
-        self._theme_years: dict[str, int] | None = None
+        self._theme_years: dict[str, ThemeSpan] | None = None
+        # getThemes can file a theme under next year while getSets returns nothing
+        # for it yet. What it claimed when next year last came back empty, so the
+        # call is skipped until the claim changes: a new set filed in the theme, or
+        # a later year.
+        self._empty_claim: frozenset[tuple[str, ThemeSpan]] | None = None
+        self._claim: frozenset[tuple[str, ThemeSpan]] | None = None
+        # Sets each year returned at the last poll that fetched it.
+        self._found: dict[int, int] = {}
         if releases or not options.get(CONF_THEMES):
             # Only a theme-only feed can page, and nothing else would clear it.
             ir.async_delete_issue(hass, DOMAIN, paging_issue_id(config_entry.entry_id))
@@ -507,15 +515,26 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
             _LOGGER.debug("Could not ask Brickset which years have sets: %s", err)
             if self._theme_years is None:
                 return today.month >= NEXT_YEAR_FROM_MONTH
-        theme_years = self._theme_years
-        if any(theme_years.get(theme, 0) >= next_year for theme in self.themes):
-            return True
-        # The release rows want next year only once the window reaches it.
-        return (
-            self.releases
-            and next_year in poll_window_years(today)
-            and max(theme_years.values(), default=0) >= next_year
-        )
+        claims = {
+            theme: span
+            for theme, span in self._theme_years.items()
+            if span.year_to >= next_year
+        }
+        followed = {theme.casefold() for theme in self.themes}
+        watched = {
+            theme: span
+            for theme, span in claims.items()
+            if theme.casefold() in followed
+        }
+        if watched:
+            claim = frozenset(watched.items())
+        elif self.releases and next_year in poll_window_years(today) and claims:
+            # The release rows want next year only once the window reaches it.
+            claim = frozenset(claims.items())
+        else:
+            return False
+        self._claim = claim
+        return claim != self._empty_claim
 
     def _planned_cost(self, years: list[int], today: date) -> int:
         """Return what fetching these years should cost, by the last poll's pages."""
@@ -547,6 +566,9 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
             for theme, sets in data.themes.items()
         }
         self._measured = sum(self._pages[year] for year in years)
+        if today.year + 1 in years:
+            # Remembered only when it came back empty, so a later poll skips it.
+            self._empty_claim = None if self._found[today.year + 1] else self._claim
         if self.catalogue is not None:
             fetched = data.releases or [
                 s for sets in data.themes.values() for s in sets
@@ -564,6 +586,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
                 year_query(year), max_pages=YEAR_MAX_PAGES
             )
             self._pages[year] = pages_spent(len(fetched), YEAR_MAX_PAGES)
+            self._found[year] = len(fetched)
             sets.extend(fetched)
         # Reading every theme costs the same however many are followed.
         self._clear_paging_issue()
@@ -615,6 +638,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
                 pages += pages_spent(len(alone), YEAR_MAX_PAGES)
                 found[theme] = alone
         self._pages[year] = pages
+        self._found[year] = sum(len(sets) for sets in found.values())
         return found
 
     @property

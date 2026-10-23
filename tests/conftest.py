@@ -229,6 +229,9 @@ class BricksetServer:
         self.themes_error: str | None = None
         # Clear this to act like a Brickset that stopped accepting comma-joined themes.
         self.themes_batchable = True
+        # getThemes' (yearTo, setCount) for a theme, overriding what the sets imply:
+        # the live API has filed themes under next year with nothing yet to return.
+        self.theme_claims: dict[str, tuple[int, int]] = {}
         # Set this to answer theme queries for the requested year only, as Brickset
         # does; most tests leave it off so their fixture sets match any year.
         self.filter_theme_year = False
@@ -299,16 +302,26 @@ class BricksetServer:
     async def _get_themes(self, method: str, url: str, data: Any) -> Any:
         if self.themes_error is not None:
             return self._error(self.themes_error)
-        # yearTo follows the sets the fake holds, as Brickset's follows its catalogue.
+        # yearTo and setCount follow the sets the fake holds, as Brickset's follow
+        # its catalogue, unless a test makes a theme claim more than getSets returns.
         latest: dict[str, int] = {"Technic": 2024, "Icons": 2024}
+        counts: dict[str, int] = {}
         for item in [*self.theme_sets, *self.year_sets]:
             latest[item["theme"]] = max(latest.get(item["theme"], 0), item["year"])
+            counts[item["theme"]] = counts.get(item["theme"], 0) + 1
+        spans = {theme: (year, counts.get(theme, 0)) for theme, year in latest.items()}
+        spans.update(self.theme_claims)
         return self._ok(
             {
-                "matches": len(latest),
+                "matches": len(spans),
                 "themes": [
-                    {"theme": theme, "setCount": 100, "yearFrom": 1977, "yearTo": year}
-                    for theme, year in latest.items()
+                    {
+                        "theme": theme,
+                        "setCount": count,
+                        "yearFrom": 1977,
+                        "yearTo": year,
+                    }
+                    for theme, (year, count) in spans.items()
                 ],
             }
         )
