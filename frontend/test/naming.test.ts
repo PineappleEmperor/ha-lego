@@ -11,6 +11,7 @@ import {
   refreshCall,
   syncedAgo,
   whenLabel,
+  whenTone,
 } from "../src/lego-panel";
 
 describe("set naming", () => {
@@ -193,5 +194,24 @@ describe("card dates", () => {
         iso,
       ),
     ).toBe("Out 2026-03-01");
+  });
+});
+
+describe("card date tone", () => {
+  const now = new Date("2026-05-15T12:00:00Z");
+  const set = (from: string | null, until: string | null) => ({
+    available_from: from,
+    available_until: until,
+  });
+
+  it("marks a set not yet out as due", () => {
+    expect(whenTone(set("2026-08-01", null), now)).toBe("due");
+    expect(whenTone(set("2026-03-01", null), now)).toBe("");
+  });
+
+  it("flags a set leaving sale within two months, and one already gone", () => {
+    expect(whenTone(set(null, "2026-06-30"), now)).toBe("retiring");
+    expect(whenTone(set(null, "2026-12-31"), now)).toBe("");
+    expect(whenTone(set(null, "2026-01-31"), now)).toBe("retired");
   });
 });

@@ -164,6 +164,27 @@ export function count(n: number, one: string, many: string): string {
   return `${n.toLocaleString()} ${n === 1 ? one : many}`;
 }
 
+/** Within this many days of leaving sale, a set's exit date is flagged. */
+const RETIRING_SOON_DAYS = 60;
+
+/**
+ * How a card's date reads at a glance, so released and upcoming sets differ without
+ * longer wording: "due" not out yet, "retiring" leaving sale soon, "retired" gone.
+ */
+export function whenTone(
+  item: Pick<LegoSet, "available_from" | "available_until">,
+  now: Date,
+): "due" | "retiring" | "retired" | "" {
+  if (item.available_until) {
+    const until = new Date(item.available_until).getTime();
+    if (until < now.getTime()) return "retired";
+    const days = (until - now.getTime()) / 86_400_000;
+    return days <= RETIRING_SOON_DAYS ? "retiring" : "";
+  }
+  if (item.available_from && new Date(item.available_from) > now) return "due";
+  return "";
+}
+
 /** What a card says about a set's dates, worded for whether they have passed. */
 export function whenLabel(
   item: Pick<LegoSet, "available_from" | "available_until" | "name">,
@@ -757,7 +778,7 @@ export class LegoPanel extends LitElement {
               .filter(Boolean)
               .join(" · ")}</span
           >
-          <span class="when"
+          <span class="when ${whenTone(item, new Date())}"
             >${whenLabel(item, new Date(), (iso) => this._date(iso))}</span
           >
           <div class="foot">
@@ -1049,6 +1070,21 @@ export class LegoPanel extends LitElement {
     .when {
       font-size: var(--ha-font-size-s, 12px);
       color: var(--lego-text-2);
+    }
+    /* Not out yet: a dot in the primary colour, so the text keeps its contrast. */
+    .when.due::before {
+      background: var(--lego-primary);
+      border-radius: var(--ha-border-radius-circle, 50%);
+      content: "";
+      display: inline-block;
+      height: 8px;
+      margin-right: var(--ha-space-1, 4px);
+      vertical-align: middle;
+      width: 8px;
+    }
+    .when.retiring {
+      color: var(--lego-want);
+      font-weight: var(--ha-font-weight-medium, 500);
     }
     .foot {
       align-items: center;
