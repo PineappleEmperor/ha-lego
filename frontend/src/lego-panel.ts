@@ -131,15 +131,54 @@ export function syncedAgo(lastSynced: string | null, now: Date): string {
 
 /** A LEGO.com RRP in the account's region, or "" when Brickset has none. */
 export function formatPrice(
-  value: number | null,
+  value: number | null | undefined,
   currency: string | null,
   language?: string,
+  wholeUnits = false,
 ): string {
-  if (value === null || !currency) return "";
+  // == null, not === null: a payload that leaves the field out sends undefined,
+  // and Intl turns that into "NaN" rather than failing.
+  if (value == null || !currency) return "";
   return new Intl.NumberFormat(language, {
     style: "currency",
     currency,
+    ...(wholeUnits ? { maximumFractionDigits: 0 } : {}),
   }).format(value);
+}
+
+/**
+ * The text of a rejected call. Home Assistant's websocket rejects with a plain
+ * {code, message} object rather than an Error, which String() turns into
+ * "[object Object]".
+ */
+export function errorText(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object" && "message" in err) {
+    return String((err as { message: unknown }).message);
+  }
+  return String(err);
+}
+
+/** "1 set", "12 sets". */
+export function count(n: number, one: string, many: string): string {
+  return `${n.toLocaleString()} ${n === 1 ? one : many}`;
+}
+
+/** What a card says about a set's dates, worded for whether they have passed. */
+export function whenLabel(
+  item: Pick<LegoSet, "available_from" | "available_until" | "name">,
+  now: Date,
+  format: (iso: string) => string,
+): string {
+  if (item.available_until) {
+    const gone = new Date(item.available_until) < now;
+    return `${gone ? "Retired" : "Retires"} ${format(item.available_until)}`;
+  }
+  if (item.available_from) {
+    const coming = new Date(item.available_from) > now;
+    return `${coming ? "Due" : "Out"} ${format(item.available_from)}`;
+  }
+  return isNamed(item) ? "Date unknown" : "Details tbd";
 }
 
 export function isNamed(item: Pick<LegoSet, "name">): boolean {
@@ -176,6 +215,9 @@ export class LegoPanel extends LitElement {
   @state() private _query = "";
   @state() private _results: LegoSet[] = [];
   @state() private _dragging = "";
+  @state() private _over = "";
+  @state() private _pending = new Set<string>();
+  @state() private _collectionError = "";
   @state() private _accounts: Account[] = [];
   @state() private _account = "";
 
@@ -195,7 +237,7 @@ export class LegoPanel extends LitElement {
       );
       await this._load();
     } catch (err) {
-      this._refreshError = err instanceof Error ? err.message : String(err);
+      this._refreshError = errorText(err);
     } finally {
       this._refreshing = false;
     }
@@ -238,7 +280,7 @@ export class LegoPanel extends LitElement {
         this._theme = Object.keys(dash.themes)[0] ?? "";
       }
     } catch (err) {
-      this._error = err instanceof Error ? err.message : String(err);
+      this._error = errorText(err);
     }
   }
 
@@ -250,8 +292,10 @@ export class LegoPanel extends LitElement {
         filter: "owned",
       });
       this._collection = res.sets;
+      this._collectionError = "";
     } catch (err) {
-      this._error = err instanceof Error ? err.message : String(err);
+      // Kept apart from _error, which would blank the Home tab too.
+      this._collectionError = errorText(err);
     }
   }
 
@@ -273,8 +317,17 @@ export class LegoPanel extends LitElement {
     }
   }
 
+  private _setPending(number: string, pending: boolean): void {
+    const next = new Set(this._pending);
+    if (pending) next.add(number);
+    else next.delete(number);
+    this._pending = next;
+  }
+
   private async _toggleOwned(item: LegoSet): Promise<void> {
+    if (this._pending.has(item.set_number)) return;
     this._writeError = "";
+    this._setPending(item.set_number, true);
     try {
       await this.hass.callService(
         "lego",
@@ -284,8 +337,10 @@ export class LegoPanel extends LitElement {
     } catch (err) {
       // A rejected write used to fail only in the console, which read as a
       // flaky button rather than a broken one.
-      this._writeError = err instanceof Error ? err.message : String(err);
+      this._writeError = errorText(err);
       return;
+    } finally {
+      this._setPending(item.set_number, false);
     }
     this._collection = [];
     await this._load();
@@ -308,9 +363,28 @@ export class LegoPanel extends LitElement {
     const from = rows.indexOf(this._dragging);
     const to = rows.indexOf(target);
     this._dragging = "";
+    this._over = "";
     if (from < 0 || to < 0 || from === to) return;
     rows.splice(to, 0, ...rows.splice(from, 1));
     void this._saveRows(rows);
+  }
+
+  /** Arrow keys on a row's handle move it, since dragging needs a pointer. */
+  private _onHandleKey(ev: KeyboardEvent, row: string): void {
+    const step = ev.key === "ArrowUp" ? -1 : ev.key === "ArrowDown" ? 1 : 0;
+    if (!step) return;
+    ev.preventDefault();
+    const rows = [...(this._dash?.rows ?? [])];
+    const from = rows.indexOf(row);
+    const to = from + step;
+    if (from < 0 || to < 0 || to >= rows.length) return;
+    rows.splice(to, 0, ...rows.splice(from, 1));
+    void this._saveRows(rows);
+    void this.updateComplete.then(() =>
+      this.renderRoot
+        .querySelector<HTMLButtonElement>(`.drag[data-row="${row}"]`)
+        ?.focus(),
+    );
   }
 
   protected override render(): TemplateResult {
@@ -318,7 +392,15 @@ export class LegoPanel extends LitElement {
       <div class="app">
         <header>
           <div class="bar">
-            <h1>LEGO</h1>
+            <div class="title">
+              ${this.narrow
+                ? html`<ha-menu-button
+                    .hass=${this.hass}
+                    .narrow=${this.narrow}
+                  ></ha-menu-button>`
+                : nothing}
+              <h1>LEGO</h1>
+            </div>
             ${this._renderAccounts()}
           </div>
           <div class="tabs">
@@ -339,18 +421,34 @@ export class LegoPanel extends LitElement {
             </button>
           </div>
         </header>
-        ${this._writeError
-          ? html`<p class="error" role="alert">
-              Brickset would not save that change: ${this._writeError}
-            </p>`
-          : nothing}
         ${this._error
-          ? html`<p class="error" role="alert">${this._error}</p>`
+          ? this._renderError(this._error, () => void this._load())
           : this._tab === "home"
             ? this._renderHome()
             : this._renderCollection()}
+        ${this._writeError
+          ? html`<div class="toast" role="alert">
+              <span
+                >Brickset would not save that change: ${this._writeError}</span
+              >
+              <button
+                class="dismiss"
+                aria-label="Dismiss"
+                @click=${() => (this._writeError = "")}
+              >
+                <ha-icon icon="mdi:close"></ha-icon>
+              </button>
+            </div>`
+          : nothing}
       </div>
     `;
+  }
+
+  private _renderError(message: string, retry: () => void): TemplateResult {
+    return html`<div class="error" role="alert">
+      <p>${message}</p>
+      <button class="link" @click=${retry}>Try again</button>
+    </div>`;
   }
 
   private _renderAccounts(): TemplateResult | typeof nothing {
@@ -396,22 +494,32 @@ export class LegoPanel extends LitElement {
           : this._renderStats();
     return html`
       <section
-        class=${this._dragging === row ? "row dragging" : "row"}
+        class=${this._dragging === row
+          ? "row dragging"
+          : this._dragging && this._over === row
+            ? "row over"
+            : "row"}
         @dragover=${(ev: DragEvent) => ev.preventDefault()}
+        @dragenter=${() => (this._over = row)}
         @drop=${() => this._onDrop(row)}
       >
         <div class="rowhead">
+          <h2>${ROW_TITLES[row]}</h2>
           <button
             class="drag"
+            data-row=${row}
             draggable="true"
-            title="Drag to reorder"
-            aria-label=${`Reorder ${ROW_TITLES[row]}`}
+            title="Drag, or use the arrow keys, to reorder"
+            aria-label=${`Move ${ROW_TITLES[row]} up or down`}
             @dragstart=${() => (this._dragging = row)}
-            @dragend=${() => (this._dragging = "")}
+            @dragend=${() => {
+              this._dragging = "";
+              this._over = "";
+            }}
+            @keydown=${(ev: KeyboardEvent) => this._onHandleKey(ev, row)}
           >
             <ha-icon icon="mdi:drag"></ha-icon>
           </button>
-          <h2>${ROW_TITLES[row]}</h2>
         </div>
         ${body}
       </section>
@@ -470,7 +578,7 @@ export class LegoPanel extends LitElement {
           ${this._refreshing ? "Updating…" : "Update now"}
         </button>
         <span
-          class="quota ${short ? "bad" : tight ? "warn" : ""}"
+          class="quota ${short || tight ? "warn" : ""}"
           title=${this._dash?.last_synced
             ? new Date(this._dash.last_synced).toLocaleString()
             : nothing}
@@ -478,11 +586,8 @@ export class LegoPanel extends LitElement {
           ${syncedAgo(this._dash?.last_synced ?? null, new Date())}.
           ${short
             ? html`Daily budget spent, ${quota.calls_today} of ${quota.budget}
-              used, so this is the last sync's data. Updates resume at
-              ${new Date(quota.resets_at).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}.`
+              used, so this is the last sync's data. Updates resume
+              ${this._resumes(quota.resets_at)}.`
             : html`Costs ${cost} of ${quota.remaining} calls left today.`}
         </span>
       </div>
@@ -490,6 +595,18 @@ export class LegoPanel extends LitElement {
         ? html`<p class="caveat bad">${this._refreshError}</p>`
         : nothing}
     `;
+  }
+
+  /** When the budget resets, in local time, saying "tomorrow" when it is. */
+  private _resumes(iso: string): string {
+    const at = new Date(iso);
+    const time = at.toLocaleTimeString(this.hass?.locale?.language, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return at.toDateString() === new Date().toDateString()
+      ? `at ${time}`
+      : `tomorrow at ${time}`;
   }
 
   private _renderStats(): TemplateResult {
@@ -500,7 +617,15 @@ export class LegoPanel extends LitElement {
       [this._num(stats.sets_distinct), "Distinct sets"],
       [this._num(stats.pieces_owned), "Pieces"],
       [this._num(stats.minifigs_owned), "Minifigures"],
-      [this._num(Math.round(stats.value)), "Value at RRP"],
+      [
+        formatPrice(
+          stats.value,
+          this._dash?.currency ?? null,
+          this.hass?.locale?.language,
+          true,
+        ) || this._num(Math.round(stats.value)),
+        "Value at RRP",
+      ],
     ];
     return html`
       <div class="stats">
@@ -515,8 +640,10 @@ export class LegoPanel extends LitElement {
       ${this._renderRefresh()}
       ${stats.sets_missing_price
         ? html`<p class="caveat">
-            ${this._num(stats.sets_missing_price)} sets have no published price
-            and are not counted in the value.
+            ${stats.sets_missing_price === 1
+              ? "1 set has no published price and is not counted in the value."
+              : `${this._num(stats.sets_missing_price)} sets have no published
+                price and are not counted in the value.`}
           </p>`
         : nothing}
       <button
@@ -546,10 +673,19 @@ export class LegoPanel extends LitElement {
             @input=${(ev: Event) =>
               void this._search((ev.target as HTMLInputElement).value)}
           />
-          ${this._query.trim().length >= 2
-            ? html`<p class="muted">${showing.length} matching sets</p>`
-            : html`<p class="muted">${showing.length} sets owned</p>`}
-          <div class="grid">${showing.map((item) => this._card(item))}</div>
+          ${this._collectionError && this._query.trim().length < 2
+            ? this._renderError(this._collectionError, () => {
+                this._collectionError = "";
+                void this._loadCollection();
+              })
+            : html`<p class="muted count">
+                  ${this._query.trim().length >= 2
+                    ? count(showing.length, "matching set", "matching sets")
+                    : count(showing.length, "set owned", "sets owned")}
+                </p>
+                <div class="grid">
+                  ${showing.map((item) => this._card(item))}
+                </div>`}
         </section>
       </div>
     `;
@@ -621,7 +757,9 @@ export class LegoPanel extends LitElement {
               .filter(Boolean)
               .join(" · ")}</span
           >
-          <span class="when">${this._when(item)}</span>
+          <span class="when"
+            >${whenLabel(item, new Date(), (iso) => this._date(iso))}</span
+          >
           <div class="foot">
             <span
               class=${item.owned
@@ -636,10 +774,15 @@ export class LegoPanel extends LitElement {
                   : "Owned"
                 : item.wanted
                   ? "Wanted"
-                  : item.year || ""}
+                  : ""}
             </span>
             <button
-              class=${item.owned ? "act on" : "act"}
+              class=${[
+                "act",
+                item.owned ? "on" : "",
+                this._pending.has(item.set_number) ? "pending" : "",
+              ].join(" ")}
+              ?disabled=${this._pending.has(item.set_number)}
               title=${item.owned
                 ? "Remove from your collection"
                 : "Add to your collection"}
@@ -654,13 +797,6 @@ export class LegoPanel extends LitElement {
         </div>
       </article>
     `;
-  }
-
-  private _when(item: LegoSet): string {
-    if (item.available_until)
-      return `Retires ${this._date(item.available_until)}`;
-    if (item.available_from) return `Out ${this._date(item.available_from)}`;
-    return isNamed(item) ? "Date unknown" : "Details tbd";
   }
 
   private _date(iso: string): string {
@@ -691,7 +827,7 @@ export class LegoPanel extends LitElement {
       --lego-outline: var(--divider-color);
       --lego-primary: var(--primary-color);
       --lego-on-primary: var(--text-primary-color, #fff);
-      --lego-focus: var(--ha-color-focus, #989898);
+      --lego-focus: var(--ha-color-focus, var(--primary-color));
       /* Status text sits on the card surface, so it takes the on-* tokens. */
       --lego-own: var(--ha-color-on-success-normal, #036730);
       --lego-want: var(--ha-color-on-warning-normal, #9d3800);
@@ -727,6 +863,12 @@ export class LegoPanel extends LitElement {
       gap: var(--ha-space-3, 12px);
       justify-content: space-between;
       min-height: var(--ha-space-16, 64px);
+    }
+    .title {
+      align-items: center;
+      display: flex;
+      gap: var(--ha-space-1, 4px);
+      min-width: 0;
     }
     h1 {
       font-size: var(--ha-font-size-xl, 20px);
@@ -781,6 +923,10 @@ export class LegoPanel extends LitElement {
     .row.dragging {
       opacity: 0.5;
     }
+    /* Where a dragged row will land. */
+    .row.over {
+      box-shadow: inset 0 var(--ha-border-width-md, 2px) 0 var(--lego-primary);
+    }
     .rowhead {
       display: flex;
       align-items: center;
@@ -804,7 +950,10 @@ export class LegoPanel extends LitElement {
       place-items: center;
       min-width: 48px;
       min-height: 48px;
-      margin-left: calc(-1 * var(--ha-space-3, 12px));
+      /* Trailing, so the title lines up with the cards below it. */
+      margin: calc(-1 * var(--ha-space-3, 12px))
+        calc(-1 * var(--ha-space-3, 12px)) calc(-1 * var(--ha-space-3, 12px))
+        auto;
     }
     .chips {
       display: flex;
@@ -873,6 +1022,7 @@ export class LegoPanel extends LitElement {
       padding: var(--ha-space-3, 12px);
     }
     .name {
+      display: block;
       font-size: var(--ha-font-size-m, 14px);
       line-height: var(--ha-line-height-condensed, 1.2);
       font-weight: var(--ha-font-weight-bold, 700);
@@ -918,39 +1068,59 @@ export class LegoPanel extends LitElement {
     .state.want {
       color: var(--lego-want);
     }
+    /* A 48px target drawing a 32px circle, so the card does not look crowded. */
     .act {
       appearance: none;
       background: none;
-      border: var(--lego-line) solid var(--lego-outline);
-      border-radius: var(--ha-border-radius-circle, 50%);
+      border: 0;
       color: var(--lego-text-2);
       cursor: pointer;
       display: grid;
       place-items: center;
-      /* 32px of ink, 48px of target: the padding does the work. */
-      width: 32px;
-      height: 32px;
-      padding: var(--ha-space-2, 8px);
-      box-sizing: content-box;
+      position: relative;
+      width: 48px;
+      height: 48px;
+      padding: 0;
       margin: calc(-1 * var(--ha-space-2, 8px));
       --mdc-icon-size: 18px;
     }
+    .act::before {
+      content: "";
+      position: absolute;
+      inset: var(--ha-space-2, 8px);
+      border: var(--lego-line) solid var(--lego-text-2);
+      border-radius: var(--ha-border-radius-circle, 50%);
+    }
+    .act ha-icon {
+      position: relative;
+    }
     .act.on {
-      background: var(--lego-own-fill);
-      border-color: var(--lego-own-fill);
       color: var(--lego-on-own-fill);
     }
+    .act.on::before {
+      background: var(--lego-own-fill);
+      border-color: var(--lego-own-fill);
+    }
+    .act.pending {
+      cursor: progress;
+      opacity: 0.5;
+    }
+    .act:focus-visible {
+      outline-offset: calc(-1 * var(--ha-space-1, 4px));
+    }
+    /* Lines drawn per cell, so an odd last cell leaves no grey gap. */
     .stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: var(--lego-line);
-      background: var(--lego-outline);
+      gap: 0;
+      background: var(--lego-surface);
       border: var(--lego-line) solid var(--lego-outline);
       border-radius: var(--lego-radius);
       overflow: hidden;
     }
     .stat {
       background: var(--lego-surface);
+      box-shadow: 0 0 0 var(--lego-line) var(--lego-outline);
       display: flex;
       flex-direction: column;
       gap: var(--ha-space-1, 4px);
@@ -1051,9 +1221,48 @@ export class LegoPanel extends LitElement {
       color: var(--lego-bad);
       padding: var(--ha-space-5, 20px) var(--ha-space-4, 16px);
     }
+    .error p {
+      margin: 0;
+    }
+    .count {
+      margin-bottom: var(--ha-space-3, 12px);
+    }
+    /* A failed write is shown where it cannot be scrolled out of view. */
+    .toast {
+      align-items: center;
+      background: var(--lego-surface);
+      border: var(--lego-line) solid var(--lego-bad);
+      border-radius: var(--ha-border-radius-md, 8px);
+      bottom: var(--ha-space-4, 16px);
+      box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+      color: var(--lego-bad);
+      display: flex;
+      gap: var(--ha-space-2, 8px);
+      left: 50%;
+      max-width: min(560px, calc(100% - 2 * var(--ha-space-4, 16px)));
+      padding: var(--ha-space-2, 8px) var(--ha-space-2, 8px)
+        var(--ha-space-2, 8px) var(--ha-space-4, 16px);
+      position: fixed;
+      transform: translateX(-50%);
+      width: max-content;
+      z-index: 3;
+    }
+    .dismiss {
+      appearance: none;
+      background: none;
+      border: 0;
+      color: inherit;
+      cursor: pointer;
+      display: grid;
+      flex: none;
+      min-height: 48px;
+      min-width: 48px;
+      place-items: center;
+    }
     a.open {
       display: block;
       min-width: 0;
+      overflow: hidden;
       color: inherit;
       text-decoration: none;
     }
