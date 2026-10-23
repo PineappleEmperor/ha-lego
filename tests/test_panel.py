@@ -9,7 +9,7 @@ from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 from pytest_homeassistant_custom_component.typing import (
     ClientSessionGenerator,
     WebSocketGenerator,
@@ -24,6 +24,7 @@ from custom_components.lego.const import (
     PANEL_ROWS,
     PANEL_URL_PATH,
 )
+from custom_components.lego.panel import PanelStore, dashboard_payload
 
 from .conftest import (
     API_KEY,
@@ -467,3 +468,149 @@ async def test_unknown_rows_are_dropped_and_new_ones_appended(
     assert rows[0] == "wishlist"
     assert "mocs" not in rows
     assert sorted(rows) == sorted(PANEL_ROWS)
+
+
+async def test_wanted_filter_includes_a_set_also_owned(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Wanted means wanted, not merely not owned: a second copy can be both."""
+    brickset.owned[1]["collection"]["wanted"] = True
+    await setup_integration(hass, mock_config_entry)
+    client = await hass_ws_client(hass)
+
+    await client.send_json_auto_id({"type": "lego/collection", "filter": "wanted"})
+    sets = (await client.receive_json())["result"]["sets"]
+
+    assert sorted(item["set_number"] for item in sets) == ["10294-1", "10305-1"]
+
+
+async def test_value_by_theme_runs_most_valuable_first(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """Each theme's total counts every copy, and the biggest leads."""
+    brickset.owned[:] = [
+        make_set(
+            1, "10001-1", "Icons", theme="Icons", owned=True, qty_owned=1, price=100.0
+        ),
+        make_set(
+            2,
+            "42001-1",
+            "Technic",
+            theme="Technic",
+            owned=True,
+            qty_owned=1,
+            price=300.0,
+        ),
+        make_set(
+            3,
+            "75001-1",
+            "Star Wars",
+            theme="Star Wars",
+            owned=True,
+            qty_owned=2,
+            price=40.0,
+        ),
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    rows = dashboard_payload(mock_config_entry, [], [])["by_theme"]
+
+    assert [(row["theme"], row["value"], row["sets"]) for row in rows] == [
+        ("Technic", 300.0, 1),
+        ("Icons", 100.0, 1),
+        ("Star Wars", 80.0, 2),
+    ]
+
+
+async def test_wishlist_runs_soonest_retirement_first_retired_last(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """What to buy before it goes leads; what has already gone sinks."""
+    today = dt_util.now().date()
+
+    def on(days: int) -> str:
+        return f"{(today + timedelta(days=days)).isoformat()}T00:00:00Z"
+
+    brickset.wanted[:] = [
+        make_set(1, "10001-1", "Retired", wanted=True, last_available=on(-10)),
+        make_set(2, "10002-1", "Retires later", wanted=True, last_available=on(200)),
+        make_set(3, "10003-1", "No date", wanted=True, last_available=None),
+        make_set(4, "10004-1", "Retires soon", wanted=True, last_available=on(20)),
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    wishlist = dashboard_payload(mock_config_entry, [], [])["wishlist"]
+
+    assert [item["name"] for item in wishlist] == [
+        "Retires soon",
+        "Retires later",
+        "No date",
+        "Retired",
+    ]
+    # Each card carries its own dates, not one standing in for the other.
+    assert wishlist[0]["available_until"] == (today + timedelta(days=20)).isoformat()
+    assert wishlist[0]["available_from"] == "2024-01-01"
+
+
+async def test_an_undated_set_already_out_is_not_new(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """Undated is news only while unreleased; a released set with no date is old."""
+    brickset.theme_sets[:] = [
+        make_set(
+            1,
+            "42001-1",
+            "Old undated",
+            theme="Technic",
+            first_available=None,
+            released=True,
+        ),
+        make_set(
+            2,
+            "42002-1",
+            "Announced",
+            theme="Technic",
+            first_available=None,
+            released=False,
+        ),
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    themes = dashboard_payload(mock_config_entry, [], [])["themes"]
+
+    assert [item["name"] for item in themes["Technic"]] == ["Announced"]
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_panel_settings_survive_a_restart(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    hass_admin_user: MockUser,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Row order, hidden rows and the chosen account are stored, not just held."""
+    await setup_integration(hass, mock_config_entry)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "lego/panel_config/set",
+            "rows": ["wishlist", "themes"],
+            "hidden": ["value"],
+        }
+    )
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id(
+        {"type": "lego/account/set", "config_entry_id": mock_config_entry.entry_id}
+    )
+    await client.receive_json()
+
+    # A fresh store reads back what the running one wrote, as after a restart.
+    restarted = PanelStore(hass)
+    await restarted.async_load()
+
+    assert restarted.rows(hass_admin_user.id)[:2] == ["wishlist", "themes"]
+    assert restarted.hidden(hass_admin_user.id) == ["value"]
+    assert restarted.account(hass_admin_user.id) == mock_config_entry.entry_id

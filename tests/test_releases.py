@@ -6,7 +6,7 @@ from typing import Any
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_REGION
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 import pytest
@@ -21,6 +21,7 @@ from custom_components.lego.const import (
     CONF_RELEASES,
     CONF_THEMES,
     DOMAIN,
+    EVENT_NEW_SET,
 )
 from custom_components.lego.diagnostics import async_get_config_entry_diagnostics
 from custom_components.lego.panel import dashboard_payload
@@ -400,3 +401,33 @@ async def test_3_december_already_reads_the_january_wave(
     assert [call["year"] for call in _year_calls(brickset)] == [2026, 2027]
     freezer.move_to("2026-12-04 10:00:00+00:00")
     assert _rows(entry)["upcoming"] == ["New Year set"]
+
+
+async def test_new_set_events_fire_when_following_every_theme(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """The default for new installs still announces new sets in watched themes."""
+    today = dt_util.now().date()
+    brickset.year_sets[:] = [_on(today, 1, "Known Technic", theme="Technic")]
+    entry = await setup_integration(
+        hass, _with_releases(mock_config_entry, **{CONF_THEMES: ["Technic"]})
+    )
+    events: list[Event] = []
+
+    @callback
+    def record(event: Event) -> None:
+        events.append(event)
+
+    hass.bus.async_listen(EVENT_NEW_SET, record)
+    brickset.year_sets += [
+        _on(today, 2, "New Technic", theme="Technic"),
+        # Read in the same poll, but no one follows Icons.
+        _on(today, 3, "New Icons", theme="Icons"),
+    ]
+    await entry.runtime_data.feeds.async_refresh()
+    await hass.async_block_till_done()
+
+    assert [event.data["name"] for event in events] == ["New Technic"]
+    assert events[0].data["theme"] == "Technic"

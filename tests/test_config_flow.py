@@ -216,19 +216,20 @@ async def test_duplicate_account_aborts(
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
+    # Brickset usernames ignore case, so another spelling is the same account.
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], USER_INPUT
+        result["flow_id"], {**USER_INPUT, CONF_USERNAME: USERNAME.upper()}
     )
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
 
 
-@pytest.mark.usefixtures("brickset")
 async def test_reauth_flow(
-    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Reauth mints a fresh token and reloads the entry."""
+    """Reauth mints a fresh token, takes a new key if given, and keeps no password."""
+    brickset.api_keys.add("renewed-key")
     mock_config_entry.add_to_hass(hass)
     hass.config_entries.async_update_entry(
         mock_config_entry,
@@ -239,13 +240,16 @@ async def test_reauth_flow(
     assert result["step_id"] == "reauth_confirm"
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_API_KEY: API_KEY, CONF_PASSWORD: "hunter2"}
+        result["flow_id"], {CONF_API_KEY: "renewed-key", CONF_PASSWORD: "hunter2"}
     )
     await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
     assert mock_config_entry.data[CONF_USER_HASH] == USER_HASH
+    assert mock_config_entry.data[CONF_API_KEY] == "renewed-key"
+    assert CONF_PASSWORD not in mock_config_entry.data
+    assert "hunter2" not in str(mock_config_entry.data)
 
 
 async def test_reauth_flow_rejects_bad_password(
@@ -264,11 +268,11 @@ async def test_reauth_flow_rejects_bad_password(
     assert result["errors"] == {"base": "invalid_auth"}
 
 
-@pytest.mark.usefixtures("brickset")
 async def test_reconfigure_flow(
-    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Reconfigure can swap the API key for the same account."""
+    """Reconfigure can swap the API key for the same account, and keeps no password."""
+    brickset.api_keys.add("new-key")
     mock_config_entry.add_to_hass(hass)
 
     result = await mock_config_entry.start_reconfigure_flow(hass)
@@ -282,6 +286,8 @@ async def test_reconfigure_flow(
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert mock_config_entry.data[CONF_API_KEY] == "new-key"
+    assert CONF_PASSWORD not in mock_config_entry.data
+    assert "hunter2" not in str(mock_config_entry.data)
 
 
 @pytest.mark.usefixtures("brickset")

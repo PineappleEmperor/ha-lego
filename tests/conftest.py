@@ -1,5 +1,6 @@
 """Fixtures for the integration's tests."""
 
+from collections.abc import Awaitable, Callable
 from copy import deepcopy
 import gzip
 import json
@@ -207,8 +208,16 @@ class BricksetServer:
         # Every set of a year, answered a page at a time to a year-only query.
         self.year_sets: list[dict[str, Any]] = []
         self.usage_today = 0
+        self.usage_checks = 0
         self.get_sets_calls: list[dict[str, Any]] = []
         self.set_collection_calls: list[dict[str, Any]] = []
+        # Like Brickset, every call must carry a key it issued, and the calls
+        # reading or writing the user's collection the hash it handed out at login.
+        self.api_keys = {API_KEY, "second-key"}
+        self.user_hash = USER_HASH
+        # The hashes Brickset would accept: the fixture's account, and the second
+        # account the multi-account tests set up beside it.
+        self.user_hashes = {USER_HASH, "second-hash"}
         self.key_valid = True
         self.credentials_valid = True
         self.hash_valid = True
@@ -240,7 +249,23 @@ class BricksetServer:
             ("getKeyUsageStats", self._get_key_usage),
             ("setCollection", self._set_collection),
         ):
-            mocker.post(f"{API_BASE}/{method}", side_effect=handler)
+            mocker.post(f"{API_BASE}/{method}", side_effect=self._authorised(handler))
+
+    def _authorised(
+        self, handler: Callable[[str, Any, Any], Awaitable[Any]]
+    ) -> Callable[[str, Any, Any], Awaitable[Any]]:
+        """Refuse a call without a valid key, as Brickset refuses it."""
+
+        async def checked(method: str, url: Any, data: Any) -> Any:
+            if not self.key_valid or data.get("apiKey") not in self.api_keys:
+                return self._error("Invalid API key")
+            return await handler(method, url, data)
+
+        return checked
+
+    def _hash_ok(self, data: Any) -> bool:
+        """Whether a call carries the user hash login handed out, still valid."""
+        return self.hash_valid and data.get("userHash") in self.user_hashes
 
     @staticmethod
     def _ok(payload: dict[str, Any]) -> AiohttpClientMockResponse:
@@ -262,16 +287,14 @@ class BricksetServer:
         return self._ok({})
 
     async def _check_user_hash(self, method: str, url: str, data: Any) -> Any:
-        if not self.hash_valid:
+        if not self._hash_ok(data):
             return self._error("Invalid userHash")
         return self._ok({})
 
     async def _login(self, method: str, url: str, data: Any) -> Any:
-        if not self.key_valid:
-            return self._error("Invalid API key")
         if not self.credentials_valid:
             return self._error("Invalid userHash: login failed")
-        return self._ok({"hash": USER_HASH})
+        return self._ok({"hash": self.user_hash})
 
     async def _get_themes(self, method: str, url: str, data: Any) -> Any:
         if self.themes_error is not None:
@@ -291,6 +314,7 @@ class BricksetServer:
         )
 
     async def _get_key_usage(self, method: str, url: str, data: Any) -> Any:
+        self.usage_checks += 1
         return self._ok(
             {
                 "matches": 1,
@@ -311,7 +335,7 @@ class BricksetServer:
         if self.get_sets_error is not None:
             return self._error(self.get_sets_error)
 
-        if not self.hash_valid and (params.get("owned") or params.get("wanted")):
+        if (params.get("owned") or params.get("wanted")) and not self._hash_ok(data):
             return self._error("Invalid userHash")
 
         if params.get("owned"):
@@ -343,13 +367,22 @@ class BricksetServer:
         else:
             sets = []
 
+        # Sorted as asked, so a test sees the order the integration requested and
+        # cannot pass on the order it happened to list its sets in.
+        order = str(params.get("orderBy", ""))
+        if order.removesuffix("DESC") == "Number":
+            sets = sorted(
+                sets,
+                key=lambda item: (int(item["number"]), item["numberVariant"]),
+                reverse=order.endswith("DESC"),
+            )
         # Every query pages as Brickset's does, 20 to a page unless asked for more.
         size = int(params.get("pageSize", 20))
         start = (int(params.get("pageNumber", 1)) - 1) * size
         return self._ok({"matches": len(sets), "sets": sets[start : start + size]})
 
     async def _set_collection(self, method: str, url: str, data: Any) -> Any:
-        if not self.hash_valid:
+        if not self._hash_ok(data):
             return self._error("Invalid userHash")
         if self.set_collection_error is not None:
             return self._error(self.set_collection_error)

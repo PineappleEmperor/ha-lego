@@ -11,8 +11,10 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
+from custom_components.lego.api import pages_spent
 from custom_components.lego.const import BRICKSET_DAILY_CALL_LIMIT
 from custom_components.lego.exceptions import BricksetQuotaError
+from custom_components.lego.panel import dashboard_payload
 from custom_components.lego.quota import (
     QuotaManager,
     collection_interval,
@@ -23,7 +25,7 @@ from custom_components.lego.quota import (
     window_years,
 )
 
-from .conftest import BricksetServer, setup_integration
+from .conftest import BricksetServer, make_set, setup_integration
 
 
 def test_reserve_and_record() -> None:
@@ -256,3 +258,78 @@ def test_resets_at_midnight_utc(freezer: FrozenDateTimeFactory) -> None:
     """Brickset's day ends at midnight UTC."""
     freezer.move_to("2026-08-05 22:30:00+00:00")
     assert QuotaManager(80).resets_at.isoformat() == "2026-08-06T00:00:00+00:00"
+
+
+@pytest.mark.parametrize(
+    ("count", "pages"),
+    [
+        # Paging stops at the first short page: an empty list still costs a call,
+        # and a full page costs one more to learn it was the last.
+        (0, 1),
+        (1, 1),
+        (499, 1),
+        (500, 2),
+        (600, 2),
+        (1000, 3),
+        # The cap bounds a bad day.
+        (10_000, 10),
+    ],
+)
+def test_pages_spent(count: int, pages: int) -> None:
+    """The budget plans on the calls paging really makes."""
+    assert pages_spent(count) == pages
+
+
+@pytest.mark.parametrize(
+    ("owned", "wanted", "calls"),
+    [(3, 1, 2), (0, 0, 2), (500, 0, 3), (600, 0, 3), (1000, 3, 4)],
+)
+async def test_collection_poll_cost_matches_the_calls_it_makes(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    owned: int,
+    wanted: int,
+    calls: int,
+) -> None:
+    """What a poll is planned to cost is what the next poll spends."""
+    brickset.owned[:] = [
+        make_set(10_000 + n, f"{70000 + n}-1", f"Owned {n}", owned=True, qty_owned=1)
+        for n in range(owned)
+    ]
+    brickset.wanted[:] = [
+        make_set(20_000 + n, f"{80000 + n}-1", f"Wanted {n}", wanted=True)
+        for n in range(wanted)
+    ]
+    await setup_integration(hass, mock_config_entry)
+    collection = mock_config_entry.runtime_data.collection
+    assert collection.poll_cost == calls
+
+    before = len(brickset.get_sets_calls)
+    await collection.async_refresh()
+    spent = brickset.get_sets_calls[before:]
+
+    assert len([c for c in spent if c.get("owned") or c.get("wanted")]) == calls
+    # The panel's Update now quotes the same cost.
+    payload = dashboard_payload(mock_config_entry, [], [])
+    assert payload["quota"]["refresh_cost"] == calls
+
+
+async def test_brickset_usage_is_rechecked_at_most_every_half_hour(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The free usage check is rate limited, so polls do not hammer it."""
+    await setup_integration(hass, mock_config_entry)
+    collection = mock_config_entry.runtime_data.collection
+    checks = brickset.usage_checks
+
+    freezer.tick(timedelta(minutes=10))
+    await collection.async_refresh()
+    assert brickset.usage_checks == checks
+
+    freezer.tick(timedelta(minutes=21))
+    await collection.async_refresh()
+    assert brickset.usage_checks == checks + 1

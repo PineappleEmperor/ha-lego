@@ -42,11 +42,12 @@ import pytest_socket
 from custom_components.lego.api import API_BASE, BricksetClient
 from custom_components.lego.const import (
     PAGE_SIZE,
+    REGIONS,
     RELEASES_PAGES_ESTIMATE,
     SETS_CSV_URL,
     YEAR_MAX_PAGES,
 )
-from custom_components.lego.coordinator import year_query
+from custom_components.lego.coordinator import theme_query, year_query
 
 pytestmark = [
     pytest.mark.live,
@@ -200,11 +201,7 @@ async def test_theme_still_accepts_a_comma_separated_list() -> None:
     async with aiohttp.ClientSession() as session:
         client = BricksetClient(session, os.environ["BRICKSET_API_KEY"])
         sets = await client.get_sets(
-            {
-                "theme": ",".join(THEMES),
-                "year": dt_util.utcnow().year,
-                "pageSize": PAGE_SIZE,
-            }
+            {**theme_query(list(THEMES), dt_util.utcnow().year), "pageSize": PAGE_SIZE}
         )
 
     returned = {lego_set.theme for lego_set in sets}
@@ -225,7 +222,7 @@ async def test_theme_years_say_whether_next_year_is_announced() -> None:
         client = BricksetClient(session, os.environ["BRICKSET_API_KEY"])
         theme_years = await client.get_theme_years()
         sets = await client.get_sets(
-            {"theme": ",".join(THEMES), "year": year, "pageSize": PAGE_SIZE}
+            {**theme_query(list(THEMES), year), "pageSize": PAGE_SIZE}
         )
 
     print(  # noqa: T201
@@ -321,6 +318,12 @@ async def test_the_release_feed_query_pages_through_a_year() -> None:
         "release rows keep; the category names have changed"
     )
     assert dated, f"no {year} set carries a release date, so both rows stay empty"
+    # Collection value and every card's price read LEGO.com's regional block. If
+    # Brickset renamed a field in it, value would quietly read 0.
+    for region in REGIONS:
+        priced = sum(1 for lego_set in sets if lego_set.price(region) is not None)
+        print(f"{region}: {priced} of {len(sets)} priced")  # noqa: T201
+        assert priced, f"no {year} set has a {region} price; LEGOCom has changed"
 
 
 async def test_the_daily_count_rolls_over_at_midnight_utc() -> None:

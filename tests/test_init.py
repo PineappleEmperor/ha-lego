@@ -4,7 +4,12 @@ from datetime import timedelta
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
+from homeassistant.const import (
+    CONF_API_KEY,
+    CONF_REGION,
+    CONF_USERNAME,
+    STATE_UNAVAILABLE,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.setup import async_setup_component
@@ -199,3 +204,37 @@ async def test_user_hash_is_used_not_password(
 
     assert "password" not in mock_config_entry.data
     assert mock_config_entry.data[CONF_USER_HASH] == USER_HASH
+
+
+async def test_a_failed_poll_after_setup_makes_entities_unavailable(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """A Brickset failure is not shown as current data; recovery brings it back."""
+    await setup_integration(hass, mock_config_entry)
+    collection = mock_config_entry.runtime_data.collection
+    owned = "sensor.brickset_brickfan_sets_owned"
+    assert hass.states.get(owned).state == "4"
+
+    brickset.get_sets_error = "Something broke upstream"
+    await collection.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(owned).state == STATE_UNAVAILABLE
+
+    brickset.get_sets_error = None
+    await collection.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(owned).state == "4"
+
+
+async def test_an_expired_token_after_setup_asks_to_reconnect(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """A password changed on Brickset mid-run starts a reauth, not silent failure."""
+    await setup_integration(hass, mock_config_entry)
+
+    brickset.hash_valid = False
+    await mock_config_entry.runtime_data.collection.async_refresh()
+    await hass.async_block_till_done()
+
+    flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    assert [flow["context"]["source"] for flow in flows] == ["reauth"]

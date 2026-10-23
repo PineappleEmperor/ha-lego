@@ -263,6 +263,82 @@ async def test_set_collection_folds_the_change_into_the_cache(
     assert data.summary.sets_distinct == len(owned)
 
 
+async def test_unticking_owned_removes_the_set(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """The panel's toggle in the off direction: sent as own=0, and dropped locally."""
+    await setup_integration(hass, mock_config_entry)
+    assert hass.states.get("sensor.brickset_brickfan_sets_owned").state == "4"
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_COLLECTION,
+        {
+            "device_id": lego_device_id(hass, mock_config_entry),
+            "set_number": "10305-1",
+            "owned": False,
+        },
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert brickset.set_collection_calls == [{"setID": "2", "params": {"own": 0}}]
+    data = mock_config_entry.runtime_data.collection.data
+    assert "10305-1" not in {lego_set.number for lego_set in data.owned}
+    assert hass.states.get("sensor.brickset_brickfan_sets_owned").state == "3"
+
+
+async def test_unticking_wanted_removes_the_set(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """Taking a set off the wishlist is sent as want=0, and dropped locally."""
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_COLLECTION,
+        {
+            "device_id": lego_device_id(hass, mock_config_entry),
+            "set_number": "10294-1",
+            "wanted": False,
+        },
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert brickset.set_collection_calls == [{"setID": "4", "params": {"want": 0}}]
+    assert mock_config_entry.runtime_data.collection.data.wanted == []
+    assert hass.states.get("sensor.brickset_brickfan_sets_wanted").state == "0"
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_owning_a_wanted_set_keeps_its_full_record(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """The cached record is reused, so its pieces and price count at once."""
+    await setup_integration(hass, mock_config_entry)
+    collection = mock_config_entry.runtime_data.collection
+    wanted = collection.data.wanted_by_number["10294-1"]
+    pieces_before = collection.data.summary.pieces_owned
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_COLLECTION,
+        {
+            "device_id": lego_device_id(hass, mock_config_entry),
+            "set_number": "10294-1",
+            "owned": True,
+            "qty_owned": 1,
+        },
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    owned = {item.number: item for item in collection.data.owned}
+    assert owned["10294-1"].pieces == wanted.pieces
+    assert collection.data.summary.pieces_owned == pieces_before + wanted.pieces
+
+
 async def test_set_collection_rejection_raises_a_repair_issue(
     hass: HomeAssistant,
     brickset: BricksetServer,

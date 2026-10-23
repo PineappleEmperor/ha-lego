@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.const import CONF_REGION
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
@@ -391,3 +392,55 @@ async def test_the_paging_repair_goes_when_no_theme_is_followed(
     await hass.async_block_till_done()
 
     assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_wishlist_availability_change_fires_an_event(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """A wanted set going from retail to retired is worth an automation's notice."""
+    await setup_integration(hass, mock_config_entry)
+    events: list[Event] = []
+
+    @callback
+    def record(event: Event) -> None:
+        events.append(event)
+
+    hass.bus.async_listen(EVENT_WANTED_CHANGED, record)
+    brickset.wanted[0]["availability"] = "Retired"
+    await mock_config_entry.runtime_data.collection.async_refresh()
+    await hass.async_block_till_done()
+
+    assert len(events) == 1
+    assert events[0].data["set_number"] == "10294-1"
+    assert events[0].data["availability"] == "Retired"
+    assert "price" not in events[0].data
+
+
+async def test_new_set_event_prices_in_the_chosen_region(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """An American user hears the US price, not the UK one."""
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry, options={**mock_config_entry.options, CONF_REGION: "US"}
+    )
+    await setup_integration(hass, mock_config_entry)
+    events: list[Event] = []
+
+    @callback
+    def record(event: Event) -> None:
+        events.append(event)
+
+    hass.bus.async_listen(EVENT_NEW_SET, record)
+    new = make_set(77, "42222-1", "Brand New Technic", theme="Technic")
+    new["LEGOCom"]["US"] = {
+        "retailPrice": 119.99,
+        "dateFirstAvailable": "2025-03-01T00:00:00Z",
+    }
+    brickset.theme_sets.insert(0, new)
+    await mock_config_entry.runtime_data.feeds.async_refresh()
+    await hass.async_block_till_done()
+
+    assert [event.data["retail_price"] for event in events] == [119.99]
+    assert events[0].data["region"] == "US"
+    assert events[0].data["release_date"] == "2025-03-01"

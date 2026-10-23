@@ -182,3 +182,60 @@ async def test_leap_day_anniversary_falls_back_to_the_28th(
     assert [(event["summary"], event["start"]) for event in events] == [
         ("Leap Day Set turns 1", "2025-02-28")
     ]
+
+
+async def test_calendar_ranges_include_their_first_day(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A retirement on the day a range starts is in that range."""
+    day = dt_util.now().date() + timedelta(days=10)
+    brickset.wanted[:] = [
+        make_set(
+            4,
+            "10294-1",
+            "Titanic",
+            wanted=True,
+            last_available=f"{day.isoformat()}T00:00:00Z",
+        ),
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    events = await _events(
+        hass,
+        RETIREMENTS,
+        f"{day.isoformat()} 00:00:00",
+        f"{(day + timedelta(days=1)).isoformat()} 00:00:00",
+    )
+
+    assert [event["summary"] for event in events] == ["10294-1 Titanic retires"]
+
+
+async def test_a_set_has_no_birthday_in_its_launch_year(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Its first anniversary is a year after launch, never "turns 0"."""
+    launch = dt_util.now().date() - timedelta(days=30)
+    brickset.owned[:] = [
+        make_set(
+            1,
+            "10497-1",
+            "Galaxy Explorer",
+            owned=True,
+            qty_owned=1,
+            first_available=f"{launch.isoformat()}T00:00:00Z",
+        ),
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    events = await _events(
+        hass,
+        ANNIVERSARIES,
+        f"{(launch - timedelta(days=1)).isoformat()} 00:00:00",
+        f"{(launch + timedelta(days=1)).isoformat()} 00:00:00",
+    )
+
+    assert events == []
