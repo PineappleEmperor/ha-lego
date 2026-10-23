@@ -237,10 +237,20 @@ const RETIRING_SOON_DAYS = 60;
  * How a card's date reads at a glance, so released and upcoming sets differ without
  * longer wording: "due" not out yet, "retiring" leaving sale soon, "retired" gone.
  */
+/**
+ * Which date a card leads with: a row of new releases is about when a set came
+ * out or is due, a wishlist or a collection about when it leaves sale.
+ */
+export type DateFocus = "release" | "retirement";
+
 export function whenTone(
   item: Pick<LegoSet, "available_from" | "available_until">,
   now: Date,
+  focus: DateFocus = "retirement",
 ): "due" | "retiring" | "retired" | "" {
+  if (focus === "release" && item.available_from) {
+    return new Date(item.available_from) > now ? "due" : "";
+  }
   if (item.available_until) {
     const until = new Date(item.available_until).getTime();
     if (until < now.getTime()) return "retired";
@@ -256,7 +266,12 @@ export function whenLabel(
   item: Pick<LegoSet, "available_from" | "available_until" | "name">,
   now: Date,
   format: (iso: string) => string,
+  focus: DateFocus = "retirement",
 ): string {
+  if (focus === "release" && item.available_from) {
+    const coming = new Date(item.available_from) > now;
+    return `${coming ? "Due" : "Out"} ${format(item.available_from)}`;
+  }
   if (item.available_until) {
     const gone = new Date(item.available_until) < now;
     return `${gone ? "Retired" : "Retires"} ${format(item.available_until)}`;
@@ -277,8 +292,9 @@ export function displayName(item: Pick<LegoSet, "name">): string {
   return isNamed(item) ? item.name : "Name tbd";
 }
 
-// The integration's own icon, served from custom_components/lego/brand/.
-const FALLBACK_ART = "/lego_panel/icon.png";
+// The integration's own icon, served from custom_components/lego/brand/: the
+// header's logo, and the picture on a card Brickset has no art for.
+const BRAND_ICON = "/lego_panel/icon.png";
 
 const ROW_TITLES: Record<string, string> = {
   recent: "Out recently",
@@ -714,7 +730,7 @@ export class LegoPanel extends LitElement {
         until they arrive.
       </p>`;
     }
-    return this._carousel(releases?.[key] ?? [], empty);
+    return this._carousel(releases?.[key] ?? [], empty, "release");
   }
 
   private _renderRow(row: string): TemplateResult {
@@ -794,7 +810,7 @@ export class LegoPanel extends LitElement {
           `,
         )}
       </div>
-      ${this._carousel(sets, "No new sets in this theme.")}
+      ${this._carousel(sets, "No new sets in this theme.", "release")}
     `;
   }
 
@@ -1152,10 +1168,14 @@ export class LegoPanel extends LitElement {
     `;
   }
 
-  private _carousel(sets: LegoSet[], empty: string): TemplateResult {
+  private _carousel(
+    sets: LegoSet[],
+    empty: string,
+    focus: DateFocus = "retirement",
+  ): TemplateResult {
     if (!sets.length) return html`<p class="muted">${empty}</p>`;
     return html`<div class="carousel">
-      ${sets.map((item) => this._card(item))}
+      ${sets.map((item) => this._card(item, focus))}
     </div>`;
   }
 
@@ -1180,7 +1200,10 @@ export class LegoPanel extends LitElement {
     >`;
   }
 
-  private _card(item: LegoSet): TemplateResult {
+  private _card(
+    item: LegoSet,
+    focus: DateFocus = "retirement",
+  ): TemplateResult {
     return html`
       <article class="card">
         ${this._linked(
@@ -1189,7 +1212,7 @@ export class LegoPanel extends LitElement {
             ? html`<img src=${item.image} alt="" loading="lazy" />`
             : html`<img
                 class="noart"
-                src=${FALLBACK_ART}
+                src=${BRAND_ICON}
                 alt=""
                 loading="lazy"
               />`,
@@ -1218,8 +1241,13 @@ export class LegoPanel extends LitElement {
               .filter(Boolean)
               .join(" · ")}</span
           >
-          <span class="when ${whenTone(item, new Date())}"
-            >${whenLabel(item, new Date(), (iso) => this._date(iso))}</span
+          <span class="when ${whenTone(item, new Date(), focus)}"
+            >${whenLabel(
+              item,
+              new Date(),
+              (iso) => this._date(iso),
+              focus,
+            )}</span
           >
           <div class="foot">
             <span

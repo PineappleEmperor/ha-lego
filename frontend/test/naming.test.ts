@@ -199,6 +199,36 @@ describe("card dates", () => {
   });
 });
 
+describe("card dates on a row of releases", () => {
+  const now = new Date("2026-05-15T12:00:00Z");
+  const iso = (value: string) => value.slice(0, 10);
+  // Both dates published, as for most sets on sale: which one leads depends on
+  // what the row is about.
+  const both = {
+    name: "A",
+    available_from: "2026-05-01",
+    available_until: "2099-12-31",
+  };
+
+  it("leads with the release date, not a retirement years away", () => {
+    expect(whenLabel(both, now, iso, "release")).toBe("Out 2026-05-01");
+    expect(whenTone(both, now, "release")).toBe("");
+    const due = { ...both, available_from: "2026-06-01" };
+    expect(whenLabel(due, now, iso, "release")).toBe("Due 2026-06-01");
+    expect(whenTone(due, now, "release")).toBe("due");
+  });
+
+  it("falls back to the retirement date when no release date is known", () => {
+    expect(
+      whenLabel({ ...both, available_from: null }, now, iso, "release"),
+    ).toBe("Retires 2099-12-31");
+  });
+
+  it("still leads with retirement on a wishlist", () => {
+    expect(whenLabel(both, now, iso)).toBe("Retires 2099-12-31");
+  });
+});
+
 describe("card date tone", () => {
   const now = new Date("2026-05-15T12:00:00Z");
   const set = (from: string | null, until: string | null) => ({
