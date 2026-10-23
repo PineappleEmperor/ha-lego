@@ -14,11 +14,12 @@ releases, obscure themes, records with almost nothing filled in. The seed is
 printed so a failure can be reproduced exactly.
 
 Marked live, excluded from the default run, and gated in CI behind an
-environment that needs a human approval. Four billed calls per run: owned,
-wanted, the catalogue sample and the theme batch.
+environment that needs a human approval. Five billed calls per run: owned,
+wanted, the catalogue sample, the theme batch and next year's theme batch.
 """
 
 import csv
+from datetime import UTC, datetime
 import gzip
 import io
 import json
@@ -157,6 +158,39 @@ async def test_theme_still_accepts_a_comma_separated_list() -> None:
     assert returned >= set(THEMES), (
         f"asked for {THEMES} and got {sorted(returned)}; batching has changed, so "
         "the feed coordinator is silently paying one call per theme"
+    )
+
+
+async def test_next_years_theme_query_answers() -> None:
+    """From September the feeds ask for next year; it must answer, empty or not."""
+    year = datetime.now(UTC).year + 1
+    async with aiohttp.ClientSession() as session:
+        client = BricksetClient(session, os.environ["BRICKSET_API_KEY"])
+        sets = await client.get_sets(
+            {"theme": ",".join(THEMES), "year": year, "pageSize": 100}
+        )
+
+    print(f"\nsets announced for {year}: {len(sets)}")  # noqa: T201
+    assert all(lego_set.year == year for lego_set in sets), (
+        f"asked for {year} and got {sorted({s.year for s in sets})}"
+    )
+
+
+async def test_the_daily_count_rolls_over_at_midnight_utc() -> None:
+    """The quota resets at midnight UTC, which is the day Brickset must count in."""
+    now = datetime.now(UTC)
+    minutes_to_midnight = 24 * 60 - (now.hour * 60 + now.minute)
+    if now.hour == 0 or minutes_to_midnight <= 60:
+        pytest.skip("too close to midnight UTC to tell the two days apart")
+    async with aiohttp.ClientSession() as session:
+        client = BricksetClient(session, os.environ["BRICKSET_API_KEY"])
+        # Earlier tests in this run have already made billed calls today.
+        usage = await client.get_key_usage()
+
+    print(f"\nusage by day: {sorted(usage.items())[-3:]}")  # noqa: T201
+    assert max(usage) == now.date(), (
+        f"the newest day Brickset counts is {max(usage)} while UTC says "
+        f"{now.date()}; the quota's day boundary is not UTC"
     )
 
 
