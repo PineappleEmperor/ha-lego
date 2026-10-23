@@ -1,6 +1,6 @@
 """The optional sidebar panel: registration and its per-user row order."""
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -30,6 +30,10 @@ from .const import (
 if TYPE_CHECKING:
     from .coordinator import LegoConfigEntry
     from .models import LegoSet
+
+# The feeds hold a whole year of sets; the panel's "New in my themes" row shows only
+# those out within this window, or still to come.
+NEW_FOR = timedelta(days=90)
 
 REGISTERED: HassKey[bool] = HassKey(f"{DOMAIN}_panel_registered")
 
@@ -177,6 +181,23 @@ def _wishlist_key(
     )
 
 
+def _new_in_theme(sets: list[LegoSet], region: str, today: date) -> list[LegoSet]:
+    """Keep what is still news: upcoming or out within NEW_FOR, newest first."""
+
+    def is_new(item: LegoSet) -> bool:
+        released = item.release_date(region)
+        if released is None:
+            # Announced without a date yet is news; released without one is not.
+            return not item.released
+        return released >= today - NEW_FOR
+
+    def newest_first(item: LegoSet) -> tuple[bool, int, str]:
+        released = item.release_date(region)
+        return (released is None, -(released or date.min).toordinal(), item.number)
+
+    return sorted(filter(is_new, sets), key=newest_first)
+
+
 def dashboard_payload(entry: LegoConfigEntry, rows: list[str]) -> dict[str, Any]:
     """Build everything the panel's home view needs in one reply."""
     collection = entry.runtime_data.collection
@@ -221,7 +242,9 @@ def dashboard_payload(entry: LegoConfigEntry, rows: list[str]) -> dict[str, Any]
         },
         "wishlist": [summarise(item, region) for item in wanted],
         "themes": {
-            theme: [summarise(item, region) for item in sets]
+            theme: [
+                summarise(item, region) for item in _new_in_theme(sets, region, today)
+            ]
             for theme, sets in (entry.runtime_data.feeds.data or {}).items()
         },
     }

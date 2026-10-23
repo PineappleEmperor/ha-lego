@@ -102,8 +102,9 @@ Reachable via **Configure** on the integration entry.
 
 A **LEGO** entry appears in the sidebar unless you turn it off in options. It has two views:
 
-- **Home** shows new releases in the themes you follow, your wishlist with release and
-  retirement dates, and your collection totals. Each row has a drag handle, and the order
+- **Home** shows new releases in the themes you follow (out in the last 90 days or still
+  to come, newest first), your wishlist with release and retirement dates, and your
+  collection totals. Each row has a drag handle, and the order
   is remembered per Home Assistant user.
 - **Collection** is the full grid. Its search box covers both your own sets and the whole
   catalogue.

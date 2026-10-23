@@ -78,6 +78,7 @@ def make_set(
     launch_date: str | None = None,
     exit_date: str | None = None,
     priority: int = 1,
+    released: bool = True,
 ) -> dict[str, Any]:
     """Build a getSets record shaped like Brickset's own payloads."""
     uk: dict[str, Any] = {}
@@ -105,7 +106,7 @@ def make_set(
         "themeGroup": "Model making",
         "subtheme": "",
         "category": "Normal",
-        "released": True,
+        "released": released,
         "pieces": pieces,
         "minifigs": minifigs,
         "image": {

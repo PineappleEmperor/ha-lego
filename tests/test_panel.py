@@ -22,7 +22,13 @@ from custom_components.lego.const import (
     PANEL_URL_PATH,
 )
 
-from .conftest import API_KEY, BricksetServer, lego_device_id, setup_integration
+from .conftest import (
+    API_KEY,
+    BricksetServer,
+    lego_device_id,
+    make_set,
+    setup_integration,
+)
 
 
 async def _second_account(hass: HomeAssistant) -> MockConfigEntry:
@@ -175,6 +181,71 @@ async def test_setting_an_unknown_account_is_rejected(
 
     assert not message["success"]
     assert message["error"]["code"] == "not_found"
+
+
+async def test_theme_rows_show_only_new_sets_newest_first(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Sets out for months drop off the row; the rest run newest release first."""
+    # The suite runs on 15 May 2026, so anything out before mid-February is old.
+    brickset.theme_sets[:] = [
+        make_set(
+            81,
+            "42201-1",
+            "January Set",
+            theme="Technic",
+            year=2026,
+            first_available="2026-01-01T00:00:00Z",
+        ),
+        make_set(
+            82,
+            "42202-1",
+            "March Set",
+            theme="Technic",
+            year=2026,
+            first_available="2026-03-01T00:00:00Z",
+        ),
+        make_set(
+            83,
+            "42203-1",
+            "August Set",
+            theme="Technic",
+            year=2026,
+            first_available="2026-08-01T00:00:00Z",
+        ),
+        make_set(
+            84,
+            "42204-1",
+            "Announced Set",
+            theme="Technic",
+            year=2026,
+            first_available=None,
+            released=False,
+        ),
+        make_set(
+            85,
+            "42205-1",
+            "May Set",
+            theme="Technic",
+            year=2026,
+            first_available="2026-05-01T00:00:00Z",
+        ),
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "lego/dashboard"})
+    result = (await client.receive_json())["result"]
+
+    assert [item["name"] for item in result["themes"]["Technic"]] == [
+        "August Set",
+        "May Set",
+        "March Set",
+        "Announced Set",
+    ]
 
 
 @pytest.mark.usefixtures("brickset")
