@@ -88,35 +88,35 @@ SUMMARY_SENSORS: tuple[LegoSummaryEntityDescription, ...] = (
     LegoSummaryEntityDescription(
         key="sets_owned",
         translation_key="sets_owned",
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="sets",
         value_fn=lambda summary: summary.sets_owned,
     ),
     LegoSummaryEntityDescription(
         key="sets_distinct",
         translation_key="sets_distinct",
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="sets",
         value_fn=lambda summary: summary.sets_distinct,
     ),
     LegoSummaryEntityDescription(
         key="pieces_owned",
         translation_key="pieces_owned",
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="pieces",
         value_fn=lambda summary: summary.pieces_owned,
     ),
     LegoSummaryEntityDescription(
         key="minifigs_owned",
         translation_key="minifigs_owned",
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="minifigs",
         value_fn=lambda summary: summary.minifigs_owned,
     ),
     LegoSummaryEntityDescription(
         key="sets_wanted",
         translation_key="sets_wanted",
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="sets",
         value_fn=lambda summary: summary.sets_wanted,
         items_fn=_wishlist_items,
@@ -319,6 +319,7 @@ class LegoNextRetirementSensor(LegoCollectionEntity, SensorEntity):
     """Days until the next set on the wishlist retires."""
 
     _attr_translation_key = "next_wishlist_retirement"
+    _attr_device_class = SensorDeviceClass.DURATION
     _attr_native_unit_of_measurement = UnitOfTime.DAYS
 
     def __init__(self, coordinator: LegoCollectionCoordinator) -> None:

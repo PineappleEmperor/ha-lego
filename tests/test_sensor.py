@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import CONF_REGION, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 import pytest
@@ -28,6 +29,10 @@ async def test_summary_sensors(
     assert hass.states.get(f"{PREFIX}_pieces_owned").state == "7122"
     assert hass.states.get(f"{PREFIX}_minifigures_owned").state == "31"
     assert hass.states.get(f"{PREFIX}_sets_wanted").state == "1"
+    # Each is a count of what is held now, which graphs as a measurement.
+    for name in ("sets_owned", "pieces_owned", "sets_wanted"):
+        state = hass.states.get(f"{PREFIX}_{name}")
+        assert state.attributes["state_class"] == SensorStateClass.MEASUREMENT
 
 
 @pytest.mark.usefixtures("brickset")
@@ -156,6 +161,7 @@ async def test_next_wishlist_retirement(
     assert state.attributes["set_number"] == "10294-1"
     assert state.attributes["set_name"] == "Titanic"
     assert state.attributes["retirement_date"] == "2099-12-31"
+    assert state.attributes["device_class"] == SensorDeviceClass.DURATION
 
 
 async def test_next_retirement_prefers_the_sooner_set(
