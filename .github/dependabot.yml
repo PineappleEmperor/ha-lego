@@ -20,3 +20,12 @@ updates:
     groups:
       pip:
         patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+    groups:
+      npm:
+        patterns: ["*"]
