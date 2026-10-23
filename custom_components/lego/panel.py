@@ -8,7 +8,7 @@ from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http.server import StaticPathConfig
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
@@ -19,6 +19,7 @@ from .const import (
     DEFAULT_PANEL,
     DOMAIN,
     PANEL_COMPONENT,
+    PANEL_DEFAULT_HIDDEN,
     PANEL_ICON_URL,
     PANEL_MODULE_URL,
     PANEL_ROWS,
@@ -49,17 +50,21 @@ class PanelStore:
             hass, STORAGE_VERSION, PANEL_STORAGE_KEY
         )
         self._rows: dict[str, list[str]] = {}
+        self._hidden: dict[str, list[str]] = {}
         self._accounts: dict[str, str] = {}
 
     async def async_load(self) -> None:
         """Read the stored orders and account choices."""
         stored = await self._store.async_load() or {}
         self._rows = {k: list(v) for k, v in stored.get("rows", {}).items()}
+        self._hidden = {k: list(v) for k, v in stored.get("hidden", {}).items()}
         self._accounts = {k: str(v) for k, v in stored.get("accounts", {}).items()}
 
     async def _async_save(self) -> None:
         """Write both maps, since they share one storage key."""
-        await self._store.async_save({"rows": self._rows, "accounts": self._accounts})
+        await self._store.async_save(
+            {"rows": self._rows, "hidden": self._hidden, "accounts": self._accounts}
+        )
 
     def rows(self, user_id: str | None) -> list[str]:
         """Return a user's row order, falling back to the default."""
@@ -71,11 +76,23 @@ class PanelStore:
         kept = [row for row in saved if row in PANEL_ROWS]
         return kept + [row for row in PANEL_ROWS if row not in kept]
 
-    async def async_set_rows(self, user_id: str, rows: list[str]) -> list[str]:
-        """Save a user's row order, ignoring anything unrecognised."""
-        self._rows[user_id] = [row for row in rows if row in PANEL_ROWS]
+    def hidden(self, user_id: str | None) -> list[str]:
+        """Return the rows a user has taken off their panel."""
+        saved = self._hidden.get(user_id or "")
+        if saved is None:
+            return list(PANEL_DEFAULT_HIDDEN)
+        return [row for row in saved if row in PANEL_ROWS]
+
+    async def async_set_rows(
+        self, user_id: str, rows: list[str] | None, hidden: list[str] | None = None
+    ) -> tuple[list[str], list[str]]:
+        """Save a user's row order and hidden rows, ignoring anything unrecognised."""
+        if rows is not None:
+            self._rows[user_id] = [row for row in rows if row in PANEL_ROWS]
+        if hidden is not None:
+            self._hidden[user_id] = [row for row in hidden if row in PANEL_ROWS]
         await self._async_save()
-        return self.rows(user_id)
+        return self.rows(user_id), self.hidden(user_id)
 
     def account(self, user_id: str | None) -> str | None:
         """Return the entry id this user last looked at, if any."""
@@ -223,7 +240,40 @@ def _new_in_theme(sets: list[LegoSet], region: str, today: date) -> list[LegoSet
     return sorted(filter(is_new, sets), key=newest_first)
 
 
-def dashboard_payload(entry: LegoConfigEntry, rows: list[str]) -> dict[str, Any]:
+def _by_theme(owned: list[LegoSet], region: str) -> list[dict[str, Any]]:
+    """Total the owned collection per theme, most valuable first."""
+    themes: dict[str, dict[str, Any]] = {}
+    for lego_set in owned:
+        qty = max(lego_set.collection.qty_owned, 1)
+        row = themes.setdefault(
+            lego_set.theme or "Other",
+            {"theme": lego_set.theme or "Other", "value": 0.0, "pieces": 0, "sets": 0},
+        )
+        row["value"] += (lego_set.price(region) or 0.0) * qty
+        row["pieces"] += (lego_set.pieces or 0) * qty
+        row["sets"] += qty
+    return sorted(themes.values(), key=lambda row: (-row["value"], row["theme"]))
+
+
+def _statistic_ids(
+    hass: HomeAssistant, entry: LegoConfigEntry
+) -> dict[str, str | None]:
+    """Name the sensors whose long-term statistics the panel draws as history."""
+    registry = er.async_get(hass)
+    return {
+        key: registry.async_get_entity_id(
+            "sensor", DOMAIN, f"{entry.entry_id}_{unique_suffix}"
+        )
+        for key, unique_suffix in (
+            ("value", "collection_value"),
+            ("pieces", "pieces_owned"),
+        )
+    }
+
+
+def dashboard_payload(
+    entry: LegoConfigEntry, rows: list[str], hidden: list[str]
+) -> dict[str, Any]:
     """Build everything the panel's home view needs in one reply."""
     collection = entry.runtime_data.collection
     data = collection.data
@@ -242,6 +292,11 @@ def dashboard_payload(entry: LegoConfigEntry, rows: list[str]) -> dict[str, Any]
     return {
         "entry_id": entry.entry_id,
         "device_id": device.id if device else None,
+        "hidden": hidden,
+        # Current totals per theme, and the sensors whose recorded statistics
+        # give the same totals over time.
+        "by_theme": _by_theme(data.owned if data else [], region),
+        "history": _statistic_ids(collection.hass, entry),
         "rows": rows,
         "region": region,
         # Prices are LEGO.com RRP in the region's own currency.

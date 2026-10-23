@@ -346,6 +346,13 @@ async def test_dashboard_returns_the_home_view(
     assert list(result["themes"]) == ["Technic"]
     # Cards show LEGO.com RRP, so the panel needs the region's currency.
     assert result["currency"] == "GBP"
+    # The value and pieces rows: totals per theme, most valuable first, and the
+    # sensors whose recorded statistics draw the history.
+    themes = [row["theme"] for row in result["by_theme"]]
+    assert themes[0] == "Icons"
+    assert sum(row["sets"] for row in result["by_theme"]) == 4
+    assert result["history"]["value"] == "sensor.brickset_brickfan_collection_value"
+    assert result["history"]["pieces"] == "sensor.brickset_brickfan_pieces_owned"
     assert result["wishlist"][0]["retail_price"] is not None
     assert len(brickset.get_sets_calls) == before
     # The panel writes through actions that require the entry id, so the payload
@@ -421,14 +428,37 @@ async def test_row_order_is_saved_and_returned(
         {"type": "lego/panel_config/set", "rows": ["collection", "wishlist", "themes"]}
     )
     saved = await client.receive_json()
-    assert saved["result"]["rows"] == ["collection", "wishlist", "themes"]
+    # Rows the saved order does not mention follow it, so none goes missing.
+    assert saved["result"]["rows"][:3] == ["collection", "wishlist", "themes"]
 
     await client.send_json_auto_id({"type": "lego/dashboard"})
-    assert (await client.receive_json())["result"]["rows"] == [
-        "collection",
-        "wishlist",
-        "themes",
-    ]
+    rows = (await client.receive_json())["result"]["rows"]
+    assert rows[:3] == ["collection", "wishlist", "themes"]
+    assert sorted(rows) == sorted(PANEL_ROWS)
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_rows_can_be_hidden_and_shown(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Hiding a row keeps its place; pieces starts hidden until a user adds it."""
+    await setup_integration(hass, mock_config_entry)
+    client = await hass_ws_client(hass)
+
+    await client.send_json_auto_id({"type": "lego/dashboard"})
+    assert (await client.receive_json())["result"]["hidden"] == ["pieces"]
+
+    await client.send_json_auto_id(
+        {"type": "lego/panel_config/set", "hidden": ["value"]}
+    )
+    saved = (await client.receive_json())["result"]
+    assert saved["hidden"] == ["value"]
+    assert "value" in saved["rows"]
+
+    await client.send_json_auto_id({"type": "lego/dashboard"})
+    assert (await client.receive_json())["result"]["hidden"] == ["value"]
 
 
 @pytest.mark.usefixtures("brickset")

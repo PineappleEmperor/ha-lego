@@ -106,6 +106,11 @@ A **LEGO** entry appears in the sidebar unless you turn it off in options. It ha
   to come, newest first), your wishlist with release and retirement dates, and your
   collection totals. Each row has a drag handle, and the order
   is remembered per Home Assistant user.
+- **Collection value** and **Pieces** show today's total, a line of the last year from
+  Home Assistant's recorded statistics (it fills in week by week after you install), and
+  a bar per theme. Pieces starts hidden.
+- **Customise**, at the top of Home, chooses which rows show; drag a row's handle, or
+  use its arrow keys, to reorder them. Both are remembered per Home Assistant user.
 - **Collection** is the full grid. Its search box covers both your own sets and the whole
   catalogue.
 

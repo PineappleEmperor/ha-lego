@@ -8,6 +8,8 @@ import {
   formatPrice,
   isNamed,
   ownershipCall,
+  statisticPoints,
+  topThemes,
   refreshCall,
   syncedAgo,
   whenLabel,
@@ -213,5 +215,35 @@ describe("card date tone", () => {
     expect(whenTone(set(null, "2026-06-30"), now)).toBe("retiring");
     expect(whenTone(set(null, "2026-12-31"), now)).toBe("");
     expect(whenTone(set(null, "2026-01-31"), now)).toBe("retired");
+  });
+});
+
+describe("history and theme totals", () => {
+  it("reads a TOTAL sensor's state and a MEASUREMENT sensor's mean", () => {
+    expect(
+      statisticPoints([
+        { start: 1000, state: 10 },
+        { start: 2000, mean: 12.5 },
+        { start: 3000, state: null },
+      ]),
+    ).toEqual([
+      { t: 1000, v: 10 },
+      { t: 2000, v: 12.5 },
+    ]);
+  });
+
+  it("keeps the biggest themes and folds the rest into Other", () => {
+    const totals = [
+      { theme: "Icons", value: 900, pieces: 5000, sets: 3 },
+      { theme: "Technic", value: 300, pieces: 9000, sets: 2 },
+      { theme: "City", value: 50, pieces: 400, sets: 1 },
+      { theme: "Gear", value: 0, pieces: 0, sets: 1 },
+    ];
+    expect(topThemes(totals, "value", 2)).toEqual([
+      { theme: "Icons", amount: 900, sets: 3 },
+      { theme: "Technic", amount: 300, sets: 2 },
+      { theme: "Other (1 theme)", amount: 50, sets: 1 },
+    ]);
+    expect(topThemes(totals, "pieces", 1)[0].theme).toBe("Technic");
   });
 });

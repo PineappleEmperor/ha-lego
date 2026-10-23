@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, svg, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 type Hass = {
@@ -40,6 +40,19 @@ interface Stats {
   sets_missing_price: number;
 }
 
+interface ThemeTotal {
+  theme: string;
+  value: number;
+  pieces: number;
+  sets: number;
+}
+
+/** One recorded statistic: when its period started, and the value for it. */
+export interface Point {
+  t: number;
+  v: number;
+}
+
 interface Quota {
   calls_today: number;
   budget: number;
@@ -66,6 +79,10 @@ interface Dashboard {
   currency: string | null;
   quota: Quota;
   last_synced: string | null;
+  hidden: string[];
+  by_theme: ThemeTotal[];
+  history: { value: string | null; pieces: string | null };
+  releases?: { recent: LegoSet[]; upcoming: LegoSet[] } | null;
   stats: Stats;
   wishlist: LegoSet[];
   themes: Record<string, LegoSet[]>;
@@ -159,6 +176,51 @@ export function errorText(err: unknown): string {
   return String(err);
 }
 
+/**
+ * Recorder statistics as chart points. A TOTAL sensor records its state, a
+ * MEASUREMENT one a mean; periods with neither are dropped rather than drawn as 0.
+ */
+export function statisticPoints(
+  rows: {
+    start: number | string;
+    state?: number | null;
+    mean?: number | null;
+  }[],
+): Point[] {
+  const points: Point[] = [];
+  for (const row of rows) {
+    const v = row.state ?? row.mean;
+    if (v == null) continue;
+    points.push({ t: new Date(row.start).getTime(), v });
+  }
+  return points;
+}
+
+/** The biggest few themes by a measure, the rest folded into "Other". */
+export function topThemes(
+  totals: ThemeTotal[],
+  measure: "value" | "pieces",
+  keep = 8,
+): { theme: string; amount: number; sets: number }[] {
+  const ranked = [...totals]
+    .filter((row) => row[measure] > 0)
+    .sort((a, b) => b[measure] - a[measure]);
+  const shown = ranked.slice(0, keep).map((row) => ({
+    theme: row.theme,
+    amount: row[measure],
+    sets: row.sets,
+  }));
+  const rest = ranked.slice(keep);
+  if (rest.length) {
+    shown.push({
+      theme: `Other (${count(rest.length, "theme", "themes")})`,
+      amount: rest.reduce((sum, row) => sum + row[measure], 0),
+      sets: rest.reduce((sum, row) => sum + row.sets, 0),
+    });
+  }
+  return shown;
+}
+
 /** "1 set", "12 sets". */
 export function count(n: number, one: string, many: string): string {
   return `${n.toLocaleString()} ${n === 1 ? one : many}`;
@@ -215,10 +277,17 @@ export function displayName(item: Pick<LegoSet, "name">): string {
 const FALLBACK_ART = "/lego_panel/icon.png";
 
 const ROW_TITLES: Record<string, string> = {
+  recent: "Out recently",
+  upcoming: "Coming soon",
   themes: "New in my themes",
   wishlist: "Your wishlist",
   collection: "Your collection",
+  value: "Collection value",
+  pieces: "Pieces",
 };
+
+/** How far back the value and pieces history reaches. */
+const HISTORY_DAYS = 365;
 
 @customElement("lego-panel")
 export class LegoPanel extends LitElement {
@@ -240,12 +309,26 @@ export class LegoPanel extends LitElement {
   @state() private _pending = new Set<string>();
   @state() private _collectionError = "";
   @state() private _switching = "";
+  @state() private _customising = false;
+  @state() private _history: Record<string, Point[] | "loading" | "none"> = {};
+  @state() private _hoverPoint: { key: string; index: number } | null = null;
   @state() private _accounts: Account[] = [];
   @state() private _account = "";
 
   public override connectedCallback(): void {
     super.connectedCallback();
     void this._load();
+  }
+
+  /** Fetch a chart's history once its row is on the page, not before. */
+  protected override updated(): void {
+    if (this._tab !== "home" || !this._dash) return;
+    const visible = this._visibleRows();
+    for (const key of ["value", "pieces"] as const) {
+      if (visible.includes(key) && this._history[key] === undefined) {
+        void this._loadHistory(key);
+      }
+    }
   }
 
   private async _refreshCollection(): Promise<void> {
@@ -305,6 +388,7 @@ export class LegoPanel extends LitElement {
       );
       this._dash = dash;
       this._error = "";
+      this._history = {};
       if (!this._theme || !(this._theme in dash.themes)) {
         this._theme = Object.keys(dash.themes)[0] ?? "";
       }
@@ -404,10 +488,12 @@ export class LegoPanel extends LitElement {
     if (!step) return;
     ev.preventDefault();
     const rows = [...(this._dash?.rows ?? [])];
+    const visible = this._visibleRows();
+    const target = visible[visible.indexOf(row) + step];
+    if (!target) return;
     const from = rows.indexOf(row);
-    const to = from + step;
-    if (from < 0 || to < 0 || to >= rows.length) return;
-    rows.splice(to, 0, ...rows.splice(from, 1));
+    rows.splice(from, 1);
+    rows.splice(rows.indexOf(target) + (step > 0 ? 1 : 0), 0, row);
     void this._saveRows(rows);
     void this.updateComplete.then(() =>
       this.renderRoot
@@ -517,12 +603,87 @@ export class LegoPanel extends LitElement {
     `;
   }
 
+  /** Rows this account can show: the release rows need the option turned on. */
+  private _availableRows(): string[] {
+    const releases = !!this._dash?.releases;
+    return (this._dash?.rows ?? []).filter(
+      (row) => releases || (row !== "recent" && row !== "upcoming"),
+    );
+  }
+
+  private _visibleRows(): string[] {
+    const hidden = this._dash?.hidden ?? [];
+    return this._availableRows().filter((row) => !hidden.includes(row));
+  }
+
+  private async _setHidden(row: string, hide: boolean): Promise<void> {
+    if (!this._dash) return;
+    const hidden = hide
+      ? [...this._dash.hidden.filter((item) => item !== row), row]
+      : this._dash.hidden.filter((item) => item !== row);
+    this._dash = { ...this._dash, hidden };
+    try {
+      await this.hass.callWS({ type: "lego/panel_config/set", hidden });
+    } catch {
+      // Applied locally already; it just will not survive a reload.
+    }
+  }
+
   private _renderHome(): TemplateResult {
     if (!this._dash) return html`<p class="muted">Loading your collection…</p>`;
+    const visible = this._visibleRows();
     return html`
       <div class="rows">
-        ${this._dash.rows.map((row) => this._renderRow(row))}
+        <div class="homebar">
+          <button
+            class="link"
+            aria-expanded=${this._customising}
+            @click=${() => (this._customising = !this._customising)}
+          >
+            ${this._customising ? "Done" : "Customise"}
+          </button>
+        </div>
+        ${this._customising ? this._renderCustomise() : nothing}
+        ${visible.length
+          ? visible.map((row) => this._renderRow(row))
+          : html`<p class="muted">
+              Every row is hidden. Choose Customise to bring some back.
+            </p>`}
       </div>
+    `;
+  }
+
+  private _renderCustomise(): TemplateResult {
+    const hidden = this._dash?.hidden ?? [];
+    const rows = this._availableRows();
+    return html`
+      <section class="row customise" aria-label="Rows on this page">
+        <h2>Rows on this page</h2>
+        <p class="muted">
+          Choose which rows show, and move them with their handles or the arrow
+          keys. Saved for you on every device.
+        </p>
+        <ul>
+          ${rows.map(
+            (row) => html`
+              <li>
+                <label>
+                  <input
+                    type="checkbox"
+                    .checked=${!hidden.includes(row)}
+                    @change=${(ev: Event) =>
+                      void this._setHidden(
+                        row,
+                        !(ev.target as HTMLInputElement).checked,
+                      )}
+                  />
+                  ${ROW_TITLES[row]}
+                </label>
+              </li>
+            `,
+          )}
+        </ul>
+      </section>
     `;
   }
 
@@ -532,7 +693,21 @@ export class LegoPanel extends LitElement {
         ? this._renderThemes()
         : row === "wishlist"
           ? this._renderWishlist()
-          : this._renderStats();
+          : row === "recent"
+            ? this._carousel(
+                this._dash?.releases?.recent ?? [],
+                "Nothing out in the last four weeks.",
+              )
+            : row === "upcoming"
+              ? this._carousel(
+                  this._dash?.releases?.upcoming ?? [],
+                  "Nothing due in the next four weeks.",
+                )
+              : row === "value"
+                ? this._renderValue()
+                : row === "pieces"
+                  ? this._renderPieces()
+                  : this._renderStats();
     return html`
       <section
         class=${this._dragging === row
@@ -658,15 +833,6 @@ export class LegoPanel extends LitElement {
       [this._num(stats.sets_distinct), "Distinct sets"],
       [this._num(stats.pieces_owned), "Pieces"],
       [this._num(stats.minifigs_owned), "Minifigures"],
-      [
-        formatPrice(
-          stats.value,
-          this._dash?.currency ?? null,
-          this.hass?.locale?.language,
-          true,
-        ) || this._num(Math.round(stats.value)),
-        "Value at RRP",
-      ],
     ];
     return html`
       <div class="stats">
@@ -679,14 +845,6 @@ export class LegoPanel extends LitElement {
         )}
       </div>
       ${this._renderRefresh()}
-      ${stats.sets_missing_price
-        ? html`<p class="caveat">
-            ${stats.sets_missing_price === 1
-              ? "1 set has no published price and is not counted in the value."
-              : `${this._num(stats.sets_missing_price)} sets have no published
-                price and are not counted in the value.`}
-          </p>`
-        : nothing}
       <button
         class="link"
         @click=${() => {
@@ -696,6 +854,223 @@ export class LegoPanel extends LitElement {
       >
         Browse all sets ›
       </button>
+    `;
+  }
+
+  private _money(value: number): string {
+    return (
+      formatPrice(
+        value,
+        this._dash?.currency ?? null,
+        this.hass?.locale?.language,
+        true,
+      ) || this._num(Math.round(value))
+    );
+  }
+
+  private _renderValue(): TemplateResult {
+    const stats = this._dash?.stats;
+    if (!stats) return html``;
+    return html`
+      <p class="headline">
+        <span class="n">${this._money(stats.value)}</span>
+        <span class="l">at LEGO.com RRP, today</span>
+      </p>
+      ${this._renderHistory("value", (v) => this._money(v))}
+      <h3>By theme</h3>
+      ${this._renderBars(topThemes(this._dash?.by_theme ?? [], "value"), (v) =>
+        this._money(v),
+      )}
+      ${stats.sets_missing_price
+        ? html`<p class="caveat">
+            ${stats.sets_missing_price === 1
+              ? "1 set has no published price and is not counted in the value."
+              : `${this._num(stats.sets_missing_price)} sets have no published
+                price and are not counted in the value.`}
+          </p>`
+        : nothing}
+    `;
+  }
+
+  private _renderPieces(): TemplateResult {
+    const stats = this._dash?.stats;
+    if (!stats) return html``;
+    return html`
+      <p class="headline">
+        <span class="n">${this._num(stats.pieces_owned)}</span>
+        <span class="l">pieces owned, today</span>
+      </p>
+      ${this._renderHistory("pieces", (v) => this._num(Math.round(v)))}
+      <h3>By theme</h3>
+      ${this._renderBars(topThemes(this._dash?.by_theme ?? [], "pieces"), (v) =>
+        this._num(v),
+      )}
+    `;
+  }
+
+  private async _loadHistory(key: "value" | "pieces"): Promise<void> {
+    const id = this._dash?.history?.[key];
+    if (!id || this._history[key]) return;
+    this._history = { ...this._history, [key]: "loading" };
+    try {
+      const res = await this.hass.callWS<
+        Record<string, { start: number; state?: number; mean?: number }[]>
+      >({
+        type: "recorder/statistics_during_period",
+        start_time: new Date(
+          Date.now() - HISTORY_DAYS * 86_400_000,
+        ).toISOString(),
+        statistic_ids: [id],
+        period: "week",
+        types: key === "value" ? ["state"] : ["mean"],
+      });
+      const points = statisticPoints(res[id] ?? []);
+      this._history = {
+        ...this._history,
+        [key]: points.length >= 2 ? points : "none",
+      };
+    } catch {
+      this._history = { ...this._history, [key]: "none" };
+    }
+  }
+
+  /**
+   * A single-series line over the last year, from the sensor's recorded weekly
+   * statistics. The SVG stretches to the row's width, so labels, the end marker
+   * and the hover readout are HTML laid over it rather than text inside it.
+   */
+  private _renderHistory(
+    key: "value" | "pieces",
+    format: (v: number) => string,
+  ): TemplateResult {
+    const state = this._history[key];
+    if (state === undefined || state === "loading") {
+      return html`<p class="muted">Loading history…</p>`;
+    }
+    if (state === "none") {
+      return html`<p class="muted">
+        No history yet. Home Assistant records it weekly from the sensor, so a
+        line appears after a couple of weeks.
+      </p>`;
+    }
+    const points = state;
+    const lo = Math.min(...points.map((p) => p.v));
+    const hi = Math.max(...points.map((p) => p.v));
+    const span = hi - lo || 1;
+    const t0 = points[0].t;
+    const tSpan = points[points.length - 1].t - t0 || 1;
+    const x = (p: Point) => ((p.t - t0) / tSpan) * 100;
+    // Headroom top and bottom, so the line never sits on the chart's edge.
+    const y = (p: Point) => 90 - ((p.v - lo) / span) * 80;
+    const line = points.map((p) => `${x(p)},${y(p)}`).join(" ");
+    const area = `0,100 ${line} 100,100`;
+    const last = points[points.length - 1];
+    const hover =
+      this._hoverPoint?.key === key
+        ? points[this._hoverPoint.index]
+        : undefined;
+    const day = (t: number) =>
+      new Date(t).toLocaleDateString(this.hass?.locale?.language, {
+        day: "numeric",
+        month: "short",
+      });
+    return html`
+      <figure class="history">
+        <div
+          class="plot"
+          @pointermove=${(ev: PointerEvent) => {
+            const box = (
+              ev.currentTarget as HTMLElement
+            ).getBoundingClientRect();
+            const at = t0 + ((ev.clientX - box.left) / box.width) * tSpan;
+            let index = 0;
+            points.forEach((p, i) => {
+              if (Math.abs(p.t - at) < Math.abs(points[index].t - at))
+                index = i;
+            });
+            this._hoverPoint = { key, index };
+          }}
+          @pointerleave=${() => (this._hoverPoint = null)}
+        >
+          <svg
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <line class="base" x1="0" y1="100" x2="100" y2="100"></line>
+            <polygon class="wash" points=${area}></polygon>
+            <polyline class="trace" points=${line}></polyline>
+            ${hover
+              ? svg`<line class="cross" x1=${x(hover)} y1="0" x2=${x(hover)} y2="100"></line>`
+              : nothing}
+          </svg>
+          <span
+            class="dot"
+            style="left:${x(hover ?? last)}%;top:${y(hover ?? last)}%"
+          ></span>
+          <span
+            class=${hover ? "readout on" : "readout"}
+            style="left:${Math.min(Math.max(x(hover ?? last), 12), 88)}%"
+            >${format((hover ?? last).v)} · ${day((hover ?? last).t)}</span
+          >
+        </div>
+        <figcaption>
+          <span>${day(points[0].t)}</span>
+          <span>${format(points[0].v)} → ${format(last.v)}</span>
+          <span>${day(last.t)}</span>
+        </figcaption>
+        <details>
+          <summary>Show as a table</summary>
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Week of</th>
+                <th scope="col">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${points.map(
+                (p) =>
+                  html`<tr>
+                    <td>${day(p.t)}</td>
+                    <td>${format(p.v)}</td>
+                  </tr>`,
+              )}
+            </tbody>
+          </table>
+        </details>
+      </figure>
+    `;
+  }
+
+  /** Ranked bars, each labelled at its tip, so no reading depends on colour. */
+  private _renderBars(
+    rows: { theme: string; amount: number; sets: number }[],
+    format: (v: number) => string,
+  ): TemplateResult {
+    if (!rows.length) {
+      return html`<p class="muted">
+        Nothing owned with a published figure yet.
+      </p>`;
+    }
+    const top = rows[0].amount || 1;
+    return html`
+      <ul class="bars">
+        ${rows.map(
+          (row) => html`
+            <li title=${count(row.sets, "set", "sets")}>
+              <span class="label">${row.theme}</span>
+              <span class="track">
+                <span
+                  class="bar"
+                  style="width:${Math.max((row.amount / top) * 100, 1)}%"
+                ></span>
+                <span class="amount">${format(row.amount)}</span>
+              </span>
+            </li>
+          `,
+        )}
+      </ul>
     `;
   }
 
@@ -1306,6 +1681,177 @@ export class LegoPanel extends LitElement {
       right: 0;
       top: 0;
       width: 48px;
+    }
+    .homebar {
+      display: flex;
+      justify-content: flex-end;
+      margin: calc(-1 * var(--ha-space-3, 12px)) 0;
+    }
+    .customise ul {
+      display: grid;
+      gap: 0;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      list-style: none;
+      margin: var(--ha-space-2, 8px) 0 0;
+      padding: 0;
+    }
+    .customise label {
+      align-items: center;
+      cursor: pointer;
+      display: flex;
+      gap: var(--ha-space-3, 12px);
+      font-size: var(--ha-font-size-m, 14px);
+      min-height: 48px;
+    }
+    .customise input {
+      accent-color: var(--lego-primary);
+      height: 20px;
+      margin: 0;
+      width: 20px;
+    }
+    h3 {
+      font-size: var(--ha-font-size-m, 14px);
+      font-weight: var(--ha-font-weight-bold, 700);
+      line-height: var(--ha-line-height-condensed, 1.2);
+      margin: var(--ha-space-5, 20px) 0 var(--ha-space-2, 8px);
+    }
+    .headline {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: var(--ha-space-2, 8px);
+      margin: 0 0 var(--ha-space-3, 12px);
+    }
+    .headline .n {
+      font-size: var(--ha-font-size-3xl, 28px);
+      font-weight: var(--ha-font-weight-bold, 700);
+      line-height: var(--ha-line-height-condensed, 1.2);
+    }
+    .headline .l {
+      color: var(--lego-text-2);
+      font-size: var(--ha-font-size-s, 12px);
+    }
+    .history {
+      margin: 0;
+    }
+    .plot {
+      height: 140px;
+      position: relative;
+      touch-action: pan-y;
+    }
+    .plot svg {
+      display: block;
+      height: 100%;
+      overflow: visible;
+      width: 100%;
+    }
+    .plot .base {
+      stroke: var(--lego-outline);
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+    .plot .wash {
+      fill: var(--lego-primary);
+      fill-opacity: 0.1;
+    }
+    .plot .trace {
+      fill: none;
+      stroke: var(--lego-primary);
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
+      vector-effect: non-scaling-stroke;
+    }
+    .plot .cross {
+      stroke: var(--lego-text-2);
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+    .plot .dot {
+      background: var(--lego-primary);
+      border-radius: var(--ha-border-radius-circle, 50%);
+      box-shadow: 0 0 0 2px var(--lego-surface);
+      height: 8px;
+      position: absolute;
+      transform: translate(-50%, -50%);
+      width: 8px;
+    }
+    .plot .readout {
+      background: var(--lego-surface);
+      border: var(--lego-line) solid var(--lego-outline);
+      border-radius: var(--ha-border-radius-sm, 4px);
+      font-size: var(--ha-font-size-s, 12px);
+      font-variant-numeric: tabular-nums;
+      padding: 2px var(--ha-space-2, 8px);
+      position: absolute;
+      top: calc(-1 * var(--ha-space-2, 8px));
+      transform: translate(-50%, -100%);
+      white-space: nowrap;
+    }
+    .history figcaption {
+      color: var(--lego-text-2);
+      display: flex;
+      font-size: var(--ha-font-size-s, 12px);
+      justify-content: space-between;
+      margin-top: var(--ha-space-1, 4px);
+    }
+    .history details {
+      font-size: var(--ha-font-size-s, 12px);
+      margin-top: var(--ha-space-2, 8px);
+    }
+    .history summary {
+      color: var(--lego-primary);
+      cursor: pointer;
+      min-height: 32px;
+    }
+    .history table {
+      border-collapse: collapse;
+      font-variant-numeric: tabular-nums;
+    }
+    .history td,
+    .history th {
+      border-bottom: var(--lego-line) solid var(--lego-outline);
+      padding: var(--ha-space-1, 4px) var(--ha-space-4, 16px)
+        var(--ha-space-1, 4px) 0;
+      text-align: left;
+    }
+    .bars {
+      display: grid;
+      gap: var(--ha-space-2, 8px);
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .bars li {
+      align-items: center;
+      display: grid;
+      gap: var(--ha-space-3, 12px);
+      grid-template-columns: minmax(80px, 30%) 1fr;
+    }
+    .bars .label {
+      font-size: var(--ha-font-size-s, 12px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .bars .track {
+      align-items: center;
+      display: flex;
+      gap: var(--ha-space-2, 8px);
+      min-width: 0;
+    }
+    .bars .bar {
+      background: var(--lego-primary);
+      border-radius: 0 var(--ha-border-radius-sm, 4px)
+        var(--ha-border-radius-sm, 4px) 0;
+      flex: none;
+      height: 16px;
+      max-width: calc(100% - 72px);
+    }
+    .bars .amount {
+      font-size: var(--ha-font-size-s, 12px);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
     .busy {
       opacity: 0.5;

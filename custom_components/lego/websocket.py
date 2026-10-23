@@ -91,7 +91,10 @@ def websocket_dashboard(
 
     store = hass.data[PANEL_STORE]
     user_id = connection.user.id if connection.user else None
-    connection.send_result(msg["id"], dashboard_payload(entry, store.rows(user_id)))
+    connection.send_result(
+        msg["id"],
+        dashboard_payload(entry, store.rows(user_id), store.hidden(user_id)),
+    )
 
 
 @callback
@@ -132,7 +135,8 @@ def websocket_collection(
 @websocket_api.websocket_command(
     {
         probatio.Required("type"): "lego/panel_config/set",
-        probatio.Required("rows"): [str],
+        probatio.Optional("rows"): [str],
+        probatio.Optional("hidden"): [str],
     }
 )
 @websocket_api.async_response
@@ -141,7 +145,7 @@ async def websocket_set_rows(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Save this user's row order and return what was stored."""
+    """Save this user's row order or hidden rows and return what was stored."""
     # websocket_api.ActiveConnection types user as always set; keep the guard anyway, since a
     # write keyed on a missing user would land in another user's slot.
     if (user := cast("User | None", connection.user)) is None:
@@ -151,8 +155,10 @@ async def websocket_set_rows(
         return
 
     store = hass.data[PANEL_STORE]
-    rows = await store.async_set_rows(user.id, msg["rows"])
-    connection.send_result(msg["id"], {"rows": rows})
+    rows, hidden = await store.async_set_rows(
+        user.id, msg.get("rows"), msg.get("hidden")
+    )
+    connection.send_result(msg["id"], {"rows": rows, "hidden": hidden})
 
 
 @callback
