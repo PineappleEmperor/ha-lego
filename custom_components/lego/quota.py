@@ -14,23 +14,33 @@ from .const import (
     BRICKSET_DAILY_CALL_LIMIT,
     COLLECTION_INTERVAL_STEPS_HOURS,
     FEEDS_INTERVAL_HOURS,
+    NEXT_YEAR_FROM_MONTH,
     POLL_SHARE_OF_BUDGET,
 )
 from .exceptions import BricksetQuotaError
 
 
-def feeds_calls_per_day(watching_themes: bool) -> int:
-    """Return the billed calls the theme feeds spend a day."""
+def feeds_poll_cost(today: date) -> int:
+    """Return the billed calls one feed poll spends on a given day."""
     # Every watched theme rides in one comma-joined call, so the cost does not grow
-    # with the theme count.
-    return math.ceil(24 / FEEDS_INTERVAL_HOURS) if watching_themes else 0
+    # with the theme count; next year's sets take a second call in the autumn.
+    return 2 if today.month >= NEXT_YEAR_FROM_MONTH else 1
+
+
+def feeds_calls_per_day(watching_themes: bool, today: date) -> int:
+    """Return the billed calls the theme feeds spend a day."""
+    if not watching_themes:
+        return 0
+    return math.ceil(24 / FEEDS_INTERVAL_HOURS) * feeds_poll_cost(today)
 
 
 def collection_interval(
-    budget: int, poll_cost: int, watching_themes: bool
+    budget: int, poll_cost: int, watching_themes: bool, today: date
 ) -> timedelta:
     """Return the shortest collection interval whose polls fit the budget."""
-    available = budget * POLL_SHARE_OF_BUDGET - feeds_calls_per_day(watching_themes)
+    available = budget * POLL_SHARE_OF_BUDGET - feeds_calls_per_day(
+        watching_themes, today
+    )
     for hours in COLLECTION_INTERVAL_STEPS_HOURS:
         if math.ceil(24 / hours) * poll_cost <= available:
             return timedelta(hours=hours)

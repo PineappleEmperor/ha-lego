@@ -30,6 +30,9 @@ COUNTRY_TO_REGION: Final = {"GB": "UK", "US": "US", "CA": "CA", "DE": "DE"}
 # sets a week, so twice a day is plenty.
 COLLECTION_INTERVAL_STEPS_HOURS: Final = (1, 2, 3, 4, 6, 8, 12, 24)
 FEEDS_INTERVAL_HOURS: Final = 12
+# LEGO announces its January wave in the autumn, so from this month the feeds also
+# ask for next year's sets, in one more batched call a poll.
+NEXT_YEAR_FROM_MONTH: Final = 9
 # Polls may spend this share of the budget; the rest is kept for actions such as a
 # manual refresh or a set lookup, which would otherwise find the budget spent.
 POLL_SHARE_OF_BUDGET: Final = 0.75

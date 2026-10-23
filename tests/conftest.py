@@ -5,6 +5,7 @@ import gzip
 import json
 from typing import Any
 
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -26,6 +27,16 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Let Home Assistant load integrations from custom_components/ in every test."""
+
+
+@pytest.fixture(autouse=True)
+def spring(freezer: FrozenDateTimeFactory) -> None:
+    """Run every test on a spring day unless it sets its own date.
+
+    From September the feeds spend a second call on next year's sets, so a test
+    counting calls on the real clock would pass or fail with the season.
+    """
+    freezer.move_to("2026-05-15 12:00:00+00:00")
 
 
 SETS_CSV_URL = "https://cdn.rebrickable.com/media/downloads/sets.csv.gz"
@@ -204,6 +215,9 @@ class BricksetServer:
         self.themes_error: str | None = None
         # Clear this to act like a Brickset that stopped accepting comma-joined themes.
         self.themes_batchable = True
+        # Set this to answer theme queries for the requested year only, as Brickset
+        # does; most tests leave it off so their fixture sets match any year.
+        self.filter_theme_year = False
 
         mocker.get(
             SETS_CSV_URL,
@@ -301,6 +315,8 @@ class BricksetServer:
             if not self.themes_batchable:
                 wanted_themes = wanted_themes[:1] if len(wanted_themes) == 1 else []
             sets = [item for item in self.theme_sets if item["theme"] in wanted_themes]
+            if self.filter_theme_year:
+                sets = [item for item in sets if item["year"] == params.get("year")]
         elif "setNumber" in params:
             requested = str(params["setNumber"]).split(",")
             pool = [*self.owned, *self.wanted, *self.theme_sets]

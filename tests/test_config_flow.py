@@ -1,6 +1,6 @@
 """Tests for the LEGO config, reauth, reconfigure and options flows."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 import aiohttp
 from homeassistant import config_entries
@@ -382,3 +382,5 @@ def test_estimated_daily_calls() -> None:
     assert estimated_daily_calls({**themes, CONF_DAILY_CALL_BUDGET: 20}) == 14
     # A collection past a page costs more a poll, so it is polled every 2 h.
     assert estimated_daily_calls(themes, poll_cost=4) == 50
+    # From September next year's sets cost a second call a feed poll.
+    assert estimated_daily_calls(themes, today=date(2026, 10, 1)) == 52

@@ -1,6 +1,6 @@
 """Tests for the Brickset daily call budget."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
@@ -13,7 +13,11 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.lego.const import BRICKSET_DAILY_CALL_LIMIT
 from custom_components.lego.exceptions import BricksetQuotaError
-from custom_components.lego.quota import QuotaManager, collection_interval
+from custom_components.lego.quota import (
+    QuotaManager,
+    collection_interval,
+    feeds_calls_per_day,
+)
 
 from .conftest import BricksetServer, setup_integration
 
@@ -135,9 +139,22 @@ def test_collection_interval_fits_the_budget(
     budget: int, poll_cost: int, watching_themes: bool, hours: int
 ) -> None:
     """The interval is the shortest whose polls stay inside three quarters of it."""
-    assert collection_interval(budget, poll_cost, watching_themes) == timedelta(
-        hours=hours
+    spring = date(2026, 5, 15)
+    assert collection_interval(budget, poll_cost, watching_themes, spring) == (
+        timedelta(hours=hours)
     )
+
+
+def test_autumn_feeds_take_their_share_of_the_budget() -> None:
+    """Next year's call doubles the feed cost, which can stretch the collection."""
+    spring, autumn = date(2026, 5, 15), date(2026, 10, 1)
+    assert feeds_calls_per_day(True, spring) == 2
+    assert feeds_calls_per_day(True, autumn) == 4
+    assert feeds_calls_per_day(False, autumn) == 0
+    # A budget of 68 leaves 51 for polls: 48 hourly collection calls fit beside the
+    # 2 spring feed calls but not the 4 autumn ones, so autumn polls every 2 hours.
+    assert collection_interval(68, 2, True, spring) == timedelta(hours=1)
+    assert collection_interval(68, 2, True, autumn) == timedelta(hours=2)
 
 
 def test_resets_at_midnight_utc(freezer: FrozenDateTimeFactory) -> None:

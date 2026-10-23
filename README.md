@@ -253,7 +253,9 @@ integration polls on two schedules, which it sets itself from the daily call bud
   hourly; a budget of 20 polls every 4 hours. The rest of the budget is kept for actions
   such as a manual refresh.
 - **Themes** (every 12 h): one call for all of them, comma joined. A theme with
-  no releases this year is confirmed separately, which costs one more.
+  no releases this year is confirmed separately, which costs one more. From September,
+  when LEGO announces its January wave, a second call adds next year's sets, so the
+  feeds cost 4 calls a day instead of 2 until the year turns.
 - `getKeyUsageStats` does not count against the 100. It is polled at most every 30
   minutes to reconcile the local tally with Brickset's own count, which also catches
   calls made by other tools sharing the key.
@@ -280,8 +282,8 @@ remaining headroom.
   later. **Update now** in the panel, or `lego.refresh_collection`, fetches them at once.
 - **Value is LEGO.com RRP, not market value**, and only for the four markets Brickset
   publishes: UK, US, Canada and Germany.
-- **Theme feeds cover the current calendar year.** A set Brickset files under next year
-  appears when the year turns.
+- **Theme feeds cover this year, and next year from September.** A set Brickset files
+  under next year before September appears in September.
 - **A set Brickset lists before its name is announced** shows as "Name tbd" until the
   name is published.
 - **A Brickset password change invalidates the saved token**, so Home Assistant asks you

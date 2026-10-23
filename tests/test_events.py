@@ -203,3 +203,52 @@ async def test_theme_batching_falls_back_when_brickset_stops_accepting_it(
     assert [s.number for s in feeds["Technic"]] == ["42200-1", "42199-1"]
     assert [s.number for s in feeds["Icons"]] == ["10333-1"]
     assert "falling back to one call per theme" in caplog.text
+
+
+async def test_autumn_feeds_include_next_year(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """From September next year's announced sets join the feed, newest first."""
+    freezer.move_to("2026-09-10 12:00:00+00:00")
+    brickset.filter_theme_year = True
+    await setup_integration(hass, mock_config_entry)
+    feeds = mock_config_entry.runtime_data.feeds
+    assert feeds.poll_cost == 2
+
+    events: list[Event] = []
+
+    @callback
+    def record(event: Event) -> None:
+        events.append(event)
+
+    hass.bus.async_listen(EVENT_NEW_SET, record)
+    brickset.theme_sets.append(
+        make_set(70, "42250-1", "January Technic", theme="Technic", year=2027)
+    )
+    await feeds.async_refresh()
+    await hass.async_block_till_done()
+
+    theme_years = [c["year"] for c in brickset.get_sets_calls if "theme" in c]
+    assert theme_years[-2:] == [2026, 2027]
+    assert [s.number for s in feeds.data["Technic"]] == [
+        "42250-1",
+        "42200-1",
+        "42199-1",
+    ]
+    assert [event.data["set_number"] for event in events] == ["42250-1"]
+    latest = hass.states.get("sensor.brickset_brickfan_latest_technic_set")
+    assert latest.attributes["set_number"] == "42250-1"
+
+
+async def test_spring_feeds_ask_for_this_year_only(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """Before September nothing is asked of next year, so a poll is one call."""
+    await setup_integration(hass, mock_config_entry)
+
+    theme_years = [c["year"] for c in brickset.get_sets_calls if "theme" in c]
+    assert theme_years == [2026]
+    assert mock_config_entry.runtime_data.feeds.poll_cost == 1

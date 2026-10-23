@@ -26,6 +26,7 @@ from .const import (
     FEEDS_INTERVAL_HOURS,
     MIN_COLLECTION_POLL_COST,
     MIN_TIME_BETWEEN_QUOTA_CHECKS,
+    NEXT_YEAR_FROM_MONTH,
     PAGE_SIZE,
 )
 from .exceptions import (
@@ -35,7 +36,7 @@ from .exceptions import (
     BricksetUserHashError,
 )
 from .models import CollectionSummary, LegoSet
-from .quota import QuotaManager, collection_interval
+from .quota import QuotaManager, collection_interval, feeds_poll_cost
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -234,6 +235,7 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
                 quota.budget,
                 MIN_COLLECTION_POLL_COST,
                 bool(config_entry.options.get(CONF_THEMES)),
+                dt_util.now().date(),
             ),
         )
 
@@ -309,6 +311,7 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
             self.quota.budget,
             _collection_poll_cost(data),
             bool(self.config_entry.options.get(CONF_THEMES)),
+            dt_util.now().date(),
         )
         return data
 
@@ -369,6 +372,12 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
         self._batching_warned = False
 
     @property
+    @override
+    def poll_cost(self) -> int:
+        """Return the billed calls one refresh would spend."""
+        return feeds_poll_cost(dt_util.now().date())
+
+    @property
     def themes(self) -> list[str]:
         """Return the themes being watched for new releases."""
         return list(self.config_entry.options.get(CONF_THEMES, []))
@@ -427,11 +436,25 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
 
         for theme in missing:
             feeds[theme] = await self._theme_query(theme, year)
+        if dt_util.now().month >= NEXT_YEAR_FROM_MONTH:
+            await self._add_next_year(feeds, year + 1)
         if self.catalogue is not None:
             self.catalogue.remember([s for sets in feeds.values() for s in sets])
             await self.catalogue.async_save_if_dirty()
         self._fire_new_set_events(feeds)
         return feeds
+
+    async def _add_next_year(self, feeds: dict[str, list[LegoSet]], year: int) -> None:
+        """Put next year's announced sets ahead of this year's, newest first."""
+        # One batched call, with no per-theme fallback: most themes have nothing
+        # announced for next year yet, which is not a sign that batching broke.
+        upcoming: dict[str, list[LegoSet]] = {theme: [] for theme in feeds}
+        for lego_set in await self._theme_query(",".join(feeds), year):
+            if lego_set.theme in upcoming:
+                upcoming[lego_set.theme].append(lego_set)
+        for theme, sets in upcoming.items():
+            known = {lego_set.number for lego_set in feeds[theme]}
+            feeds[theme] = [s for s in sets if s.number not in known] + feeds[theme]
 
     def _fire_new_set_events(self, feeds: dict[str, list[LegoSet]]) -> None:
         """Fire an event per set new since the previous poll, baselining the first."""

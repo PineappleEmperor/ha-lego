@@ -1,6 +1,7 @@
 """Config, reauth, reconfigure and options flows for the LEGO integration."""
 
 from collections.abc import Mapping
+from datetime import date
 import logging
 import math
 from typing import TYPE_CHECKING, Any, cast, override
@@ -27,6 +28,7 @@ from homeassistant.helpers.selector import (
     TextSelectorConfig,
     TextSelectorType,
 )
+from homeassistant.util import dt as dt_util
 import probatio
 
 from .api import BricksetClient
@@ -78,26 +80,32 @@ STEP_USER_SCHEMA = probatio.Schema(
 
 
 def collection_hours(
-    options: Mapping[str, Any], poll_cost: int = MIN_COLLECTION_POLL_COST
+    options: Mapping[str, Any],
+    poll_cost: int = MIN_COLLECTION_POLL_COST,
+    today: date | None = None,
 ) -> int:
     """Return the hours between collection polls that a set of options yields."""
     interval = collection_interval(
         options.get(CONF_DAILY_CALL_BUDGET, DEFAULT_DAILY_CALL_BUDGET),
         poll_cost,
         bool(options.get(CONF_THEMES)),
+        today or dt_util.now().date(),
     )
     return int(interval.total_seconds() // 3600)
 
 
 def estimated_daily_calls(
-    options: Mapping[str, Any], poll_cost: int = MIN_COLLECTION_POLL_COST
+    options: Mapping[str, Any],
+    poll_cost: int = MIN_COLLECTION_POLL_COST,
+    today: date | None = None,
 ) -> int:
     """Estimate billed getSets calls per day for a set of options."""
-    collection_polls = math.ceil(24 / collection_hours(options, poll_cost))
+    today = today or dt_util.now().date()
+    collection_polls = math.ceil(24 / collection_hours(options, poll_cost, today))
     # A theme with no releases this year is confirmed individually, which adds a
     # call the steady state does not pay.
     return collection_polls * poll_cost + feeds_calls_per_day(
-        bool(options.get(CONF_THEMES))
+        bool(options.get(CONF_THEMES)), today
     )
 
 
