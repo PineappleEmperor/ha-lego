@@ -7,8 +7,10 @@ rules:
   config-flow-test-coverage: done
   config-flow: done
   dependency-transparency:
-    status: exempt
-    comment: No third-party requirements; the Brickset client ships in this repo.
+    status: done
+    comment: >-
+      manifest.json lists no requirements; the Brickset client ships in this
+      repository, so there is nothing unpublished to depend on.
   docs-actions: done
   docs-high-level-description: done
   docs-installation-instructions: done
@@ -60,8 +62,9 @@ rules:
   stale-devices:
     status: exempt
     comment: >-
-      One service device per config entry, removed with the entry;
-      async_remove_config_entry_device refuses manual removal.
+      The only device is the account's service device, one per config entry. It
+      cannot go stale while its entry exists and Home Assistant removes it with the
+      entry, so async_remove_config_entry_device refuses manual removal.
   diagnostics: done
   exception-translations: done
   icon-translations: done
@@ -82,6 +85,10 @@ rules:
   docs-examples: todo
 
   # Platinum
-  async-dependency: done
+  async-dependency:
+    status: exempt
+    comment: >-
+      No external dependency: the Brickset client is part of this integration and
+      already async, on Home Assistant's shared aiohttp session.
   inject-websession: done
   strict-typing: done
