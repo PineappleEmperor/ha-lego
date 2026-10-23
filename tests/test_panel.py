@@ -344,6 +344,9 @@ async def test_dashboard_returns_the_home_view(
     assert result["stats"]["pieces_owned"] == 7122
     assert [item["set_number"] for item in result["wishlist"]] == ["10294-1"]
     assert list(result["themes"]) == ["Technic"]
+    # Cards show LEGO.com RRP, so the panel needs the region's currency.
+    assert result["currency"] == "GBP"
+    assert result["wishlist"][0]["retail_price"] is not None
     assert len(brickset.get_sets_calls) == before
     # The panel writes through actions that require the entry id, so the payload
     # has to carry it; without this the ownership toggle fails validation.

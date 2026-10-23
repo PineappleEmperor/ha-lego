@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   accountCall,
   displayName,
+  formatPrice,
   isNamed,
   ownershipCall,
   refreshCall,
@@ -113,5 +114,17 @@ describe("sync age", () => {
     );
     expect(syncedAgo("2026-08-05T12:00:00Z", now)).toBe("Updated 3 hours ago");
     expect(syncedAgo("2026-08-02T15:30:00Z", now)).toBe("Updated 3 days ago");
+  });
+});
+
+describe("price", () => {
+  it("shows the RRP in the region's currency", () => {
+    expect(formatPrice(99.99, "GBP", "en-GB")).toBe("£99.99");
+    expect(formatPrice(649.99, "USD", "en-US")).toBe("$649.99");
+  });
+
+  it("shows nothing when Brickset has no price or no currency", () => {
+    expect(formatPrice(null, "GBP", "en-GB")).toBe("");
+    expect(formatPrice(99.99, null, "en-GB")).toBe("");
   });
 });

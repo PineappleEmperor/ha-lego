@@ -63,6 +63,7 @@ interface Dashboard {
   device_id: string | null;
   rows: string[];
   region: string;
+  currency: string | null;
   quota: Quota;
   last_synced: string | null;
   stats: Stats;
@@ -126,6 +127,19 @@ export function syncedAgo(lastSynced: string | null, now: Date): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 48) return `Updated ${ago.format(-hours, "hour")}`;
   return `Updated ${ago.format(-Math.floor(hours / 24), "day")}`;
+}
+
+/** A LEGO.com RRP in the account's region, or "" when Brickset has none. */
+export function formatPrice(
+  value: number | null,
+  currency: string | null,
+  language?: string,
+): string {
+  if (value === null || !currency) return "";
+  return new Intl.NumberFormat(language, {
+    style: "currency",
+    currency,
+  }).format(value);
 }
 
 export function isNamed(item: Pick<LegoSet, "name">): boolean {
@@ -595,7 +609,18 @@ export class LegoPanel extends LitElement {
               >${displayName(item)}</span
             >`,
           )}
-          <span class="num">${item.set_number}</span>
+          <span class="num"
+            >${[
+              item.set_number,
+              formatPrice(
+                item.retail_price,
+                this._dash?.currency ?? null,
+                this.hass?.locale?.language,
+              ),
+            ]
+              .filter(Boolean)
+              .join(" · ")}</span
+          >
           <span class="when">${this._when(item)}</span>
           <div class="foot">
             <span

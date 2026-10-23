@@ -24,6 +24,7 @@ from .const import (
     PANEL_ROWS,
     PANEL_STORAGE_KEY,
     PANEL_URL_PATH,
+    REGION_CURRENCY,
     STORAGE_VERSION,
 )
 
@@ -219,6 +220,8 @@ def dashboard_payload(entry: LegoConfigEntry, rows: list[str]) -> dict[str, Any]
         "device_id": device.id if device else None,
         "rows": rows,
         "region": region,
+        # Prices are LEGO.com RRP in the region's own currency.
+        "currency": REGION_CURRENCY.get(region),
         "quota": {
             "calls_today": quota.calls_today,
             "budget": quota.budget,
