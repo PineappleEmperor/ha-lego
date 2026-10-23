@@ -15,9 +15,11 @@ printed so a failure can be reproduced exactly.
 
 Marked live, excluded from the default run, and gated in CI behind an
 environment that needs a human approval. Five billed calls per run: owned,
-wanted, the catalogue sample, the theme batch and next year's theme batch.
+wanted, the catalogue sample, the theme batch and next year's theme batch, plus
+one per page of this year's sets for the release feed, up to four.
 """
 
+from collections import Counter
 import csv
 import gzip
 import io
@@ -31,7 +33,13 @@ from homeassistant.util import dt as dt_util
 import pytest
 
 from custom_components.lego.api import API_BASE, BricksetClient
-from custom_components.lego.const import SETS_CSV_URL
+from custom_components.lego.const import (
+    PAGE_SIZE,
+    RELEASES_MAX_PAGES,
+    RELEASES_PAGES_ESTIMATE,
+    SETS_CSV_URL,
+)
+from custom_components.lego.coordinator import releases_query
 
 pytestmark = [
     pytest.mark.live,
@@ -174,6 +182,59 @@ async def test_next_years_theme_query_answers() -> None:
     assert all(lego_set.year == year for lego_set in sets), (
         f"asked for {year} and got {sorted({s.year for s in sets})}"
     )
+
+
+async def test_the_release_feed_query_pages_through_a_year() -> None:
+    """The all-themes rows page through a whole year; every page is a billed call.
+
+    Written from the docs, not a live payload: that a year alone filters without a
+    theme, that orderBy Number sorts ascending, that pageNumber moves on without
+    repeating sets, and how many pages a year takes against the budget's estimate.
+    """
+    year = dt_util.utcnow().year
+    async with aiohttp.ClientSession() as session:
+        client = BricksetClient(session, os.environ["BRICKSET_API_KEY"])
+        sets = await client.get_all_sets(
+            releases_query(year), max_pages=RELEASES_MAX_PAGES
+        )
+
+    pages = min(len(sets) // PAGE_SIZE + 1, RELEASES_MAX_PAGES)
+    categories = Counter(lego_set.category or "(none)" for lego_set in sets)
+    dated = sum(1 for lego_set in sets if lego_set.release_date("UK") is not None)
+    print(  # noqa: T201
+        f"\n{year}: {len(sets)} sets over {pages} pages "
+        f"(budget estimate {RELEASES_PAGES_ESTIMATE}); {dated} with a UK or "
+        f"set-wide release date; categories {dict(categories.most_common())}"
+    )
+
+    assert sets, f"a year-only query for {year} returned nothing"
+    assert all(lego_set.year == year for lego_set in sets), (
+        f"asked for {year} and got {sorted({s.year for s in sets})}; the year "
+        "filter needs a theme beside it"
+    )
+    numbers = [lego_set.number for lego_set in sets]
+    assert len(set(numbers)) == len(numbers), (
+        "pageNumber repeated sets across pages, so the feed double-counts"
+    )
+    digits = [int(n.split("-")[0]) for n in numbers if n.split("-")[0].isdigit()]
+    assert digits == sorted(digits) or numbers == sorted(numbers), (
+        f"orderBy Number is not ascending (starts {numbers[:5]}), so a capped "
+        "poll would drop real sets instead of gear"
+    )
+    assert len(sets) < RELEASES_MAX_PAGES * PAGE_SIZE, (
+        f"{year} filled all {RELEASES_MAX_PAGES} pages, so the feed is missing "
+        "sets; raise RELEASES_MAX_PAGES"
+    )
+    assert pages <= RELEASES_PAGES_ESTIMATE, (
+        f"{year} takes {pages} pages but the budget plans on "
+        f"{RELEASES_PAGES_ESTIMATE} until a poll measures it; raise "
+        "RELEASES_PAGES_ESTIMATE"
+    )
+    assert "Normal" in categories, (
+        f"no set is in the Normal category ({sorted(categories)}), which the "
+        "release rows keep; the category names have changed"
+    )
+    assert dated, f"no {year} set carries a release date, so both rows stay empty"
 
 
 async def test_the_daily_count_rolls_over_at_midnight_utc() -> None:

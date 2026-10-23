@@ -518,6 +518,14 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
                 )
 
 
+def releases_query(year: int) -> dict[str, Any]:
+    """Return the getSets query the release feed pages through for a year."""
+    # Ascending, so if the page cap ever bites it drops gear numbered in the
+    # millions rather than the sets the rows are for. The live API tests run this
+    # same query, so the two cannot drift apart.
+    return {"year": year, "orderBy": "Number"}
+
+
 class LegoReleasesCoordinator(LegoBaseCoordinator[list[LegoSet]]):
     """Poll every set of the year for the panel's all-themes release rows."""
 
@@ -564,10 +572,8 @@ class LegoReleasesCoordinator(LegoBaseCoordinator[list[LegoSet]]):
 
     async def _year(self, year: int) -> tuple[list[LegoSet], int]:
         """Fetch every set Brickset lists for a year and the pages it took."""
-        # Ascending, so if the cap ever bites it drops gear numbered in the
-        # millions rather than the sets the rows are for.
         sets = await self.client.get_all_sets(
-            {"year": year, "orderBy": "Number"}, max_pages=RELEASES_MAX_PAGES
+            releases_query(year), max_pages=RELEASES_MAX_PAGES
         )
         # Paging stops at the first short page, so a full last page costs one more.
         return sets, min(len(sets) // PAGE_SIZE + 1, RELEASES_MAX_PAGES)
