@@ -3,7 +3,6 @@
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 import logging
-import math
 from typing import Any, cast, override
 
 from homeassistant.config_entries import ConfigEntry
@@ -15,7 +14,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import BricksetClient
+from .api import BricksetClient, pages_spent
 from .catalogue import SetCatalogue
 from .const import (
     CONF_RELEASES,
@@ -29,7 +28,6 @@ from .const import (
     MIN_COLLECTION_POLL_COST,
     MIN_TIME_BETWEEN_QUOTA_CHECKS,
     NEXT_YEAR_FROM_MONTH,
-    PAGE_SIZE,
     RELEASES_PAGES_ESTIMATE,
     YEAR_MAX_PAGES,
 )
@@ -77,12 +75,10 @@ class CollectionData:
 
 def _collection_poll_cost(data: CollectionData | None) -> int:
     """Return the billed calls a collection poll spends, given the last result."""
-    # Owned and wanted are one call each until a list passes a page.
+    # Owned and wanted are one call each until a list fills a page.
     if data is None:
         return MIN_COLLECTION_POLL_COST
-    pages = math.ceil(len(data.owned) / PAGE_SIZE) + math.ceil(
-        len(data.wanted) / PAGE_SIZE
-    )
+    pages = pages_spent(len(data.owned)) + pages_spent(len(data.wanted))
     return max(pages, MIN_COLLECTION_POLL_COST)
 
 
@@ -395,15 +391,27 @@ def theme_query(themes: list[str], year: int) -> dict[str, Any]:
     return {"theme": ",".join(themes), "year": year, "orderBy": "NumberDESC"}
 
 
+def newest_first(sets: list[LegoSet], region: str, today: date) -> list[LegoSet]:
+    """Order a theme's sets so the most recently released comes first."""
+    # Then the dated ones still to come, soonest first, and the announced sets
+    # with no date last, since they are furthest away. Within a day the higher
+    # set number, the later one, goes first: the sort keeps that order.
+
+    def key(item: LegoSet) -> tuple[int, int]:
+        released = item.release_date(region)
+        if released is None:
+            return (2, 0)
+        if released <= today:
+            return (0, -released.toordinal())
+        return (1, released.toordinal())
+
+    by_number = sorted(sets, key=lambda item: item.number_key, reverse=True)
+    return sorted(by_number, key=key)
+
+
 def paging_issue_id(entry_id: str) -> str:
     """Return the id of the Repair raised while the followed themes need paging."""
     return f"theme_feed_paging_{entry_id}"
-
-
-def _pages(count: int) -> int:
-    """Return the billed pages a paged query that returned count sets spent."""
-    # Paging stops at the first short page, so a full last page costs one more.
-    return min(count // PAGE_SIZE + 1, YEAR_MAX_PAGES)
 
 
 class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
@@ -533,6 +541,11 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
             data = await self._fetch_years(years)
         else:
             data = FeedsData(themes=await self._fetch_themes(years, today))
+        # Neither query returns the sets in release order, so they are put in it.
+        data.themes = {
+            theme: newest_first(sets, self.region, today)
+            for theme, sets in data.themes.items()
+        }
         self._measured = sum(self._pages[year] for year in years)
         if self.catalogue is not None:
             fetched = data.releases or [
@@ -550,7 +563,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
             fetched = await self.client.get_all_sets(
                 year_query(year), max_pages=YEAR_MAX_PAGES
             )
-            self._pages[year] = _pages(len(fetched))
+            self._pages[year] = pages_spent(len(fetched), YEAR_MAX_PAGES)
             sets.extend(fetched)
         # Reading every theme costs the same however many are followed.
         self._clear_paging_issue()
@@ -558,7 +571,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         # A theme typed by hand need not match Brickset's capitals, which its own
         # theme filter forgives.
         followed = {theme.casefold(): theme for theme in self.themes}
-        for lego_set in sorted(sets, key=lambda s: (s.year, s.number), reverse=True):
+        for lego_set in sets:
             if (theme := followed.get((lego_set.theme or "").casefold())) is not None:
                 themes[theme].append(lego_set)
         return FeedsData(themes=themes, releases=sets)
@@ -572,8 +585,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         for year in years:
             found = await self._theme_year(themes, year, today)
             for theme in themes:
-                # A later year's sets go ahead of the earlier ones.
-                feeds[theme] = found[theme] + feeds[theme]
+                feeds[theme] += found[theme]
         return feeds
 
     async def _theme_year(
@@ -587,7 +599,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         for lego_set in batched:
             if lego_set.theme in found:
                 found[lego_set.theme].append(lego_set)
-        pages = _pages(len(batched))
+        pages = pages_spent(len(batched), YEAR_MAX_PAGES)
         if year == today.year:
             self._update_paging_issue(pages)
             # The comma-joined theme is undocumented, so a theme it returned
@@ -600,7 +612,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
                 alone = await self.client.get_all_sets(
                     theme_query([theme], year), max_pages=YEAR_MAX_PAGES
                 )
-                pages += _pages(len(alone))
+                pages += pages_spent(len(alone), YEAR_MAX_PAGES)
                 found[theme] = alone
         self._pages[year] = pages
         return found

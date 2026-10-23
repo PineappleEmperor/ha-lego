@@ -127,6 +127,18 @@ class LegoSet:
     launch_date: date | None = None
     exit_date: date | None = None
 
+    @property
+    def number_key(self) -> tuple[bool, int, str, int]:
+        """Return a key that sorts set numbers as numbers, 10294 after 9999."""
+        base, _, variant = self.number.partition("-")
+        numeric = base.isdigit()
+        return (
+            numeric,
+            int(base) if numeric else 0,
+            base,
+            int(variant) if variant.isdigit() else 0,
+        )
+
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> LegoSet:
         """Build a set from a getSets record."""

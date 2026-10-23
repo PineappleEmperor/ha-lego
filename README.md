@@ -142,7 +142,7 @@ exceeded rather than failing at the API.
 | Brickset calls today | Diagnostic; usage against the daily limit. |
 | Last synced | Diagnostic timestamp of the last time Brickset answered a poll. Stays available, so a dashboard can show how old the data is. |
 | Next wishlist retirement | Days until the soonest set on your wishlist leaves sale, with that set's full record in attributes. Sets already gone are excluded. |
-| Latest *theme* set | One per watched theme; newest set number, with details in attributes. |
+| Latest *theme* set | One per watched theme: the most recently released set, or the soonest due if none is out yet, with details and this year's count in attributes. |
 | Set retirements / releases / anniversaries | Three calendar entities. |
 
 ## Actions

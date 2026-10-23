@@ -30,6 +30,17 @@ _INVALID_HASH_FRAGMENTS = ("invalid userhash", "invalid user hash", "not logged 
 _QUOTA_FRAGMENTS = ("exceeded", "too many", "limit reached")
 
 
+# Paging stops here even if a page comes back full, which bounds a bad day's cost.
+DEFAULT_MAX_PAGES = 10
+
+
+def pages_spent(count: int, max_pages: int = DEFAULT_MAX_PAGES) -> int:
+    """Return the billed pages get_all_sets spends to return count sets."""
+    # It stops at the first short page, so an empty result still costs a call
+    # and a full last page costs one more to find out it was the last.
+    return min(count // PAGE_SIZE + 1, max_pages)
+
+
 class BricksetClient:
     """Call the Brickset API v3 over Home Assistant's shared session."""
 
@@ -158,7 +169,7 @@ class BricksetClient:
         return [LegoSet.from_api(item) for item in result.get("sets") or []]
 
     async def get_all_sets(
-        self, params: dict[str, Any], max_pages: int = 10
+        self, params: dict[str, Any], max_pages: int = DEFAULT_MAX_PAGES
     ) -> list[LegoSet]:
         """Page through getSets; each page is billed, so max_pages caps the cost."""
         collected: list[LegoSet] = []
