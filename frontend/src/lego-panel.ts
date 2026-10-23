@@ -548,25 +548,53 @@ export class LegoPanel extends LitElement {
     </div>`;
   }
 
+  /**
+   * Open the set's Brickset page in a new tab. The image and the name both link,
+   * and only the name takes a tab stop, so a keyboard reaches each set once.
+   */
+  private _linked(
+    item: LegoSet,
+    content: TemplateResult,
+    decorative = false,
+  ): TemplateResult {
+    if (!item.url) return content;
+    return html`<a
+      class="open"
+      href=${item.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      tabindex=${decorative ? "-1" : nothing}
+      aria-hidden=${decorative ? "true" : nothing}
+      >${content}</a
+    >`;
+  }
+
   private _card(item: LegoSet): TemplateResult {
     return html`
       <article class="card">
-        ${item.image
-          ? html`<img src=${item.image} alt="" loading="lazy" />`
-          : html`<img
-              class="noart"
-              src=${FALLBACK_ART}
-              alt=""
-              loading="lazy"
-            />`}
+        ${this._linked(
+          item,
+          item.image
+            ? html`<img src=${item.image} alt="" loading="lazy" />`
+            : html`<img
+                class="noart"
+                src=${FALLBACK_ART}
+                alt=""
+                loading="lazy"
+              />`,
+          true,
+        )}
         <div class="meta">
-          <span
-            class=${isNamed(item) ? "name" : "name unnamed"}
-            title=${isNamed(item)
-              ? item.name
-              : "Brickset has not published a name yet"}
-            >${displayName(item)}</span
-          >
+          ${this._linked(
+            item,
+            html`<span
+              class=${isNamed(item) ? "name" : "name unnamed"}
+              title=${isNamed(item)
+                ? item.name
+                : "Brickset has not published a name yet"}
+              >${displayName(item)}</span
+            >`,
+          )}
           <span class="num">${item.set_number}</span>
           <span class="when">${this._when(item)}</span>
           <div class="foot">
@@ -998,6 +1026,16 @@ export class LegoPanel extends LitElement {
       color: var(--lego-bad);
       padding: var(--ha-space-5, 20px) var(--ha-space-4, 16px);
     }
+    a.open {
+      display: block;
+      min-width: 0;
+      color: inherit;
+      text-decoration: none;
+    }
+    a.open:hover .name {
+      text-decoration: underline;
+    }
+    a:focus-visible,
     button:focus-visible,
     input:focus-visible,
     select:focus-visible {

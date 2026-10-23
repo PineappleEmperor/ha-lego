@@ -113,7 +113,8 @@ One sidebar entry serves every Brickset account you have set up. A picker appear
 header when there is more than one, and your choice is remembered per Home Assistant user,
 as the row order already is.
 
-Every card can mark a set owned or not owned. The panel reads only websocket commands, so
+Every card opens the set's Brickset page in a new tab from its picture or name, and can
+mark the set owned or not owned. The panel reads only websocket commands, so
 browsing and searching cost no Brickset calls; only the ownership toggle writes.
 
 An **Update now** button on the Home view polls Brickset immediately, showing what the
