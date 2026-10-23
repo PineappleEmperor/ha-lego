@@ -26,11 +26,13 @@ import io
 import json
 import os
 import random
+import socket
 from typing import Any
 
 import aiohttp
 from homeassistant.util import dt as dt_util
 import pytest
+import pytest_socket
 
 from custom_components.lego.api import API_BASE, BricksetClient
 from custom_components.lego.const import (
@@ -50,6 +52,20 @@ pytestmark = [
         reason="needs BRICKSET_API_KEY and BRICKSET_USER_HASH",
     ),
 ]
+
+
+@pytest.fixture(autouse=True)
+def real_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Lift the test plugin's network block, which these tests exist to cross."""
+    # Home Assistant's pytest plugin blocks sockets, limits connects to localhost
+    # and refuses DNS before every test, so without this each call here fails
+    # before it reaches Brickset. pytest_socket keeps the originals it replaced;
+    # monkeypatch puts the block back afterwards.
+    monkeypatch.setattr(socket, "socket", pytest_socket._true_socket)
+    monkeypatch.setattr(socket.socket, "connect", pytest_socket._true_connect)
+    monkeypatch.setattr(socket, "getaddrinfo", pytest_socket._true_getaddrinfo)
+    monkeypatch.setattr(socket, "gethostbyname", pytest_socket._true_gethostbyname)
+
 
 CATALOGUE_SAMPLE = 8
 THEMES = ("Technic", "Icons")
