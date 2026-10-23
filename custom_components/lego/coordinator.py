@@ -10,6 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_REGION
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -148,6 +149,14 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         # the sync time goes out on its own signal.
         async_dispatcher_send(self.hass, self.signal_synced)
         return data
+
+    @property
+    def device_id(self) -> str | None:
+        """Return the id of the account's Brickset device, which actions target."""
+        device = dr.async_get(self.hass).async_get_device_by_identifier(
+            (DOMAIN, self.config_entry.entry_id), self.config_entry.entry_id
+        )
+        return device.id if device else None
 
     @property
     def signal_synced(self) -> str:
@@ -309,6 +318,7 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
             return
         previous = {lego_set.number: lego_set for lego_set in data.wanted}
         region = self.region
+        device_id = self.device_id
         for lego_set in new_data.wanted:
             before = previous.get(lego_set.number)
             if before is None:
@@ -326,6 +336,7 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
                     EVENT_WANTED_CHANGED,
                     {
                         "entry_id": self.config_entry.entry_id,
+                        "device_id": device_id,
                         "set_number": lego_set.number,
                         "name": lego_set.name,
                         "brickset_url": lego_set.brickset_url,
@@ -427,6 +438,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
         if (previous := self._previous) is None:
             return
         region = self.region
+        device_id = self.device_id
         for theme, sets in feeds.items():
             seen = {lego_set.number for lego_set in previous.get(theme, [])}
             for lego_set in sets:
@@ -438,6 +450,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
                     EVENT_NEW_SET,
                     {
                         "entry_id": self.config_entry.entry_id,
+                        "device_id": device_id,
                         "theme": theme,
                         "set_number": lego_set.number,
                         "name": lego_set.name,

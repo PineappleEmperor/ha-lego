@@ -16,7 +16,7 @@ from custom_components.lego.const import (
     EVENT_WANTED_CHANGED,
 )
 
-from .conftest import BricksetServer, make_set, setup_integration
+from .conftest import BricksetServer, lego_device_id, make_set, setup_integration
 
 
 async def test_new_set_event(
@@ -52,6 +52,8 @@ async def test_new_set_event(
     assert data["theme"] == "Technic"
     assert data["name"] == "Brand New Technic"
     assert data["entry_id"] == mock_config_entry.entry_id
+    # The device is what the actions target, so an automation can pass it straight on.
+    assert data["device_id"] == lego_device_id(hass, mock_config_entry)
     assert data["release_date"] == "2024-01-01"
     assert data["retirement_date"] == "2099-12-31"
     assert data["retail_price"] == 99.99
@@ -129,6 +131,7 @@ async def test_wanted_set_change_event(
     assert events[0].data["set_number"] == "10294-1"
     assert events[0].data["price"] == 699.99
     assert events[0].data["retirement_date"] == "2027-01-31"
+    assert events[0].data["device_id"] == lego_device_id(hass, mock_config_entry)
 
 
 @pytest.mark.usefixtures("brickset")

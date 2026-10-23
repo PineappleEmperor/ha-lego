@@ -153,8 +153,8 @@ device list in the action editor. Automations written for 0.4.0 or 1.0.0rc1 pass
 
 | Event | Fired when | Data |
 |-------|-----------|------|
-| `lego_new_set` | A watched theme gains a set since the previous poll. The first poll after setup only records what is there, so a restart does not replay the catalogue. | `entry_id`, `theme`, `set_number`, `name`, `year`, `pieces`, `minifigs`, `image_url`, `brickset_url`, `released`, `release_date`, `retirement_date`, `retail_price`, `region` |
-| `lego_wanted_set_changed` | A set on your wishlist changes price, retirement date or availability. | `entry_id`, `set_number`, `name`, `brickset_url`, and whichever of `price`, `retirement_date` and `availability` changed |
+| `lego_new_set` | A watched theme gains a set since the previous poll. The first poll after setup only records what is there, so a restart does not replay the catalogue. | `entry_id`, `device_id`, `theme`, `set_number`, `name`, `year`, `pieces`, `minifigs`, `image_url`, `brickset_url`, `released`, `release_date`, `retirement_date`, `retail_price`, `region` |
+| `lego_wanted_set_changed` | A set on your wishlist changes price, retirement date or availability. | `entry_id`, `device_id`, `set_number`, `name`, `brickset_url`, and whichever of `price`, `retirement_date` and `availability` changed |
 
 ## Examples
 
@@ -176,6 +176,25 @@ automation:
           message: >-
             {{ trigger.event.data.set_number }} {{ trigger.event.data.name }},
             {{ trigger.event.data.pieces }} pieces
+```
+
+Put every new set from a theme you follow straight on your wishlist. The event carries the
+account's `device_id`, so it passes straight to the action:
+
+```yaml
+automation:
+  - alias: "LEGO: wishlist new Icons sets"
+    triggers:
+      - trigger: event
+        event_type: lego_new_set
+        event_data:
+          theme: Icons
+    actions:
+      - action: lego.set_collection
+        data:
+          device_id: "{{ trigger.event.data.device_id }}"
+          set_number: "{{ trigger.event.data.set_number }}"
+          wanted: true
 ```
 
 A wishlist set retires within a month:
