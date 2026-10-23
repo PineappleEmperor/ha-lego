@@ -1,4 +1,4 @@
-"""The optional sidebar panel: registration and its per-user row order."""
+"""The optional sidebar panel and dashboard cards: registration and per-user layout."""
 
 from datetime import date, timedelta
 from pathlib import Path
@@ -108,8 +108,13 @@ class PanelStore:
 PANEL_STORE: HassKey[PanelStore] = HassKey(f"{DOMAIN}_panel_store")
 
 
+def _module_url(version: Any) -> str:
+    """Return the bundle's URL, versioned so a browser drops an old copy."""
+    return f"{PANEL_MODULE_URL}?v={version}"
+
+
 async def async_setup_panel_static(hass: HomeAssistant) -> None:
-    """Serve the built panel bundle and the brand icon it uses for missing art."""
+    """Serve the bundle and brand icon, and load the bundle's cards on every page."""
     here = Path(__file__).parent
     await hass.http.async_register_static_paths(
         [
@@ -119,6 +124,10 @@ async def async_setup_panel_static(hass: HomeAssistant) -> None:
             StaticPathConfig(PANEL_ICON_URL, str(here / "brand" / "icon.png"), True),
         ]
     )
+    integration = await async_get_integration(hass, DOMAIN)
+    # The panel loads this exact URL too, and a browser evaluates a module once per
+    # URL, so the panel page does not define the cards twice.
+    frontend.add_extra_js_url(hass, _module_url(integration.version))
 
 
 def panel_wanted(hass: HomeAssistant) -> bool:
@@ -145,7 +154,7 @@ async def async_refresh_panel(hass: HomeAssistant) -> None:
             hass,
             frontend_url_path=PANEL_URL_PATH,
             webcomponent_name=PANEL_COMPONENT,
-            module_url=f"{PANEL_MODULE_URL}?v={integration.version}",
+            module_url=_module_url(integration.version),
             sidebar_title="LEGO",
             sidebar_icon="mdi:toy-brick",
             require_admin=False,
