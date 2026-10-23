@@ -535,6 +535,7 @@ export class LegoPanel extends LitElement {
                   .narrow=${this.narrow}
                 ></ha-menu-button>`
               : nothing}
+            <img class="logo" src=${BRAND_ICON} alt="" />
             <h1>LEGO</h1>
           </div>
           ${this._renderAccounts()}
@@ -1366,6 +1367,12 @@ export class LegoPanel extends LitElement {
       display: flex;
       gap: var(--ha-space-1, 4px);
       min-width: 0;
+    }
+    /* The integration's own brick, the icon Home Assistant shows for it too. */
+    .logo {
+      block-size: 32px;
+      flex: none;
+      inline-size: 32px;
     }
     /* The page title reads like Home Assistant's own toolbar titles: regular
        weight, so the bold section headings below it are the ones that stand out. */
