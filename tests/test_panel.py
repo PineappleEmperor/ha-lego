@@ -1,10 +1,13 @@
 """Tests for the sidebar panel and its websocket commands."""
 
+from datetime import timedelta
 from http import HTTPStatus
+from typing import Any
 
 from homeassistant.components import frontend
 from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import (
@@ -190,49 +193,33 @@ async def test_theme_rows_show_only_new_sets_newest_first(
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """Sets out for months drop off the row; the rest run newest release first."""
-    # The suite runs on 15 May 2026, so anything out before mid-February is old.
+    today = dt_util.now().date()
+
+    def dated(set_id: int, name: str, days: int) -> dict[str, Any]:
+        """A Technic set that went, or goes, on sale this many days from today."""
+        return make_set(
+            set_id,
+            f"{42200 + set_id}-1",
+            name,
+            theme="Technic",
+            first_available=f"{(today + timedelta(days=days)).isoformat()}T00:00:00Z",
+        )
+
+    # Kept for 90 days after release, the last of them included.
     brickset.theme_sets[:] = [
+        dated(1, "Out 91 days ago", -91),
+        dated(2, "Out 90 days ago", -90),
+        dated(3, "Out 30 days ago", -30),
+        dated(4, "Due in a month", 30),
         make_set(
-            81,
-            "42201-1",
-            "January Set",
-            theme="Technic",
-            year=2026,
-            first_available="2026-01-01T00:00:00Z",
-        ),
-        make_set(
-            82,
-            "42202-1",
-            "March Set",
-            theme="Technic",
-            year=2026,
-            first_available="2026-03-01T00:00:00Z",
-        ),
-        make_set(
-            83,
-            "42203-1",
-            "August Set",
-            theme="Technic",
-            year=2026,
-            first_available="2026-08-01T00:00:00Z",
-        ),
-        make_set(
-            84,
-            "42204-1",
+            5,
+            "42205-1",
             "Announced Set",
             theme="Technic",
-            year=2026,
             first_available=None,
             released=False,
         ),
-        make_set(
-            85,
-            "42205-1",
-            "May Set",
-            theme="Technic",
-            year=2026,
-            first_available="2026-05-01T00:00:00Z",
-        ),
+        dated(6, "Out today", 0),
     ]
     await setup_integration(hass, mock_config_entry)
 
@@ -241,9 +228,10 @@ async def test_theme_rows_show_only_new_sets_newest_first(
     result = (await client.receive_json())["result"]
 
     assert [item["name"] for item in result["themes"]["Technic"]] == [
-        "August Set",
-        "May Set",
-        "March Set",
+        "Due in a month",
+        "Out today",
+        "Out 30 days ago",
+        "Out 90 days ago",
         "Announced Set",
     ]
 

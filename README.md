@@ -91,10 +91,10 @@ Reachable via **Configure** on the integration entry.
 | Option | Default | Notes |
 |--------|---------|-------|
 | Pricing region | from HA's country | Which LEGO.com market supplies prices and availability dates (`UK`, `US`, `CA`, `DE`). |
-| Themes to watch | none | Which themes to follow for new releases. However many you pick, they ride in one call per refresh. |
+| Themes to watch | none | Which themes to follow for new releases. However many you pick, they ride in one call per refresh, until together they hold more than 500 sets in a year. |
 | Daily call budget | 80 | The most calls Home Assistant spends a day. The refresh intervals are set from it (see [Data updates](#data-updates)), and polling pauses until midnight UTC once it is spent. |
 | Show the LEGO panel in the sidebar | on | Whether to add the sidebar page for browsing your collection, your wishlist and new releases. |
-| Follow releases across all themes | on for new setups | Fills the panel's **Out recently** and **Coming soon** rows with every set out in the last four weeks or due in the next four, whatever its theme. About 3 calls a day, 4 from September. Off for entries set up before it existed, so upgrading spends nothing new until you turn it on. |
+| Follow releases across all themes | on for new setups | Fills the panel's **Out recently** and **Coming soon** rows with every set out in the last four weeks or due in the next four, whatever its theme. It reads every set of the year once a day, about 3 calls, and your watched themes then come from the same read rather than costing calls of their own. Off for entries set up before it existed, so upgrading spends nothing new until you turn it on. |
 | Keep a local set index | on | Whether to keep a local copy of Rebrickable's set list, so looking a set up costs no Brickset calls. |
 | Include set names in the index | on | Whether that index stores names as well as numbers, which is what searching by name needs. Takes roughly 1.8 MB on disk instead of 450 KB. |
 | Set index refresh interval | 7 days | How often the local list is re-downloaded, from 1 to 90 days. Costs no Brickset calls, and a set missing from it still works at the price of one lookup. |
@@ -257,25 +257,33 @@ entities:
 ## Data updates
 
 Brickset allows **100 `getSets` calls per API key per day**; no other method counts. The
-integration polls on up to three schedules, which it sets itself from the daily call budget:
+integration polls on two schedules, which it sets itself from the daily call budget:
 
 - **Collection**: one call for owned sets and one for wanted, plus one per extra page of
   500. It polls as often as fits in three quarters of the budget, stepping from every
   hour through 2, 3, 4, 6, 8 and 12 hours to once a day. The default budget of 80 polls
   hourly; a budget of 20 polls every 4 hours. The rest of the budget is kept for actions
   such as a manual refresh.
-- **Themes** (every 12 h): one call for all of them, comma joined. A theme with
-  no releases this year is confirmed separately, which costs one more. From September,
-  when LEGO announces its January wave, a second call adds next year's sets, so the
-  feeds cost 4 calls a day instead of 2 until the year turns.
-- **Releases across all themes** (once a day, when followed): `getSets` has no date
-  filter, so this pages through every set of the year, about 3 calls, plus one for next
-  year from September; once a poll has counted the pages, the budget plans on that count.
-  Its cost comes out of the collection's share, so on a small budget the collection polls
-  a step less often. A poll reserves all its pages first, so it never spends calls it
-  cannot finish. It fetches in the background after setup, so each Home Assistant restart
-  or options save spends one more poll than the daily estimate shows; a failed first
-  fetch is retried every 3 hours.
+- **New releases**, in one of two ways:
+  - **Watched themes only** (every 12 h): one call for all of them, comma joined. A
+    theme with no releases this year is confirmed separately, which costs one more. If
+    the watched themes together pass 500 sets in a year, each refresh pages on at a
+    call a page, and a Repair in **Settings → Repairs** says so; it clears once they
+    fit one call again.
+  - **Following releases across all themes** (once a day): `getSets` has no date
+    filter, so this reads each year the four weeks either side of today touch, whole:
+    this year alone for most of it, last year as well until 28 January, and next year
+    from 4 December. A year is about 1,000 entries once gear and books count, so 3
+    calls. The watched themes are cut from the same read, so they cost nothing more.
+  - **Next year** is asked for only once Brickset has a set filed under it, which
+    `getThemes` says without spending a call. Until then a poll does not spend one on
+    an empty year.
+  - Once a poll has counted its pages, the budget plans on that count, and what the
+    feeds spend comes out of the collection's share. A poll reserves all its pages
+    first, so it never spends calls it cannot finish. Following all themes fetches in
+    the background after setup, so each Home Assistant restart or options save spends
+    one more poll than the daily estimate shows; a failed first fetch is retried every
+    3 hours.
 - `getKeyUsageStats` does not count against the 100. It is polled at most every 30
   minutes to reconcile the local tally with Brickset's own count, which also catches
   calls made by other tools sharing the key.
@@ -302,11 +310,9 @@ remaining headroom.
   later. **Update now** in the panel, or `lego.refresh_collection`, fetches them at once.
 - **Value is LEGO.com RRP, not market value**, and only for the four markets Brickset
   publishes: UK, US, Canada and Germany.
-- **Theme feeds cover this year, and next year from September.** A set Brickset files
-  under next year before September appears in September.
-- **Out recently misses last December's sets in early January**, since the release
-  feed covers this year and next, and a second year of pages every day would cost too
-  much.
+- **Next year's sets appear once Brickset files one under next year**, which is when
+  `getThemes` reports it. A set labelled next year but released this December appears
+  once next year's wave is filed.
 - **A set Brickset lists before its name is announced** shows as "Name tbd" until the
   name is published.
 - **A Brickset password change invalidates the saved token**, so Home Assistant asks you

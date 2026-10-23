@@ -14,13 +14,18 @@ releases, obscure themes, records with almost nothing filled in. The seed is
 printed so a failure can be reproduced exactly.
 
 Marked live, excluded from the default run, and gated in CI behind an
-environment that needs a human approval. Five billed calls per run: owned,
-wanted, the catalogue sample, the theme batch and next year's theme batch, plus
-one per page of this year's sets for the release feed, up to four.
+environment that needs a human approval. Six billed calls per run: owned,
+wanted, the catalogue sample, the theme batch, next year's theme batch and the
+updatedSince probe, plus one per page of this year's sets, up to four. getThemes
+and getKeyUsageStats are not billed.
+
+Every test runs on the real clock: the suite's tests choose their own dates, and
+these exist to see the real API on the real day.
 """
 
 from collections import Counter
 import csv
+from datetime import timedelta
 import gzip
 import io
 import json
@@ -37,11 +42,11 @@ import pytest_socket
 from custom_components.lego.api import API_BASE, BricksetClient
 from custom_components.lego.const import (
     PAGE_SIZE,
-    RELEASES_MAX_PAGES,
     RELEASES_PAGES_ESTIMATE,
     SETS_CSV_URL,
+    YEAR_MAX_PAGES,
 )
-from custom_components.lego.coordinator import releases_query
+from custom_components.lego.coordinator import year_query
 
 pytestmark = [
     pytest.mark.live,
@@ -98,8 +103,24 @@ async def _post(
     return payload
 
 
-def _assert_shape(records: list[dict[str, Any]], source: str) -> None:
-    """Check every field the integration reads, naming the set that broke."""
+def _has_exit_date(record: dict[str, Any]) -> bool:
+    """Whether a retirement date is readable from the top level or any region."""
+    regions = record.get("LEGOCom") or {}
+    return "exitDate" in record or any(
+        payload.get("dateLastAvailable")
+        for payload in regions.values()
+        if isinstance(payload, dict)
+    )
+
+
+def _assert_shape(records: list[dict[str, Any]], source: str) -> list[str]:
+    """Check every field the integration reads; return the sets with no exit date.
+
+    A set with no exit date is legitimate: a 1988 set predates LEGO.com, and a
+    promotional one was never on sale. The integration reads None for it, so
+    the test reports them rather than failing on them.
+    """
+    undated: list[str] = []
     for record in records:
         number = f"{record.get('number')}-{record.get('numberVariant')}"
         where = f"{source} {number}"
@@ -107,17 +128,12 @@ def _assert_shape(records: list[dict[str, Any]], source: str) -> None:
         for key in ("setID", "number", "numberVariant", "name", "year", "theme"):
             assert key in record, f"{where} has no {key}"
 
-        regions = record.get("LEGOCom") or {}
-        regional_exit = [
-            payload.get("dateLastAvailable")
-            for payload in regions.values()
-            if isinstance(payload, dict)
-        ]
-        # Retirement drives the countdowns, so it has to be readable from one
-        # place or the other. Brickset omits the regional date more often than not.
-        assert "exitDate" in record or any(regional_exit), (
-            f"{where} publishes no exit date at the top level and none per region"
-        )
+        if not _has_exit_date(record):
+            undated.append(
+                f"{number} ({record.get('year')}, {record.get('availability')})"
+            )
+    print(f"\n{source} without an exit date: {undated or 'none'}")  # noqa: T201
+    return undated
 
 
 async def test_the_account_collection_keeps_its_shape() -> None:
@@ -134,8 +150,15 @@ async def test_the_account_collection_keeps_its_shape() -> None:
             "add a few sets to it, ideally one long retired and one still on sale"
         )
 
-    _assert_shape(owned_sets, "owned")
-    _assert_shape(wanted_sets, "wanted")
+    records = owned_sets + wanted_sets
+    undated = _assert_shape(owned_sets, "owned") + _assert_shape(wanted_sets, "wanted")
+    # Retirement drives the countdowns, so the field has to be there to read on
+    # the sets that have one, or every countdown is silently unknown.
+    assert len(undated) < len(records), (
+        "no set in the account carries an exit date at the top level or in any "
+        "region; add one still on sale or retired since 2015 to the test account, "
+        "or the field has moved"
+    )
 
     for record in owned_sets + wanted_sets:
         collection = record.get("collection") or {}
@@ -172,10 +195,16 @@ async def test_a_random_slice_of_the_catalogue_keeps_its_shape() -> None:
 
 async def test_theme_still_accepts_a_comma_separated_list() -> None:
     """The feed poll is one call because of this; losing it silently costs N."""
+    # The feed's own query: one year, a full page. Without the year, Icons alone
+    # fills a page across every year before Technic is reached.
     async with aiohttp.ClientSession() as session:
         client = BricksetClient(session, os.environ["BRICKSET_API_KEY"])
         sets = await client.get_sets(
-            {"theme": ",".join(THEMES), "pageSize": 100, "orderBy": "Theme"}
+            {
+                "theme": ",".join(THEMES),
+                "year": dt_util.utcnow().year,
+                "pageSize": PAGE_SIZE,
+            }
         )
 
     returned = {lego_set.theme for lego_set in sets}
@@ -185,19 +214,62 @@ async def test_theme_still_accepts_a_comma_separated_list() -> None:
     )
 
 
-async def test_next_years_theme_query_answers() -> None:
-    """From September the feeds ask for next year; it must answer, empty or not."""
+async def test_theme_years_say_whether_next_year_is_announced() -> None:
+    """The feeds ask getThemes, unbilled, before spending a call on next year.
+
+    yearTo has to move as soon as Brickset files a set under next year, or the
+    feeds would skip a wave that has been announced.
+    """
     year = dt_util.utcnow().year + 1
     async with aiohttp.ClientSession() as session:
         client = BricksetClient(session, os.environ["BRICKSET_API_KEY"])
+        theme_years = await client.get_theme_years()
         sets = await client.get_sets(
-            {"theme": ",".join(THEMES), "year": year, "pageSize": 100}
+            {"theme": ",".join(THEMES), "year": year, "pageSize": PAGE_SIZE}
         )
 
-    print(f"\nsets announced for {year}: {len(sets)}")  # noqa: T201
+    print(  # noqa: T201
+        f"\nsets announced for {year}: {len(sets)}; yearTo "
+        f"{ {theme: theme_years.get(theme) for theme in THEMES} }; latest of any "
+        f"theme {max(theme_years.values(), default=None)}"
+    )
+    assert theme_years, "getThemes no longer carries yearTo"
     assert all(lego_set.year == year for lego_set in sets), (
         f"asked for {year} and got {sorted({s.year for s in sets})}"
     )
+    for theme in THEMES:
+        announced = theme_years.get(theme, 0) >= year
+        filed = any(lego_set.theme == theme for lego_set in sets)
+        assert announced == filed, (
+            f"{theme}: yearTo says {year} is {'' if announced else 'not '}"
+            f"announced, but getSets {'found' if filed else 'found nothing'}; the "
+            "free check no longer predicts the billed one"
+        )
+
+
+async def test_updated_since_narrows_a_year() -> None:
+    """Recorded, not relied on: whether updatedSince could make daily polls cheap.
+
+    The feeds do not use it. A date change has to bump a set's update time for it
+    to be safe, and this only shows what Brickset returns, so it asserts nothing
+    beyond the year filter still holding.
+    """
+    year = dt_util.utcnow().year
+    since = (dt_util.utcnow() - timedelta(days=7)).date().isoformat()
+    async with aiohttp.ClientSession() as session:
+        payload = await _post(
+            session,
+            "getSets",
+            {"year": year, "updatedSince": since, "pageSize": PAGE_SIZE},
+        )
+
+    records = payload.get("sets") or []
+    stamps = sorted(str(r["lastUpdated"]) for r in records if r.get("lastUpdated"))
+    print(  # noqa: T201
+        f"\n{year} sets updated since {since}: {payload.get('matches')} matches, "
+        f"{len(records)} returned; lastUpdated runs {stamps[:1]} to {stamps[-1:]}"
+    )
+    assert all(record.get("year") == year for record in records)
 
 
 async def test_the_release_feed_query_pages_through_a_year() -> None:
@@ -210,11 +282,9 @@ async def test_the_release_feed_query_pages_through_a_year() -> None:
     year = dt_util.utcnow().year
     async with aiohttp.ClientSession() as session:
         client = BricksetClient(session, os.environ["BRICKSET_API_KEY"])
-        sets = await client.get_all_sets(
-            releases_query(year), max_pages=RELEASES_MAX_PAGES
-        )
+        sets = await client.get_all_sets(year_query(year), max_pages=YEAR_MAX_PAGES)
 
-    pages = min(len(sets) // PAGE_SIZE + 1, RELEASES_MAX_PAGES)
+    pages = min(len(sets) // PAGE_SIZE + 1, YEAR_MAX_PAGES)
     categories = Counter(lego_set.category or "(none)" for lego_set in sets)
     dated = sum(1 for lego_set in sets if lego_set.release_date("UK") is not None)
     print(  # noqa: T201
@@ -237,9 +307,9 @@ async def test_the_release_feed_query_pages_through_a_year() -> None:
         f"orderBy Number is not ascending (starts {numbers[:5]}), so a capped "
         "poll would drop real sets instead of gear"
     )
-    assert len(sets) < RELEASES_MAX_PAGES * PAGE_SIZE, (
-        f"{year} filled all {RELEASES_MAX_PAGES} pages, so the feed is missing "
-        "sets; raise RELEASES_MAX_PAGES"
+    assert len(sets) < YEAR_MAX_PAGES * PAGE_SIZE, (
+        f"{year} filled all {YEAR_MAX_PAGES} pages, so the feed is missing "
+        "sets; raise YEAR_MAX_PAGES"
     )
     assert pages <= RELEASES_PAGES_ESTIMATE, (
         f"{year} takes {pages} pages but the budget plans on "

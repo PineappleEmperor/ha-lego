@@ -312,19 +312,22 @@ def dashboard_payload(
         key=lambda item: _wishlist_key(item, region, today),
     )
     # None tells the panel the option is off, so it offers no release rows at all.
-    releases = entry.runtime_data.releases
+    feeds = entry.runtime_data.feeds
+    feed = feeds.data
     release_rows: dict[str, Any] | None = None
-    if releases is not None:
+    if feeds.releases:
         release_rows = {
             key: [summarise(item, region) for item in sets]
-            for key, sets in _releases(releases.data or [], region, today).items()
+            for key, sets in _releases(
+                (feed.releases if feed else None) or [], region, today
+            ).items()
         }
         # Fetched in the background after setup, so empty may only mean not yet.
         release_rows["status"] = (
             "ready"
-            if releases.data is not None
+            if feed is not None and feed.releases is not None
             else "fetching"
-            if releases.last_update_success
+            if feeds.last_update_success
             else "failed"
         )
     return {
@@ -366,6 +369,6 @@ def dashboard_payload(
             theme: [
                 summarise(item, region) for item in _new_in_theme(sets, region, today)
             ]
-            for theme, sets in (entry.runtime_data.feeds.data or {}).items()
+            for theme, sets in (feed.themes if feed else {}).items()
         },
     }

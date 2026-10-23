@@ -1,5 +1,7 @@
 """Tests for the LEGO calendars."""
 
+from datetime import timedelta
+
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
@@ -144,9 +146,8 @@ async def test_empty_calendar_has_no_next_event(
         hass,
         RETIREMENTS,
         dt_util.now().strftime("%Y-%m-%d %H:%M:%S"),
-        (dt_util.now().replace(year=dt_util.now().year + 1)).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        ),
+        # A year on by days: replacing the year has no 29 February to land on.
+        (dt_util.now() + timedelta(days=365)).strftime("%Y-%m-%d %H:%M:%S"),
     )
     assert events == []
     assert hass.states.get(RETIREMENTS).state == "off"

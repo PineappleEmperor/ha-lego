@@ -16,8 +16,10 @@ from custom_components.lego.exceptions import BricksetQuotaError
 from custom_components.lego.quota import (
     QuotaManager,
     collection_interval,
+    feed_years,
     feeds_calls_per_day,
-    releases_calls_per_day,
+    feeds_poll_estimate,
+    window_years,
 )
 
 from .conftest import BricksetServer, setup_integration
@@ -125,55 +127,115 @@ async def test_unchanged_poll_still_moves_last_synced(
 
 
 @pytest.mark.parametrize(
-    ("budget", "poll_cost", "watching_themes", "hours"),
+    ("budget", "poll_cost", "feeds_calls", "hours"),
     [
-        (80, 2, True, 1),
-        (80, 2, False, 1),
-        (80, 4, True, 2),
-        (20, 2, True, 4),
-        (100, 2, True, 1),
+        (80, 2, 2, 1),
+        (80, 2, 0, 1),
+        (80, 4, 2, 2),
+        (20, 2, 2, 4),
+        (100, 2, 2, 1),
         # Nothing fits a budget this small, so it polls once a day regardless.
-        (4, 2, True, 24),
+        (4, 2, 2, 24),
     ],
 )
 def test_collection_interval_fits_the_budget(
-    budget: int, poll_cost: int, watching_themes: bool, hours: int
+    budget: int, poll_cost: int, feeds_calls: int, hours: int
 ) -> None:
     """The interval is the shortest whose polls stay inside three quarters of it."""
-    spring = date(2026, 5, 15)
-    assert collection_interval(budget, poll_cost, watching_themes, spring) == (
+    assert collection_interval(budget, poll_cost, feeds_calls) == (
         timedelta(hours=hours)
     )
 
 
-def test_autumn_feeds_take_their_share_of_the_budget() -> None:
-    """Next year's call doubles the feed cost, which can stretch the collection."""
-    spring, autumn = date(2026, 5, 15), date(2026, 10, 1)
-    assert feeds_calls_per_day(True, spring) == 2
-    assert feeds_calls_per_day(True, autumn) == 4
-    assert feeds_calls_per_day(False, autumn) == 0
-    # A budget of 68 leaves 51 for polls: 48 hourly collection calls fit beside the
-    # 2 spring feed calls but not the 4 autumn ones, so autumn polls every 2 hours.
-    assert collection_interval(68, 2, True, spring) == timedelta(hours=1)
-    assert collection_interval(68, 2, True, autumn) == timedelta(hours=2)
+def test_feeds_take_their_share_of_the_budget() -> None:
+    """What the feeds spend comes out of the collection's share."""
+    # A budget of 68 leaves 51 for polls: 48 hourly collection calls fit beside
+    # 2 feed calls a day but not 4, so with 4 the collection polls every 2 hours.
+    assert collection_interval(68, 2, 2) == timedelta(hours=1)
+    assert collection_interval(68, 2, 4) == timedelta(hours=2)
+
+
+@pytest.mark.parametrize(
+    ("today", "years"),
+    [
+        # The window reaches back into last year until 28 January.
+        (date(2026, 1, 1), [2025, 2026]),
+        (date(2026, 1, 28), [2025, 2026]),
+        (date(2026, 1, 29), [2026]),
+        (date(2026, 6, 15), [2026]),
+        # It reaches on into next year from 4 December.
+        (date(2026, 12, 3), [2026]),
+        (date(2026, 12, 4), [2026, 2027]),
+        (date(2026, 12, 31), [2026, 2027]),
+        # Leap years move neither edge.
+        (date(2028, 1, 28), [2027, 2028]),
+        (date(2028, 1, 29), [2028]),
+        (date(2028, 2, 29), [2028]),
+        (date(2028, 12, 4), [2028, 2029]),
+    ],
+)
+def test_window_years_follow_four_weeks_either_side(
+    today: date, years: list[int]
+) -> None:
+    """The release rows ask for a year only while the window touches it."""
+    assert window_years(today) == years
+
+
+@pytest.mark.parametrize(
+    ("today", "releases", "next_year", "years"),
+    [
+        # The followed themes alone need this year, and next once announced.
+        (date(2026, 1, 10), False, False, [2026]),
+        (date(2026, 10, 1), False, True, [2026, 2027]),
+        # All themes add last year while the window reaches it.
+        (date(2026, 1, 10), True, False, [2025, 2026]),
+        # Next year is skipped while nothing is filed under it, window or not.
+        (date(2026, 12, 10), True, False, [2026]),
+        (date(2026, 12, 10), True, True, [2026, 2027]),
+        (date(2026, 6, 15), True, True, [2026, 2027]),
+    ],
+)
+def test_feed_years(
+    today: date, releases: bool, next_year: bool, years: list[int]
+) -> None:
+    """A poll asks for each year it needs once, and none it does not."""
+    assert feed_years(today, releases, next_year) == years
+
+
+@pytest.mark.parametrize(
+    ("today", "themes", "releases", "cost"),
+    [
+        (date(2026, 5, 15), False, False, 0),
+        # One batched call a year for the followed themes, next year from September.
+        (date(2026, 8, 31), True, False, 1),
+        (date(2026, 9, 1), True, False, 2),
+        # Three pages a whole year, one for next year's early announcements.
+        (date(2026, 5, 15), False, True, 3),
+        (date(2026, 9, 1), True, True, 4),
+        # January reads last year whole too.
+        (date(2026, 1, 10), False, True, 6),
+        (date(2026, 12, 10), False, True, 4),
+    ],
+)
+def test_feeds_poll_estimate(
+    today: date, themes: bool, releases: bool, cost: int
+) -> None:
+    """Before a poll has measured its pages, the budget plans on these."""
+    assert feeds_poll_estimate(today, themes, releases) == cost
+
+
+def test_feeds_calls_per_day() -> None:
+    """Themes alone poll twice a day; reading whole years, once."""
+    spring = date(2026, 5, 15)
+    assert feeds_calls_per_day(False, False, spring) == 0
+    assert feeds_calls_per_day(True, False, spring) == 2
+    assert feeds_calls_per_day(True, True, spring) == 3
+    # A measured poll replaces the estimate.
+    assert feeds_calls_per_day(False, True, spring, measured=2) == 2
+    assert feeds_calls_per_day(True, False, spring, measured=3) == 6
 
 
 def test_resets_at_midnight_utc(freezer: FrozenDateTimeFactory) -> None:
     """Brickset's day ends at midnight UTC."""
     freezer.move_to("2026-08-05 22:30:00+00:00")
     assert QuotaManager(80).resets_at.isoformat() == "2026-08-06T00:00:00+00:00"
-
-
-def test_releases_calls_per_day() -> None:
-    """The release feed costs its pages once a day, plus next year in autumn."""
-    assert releases_calls_per_day(False, date(2026, 5, 15)) == 0
-    assert releases_calls_per_day(True, date(2026, 5, 15)) == 3
-    assert releases_calls_per_day(True, date(2026, 9, 1)) == 4
-    # Once a poll has measured its pages, that replaces the estimate.
-    assert releases_calls_per_day(True, date(2026, 5, 15), measured=1) == 1
-    # Its calls come out of the collection's share: 60 less 3 still fits hourly,
-    # while 18 less 3 leaves room for polls every 4 h instead of every 3 h.
-    spring = date(2026, 5, 15)
-    assert collection_interval(80, 2, False, spring, 3) == timedelta(hours=1)
-    assert collection_interval(24, 2, False, spring) == timedelta(hours=3)
-    assert collection_interval(24, 2, False, spring, 3) == timedelta(hours=4)

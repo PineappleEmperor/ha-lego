@@ -61,7 +61,7 @@ from .exceptions import (
     BricksetError,
     BricksetUserHashError,
 )
-from .quota import collection_interval, feeds_calls_per_day, releases_calls_per_day
+from .quota import collection_interval, feeds_calls_per_day
 
 if TYPE_CHECKING:
     from .coordinator import LegoConfigEntry
@@ -81,22 +81,30 @@ STEP_USER_SCHEMA = probatio.Schema(
 )
 
 
+def _feeds_calls(
+    options: Mapping[str, Any], today: date, feeds_cost: int | None
+) -> int:
+    """Return the calls a day the feeds spend under a set of options."""
+    return feeds_calls_per_day(
+        bool(options.get(CONF_THEMES)),
+        bool(options.get(CONF_RELEASES, DEFAULT_RELEASES)),
+        today,
+        feeds_cost,
+    )
+
+
 def collection_hours(
     options: Mapping[str, Any],
     poll_cost: int = MIN_COLLECTION_POLL_COST,
     today: date | None = None,
-    releases_cost: int | None = None,
+    feeds_cost: int | None = None,
 ) -> int:
     """Return the hours between collection polls that a set of options yields."""
     today = today or dt_util.now().date()
     interval = collection_interval(
         options.get(CONF_DAILY_CALL_BUDGET, DEFAULT_DAILY_CALL_BUDGET),
         poll_cost,
-        bool(options.get(CONF_THEMES)),
-        today,
-        releases_calls_per_day(
-            options.get(CONF_RELEASES, DEFAULT_RELEASES), today, releases_cost
-        ),
+        _feeds_calls(options, today, feeds_cost),
     )
     return int(interval.total_seconds() // 3600)
 
@@ -105,22 +113,16 @@ def estimated_daily_calls(
     options: Mapping[str, Any],
     poll_cost: int = MIN_COLLECTION_POLL_COST,
     today: date | None = None,
-    releases_cost: int | None = None,
+    feeds_cost: int | None = None,
 ) -> int:
     """Estimate billed getSets calls per day for a set of options."""
+    # feeds_cost is what the last feeds poll measured, when one has run; before
+    # that the feeds are estimated.
     today = today or dt_util.now().date()
     collection_polls = math.ceil(
-        24 / collection_hours(options, poll_cost, today, releases_cost)
+        24 / collection_hours(options, poll_cost, today, feeds_cost)
     )
-    # A theme with no releases this year is confirmed individually, which adds a
-    # call the steady state does not pay.
-    return (
-        collection_polls * poll_cost
-        + feeds_calls_per_day(bool(options.get(CONF_THEMES)), today)
-        + releases_calls_per_day(
-            options.get(CONF_RELEASES, DEFAULT_RELEASES), today, releases_cost
-        )
-    )
+    return collection_polls * poll_cost + _feeds_calls(options, today, feeds_cost)
 
 
 async def _validate(
@@ -398,12 +400,12 @@ class LegoOptionsFlow(OptionsFlowWithReload):
             description_placeholders={
                 "collection_hours": str(
                     collection_hours(
-                        options, self._poll_cost, releases_cost=self._releases_cost
+                        options, self._poll_cost, feeds_cost=self._feeds_cost
                     )
                 ),
                 "estimated_calls": str(
                     estimated_daily_calls(
-                        options, self._poll_cost, releases_cost=self._releases_cost
+                        options, self._poll_cost, feeds_cost=self._feeds_cost
                     )
                 ),
                 "budget": str(
@@ -421,13 +423,12 @@ class LegoOptionsFlow(OptionsFlowWithReload):
         return cast("LegoConfigEntry", entry).runtime_data.collection.poll_cost
 
     @property
-    def _releases_cost(self) -> int | None:
-        """Return what the last release poll measured, if one has run."""
+    def _feeds_cost(self) -> int | None:
+        """Return what the last feeds poll measured, if one has run."""
         entry = self.config_entry
         if entry.state is not ConfigEntryState.LOADED:
             return None
-        releases = cast("LegoConfigEntry", entry).runtime_data.releases
-        return releases.measured_cost if releases is not None else None
+        return cast("LegoConfigEntry", entry).runtime_data.feeds.measured_cost
 
     async def _async_theme_options(self) -> list[str]:
         """Fetch the unbilled theme list, falling back to free text if it fails."""

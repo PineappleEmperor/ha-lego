@@ -139,7 +139,9 @@ class LegoReleaseCalendar(LegoCalendarBase):
         if self.coordinator.data is not None:
             for lego_set in self.coordinator.data.wanted:
                 candidates[lego_set.number] = lego_set
-        for theme_sets in (self._feeds.data or {}).values():
+        for theme_sets in (
+            self._feeds.data.themes if self._feeds.data else {}
+        ).values():
             for lego_set in theme_sets:
                 candidates.setdefault(lego_set.number, lego_set)
 

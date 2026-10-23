@@ -132,6 +132,19 @@ class BricksetClient:
             if theme.get("theme")
         ]
 
+    async def get_theme_years(self) -> dict[str, int]:
+        """Return the latest year each theme has a set filed under, unbilled."""
+        # getThemes is free where getSets is not, so it answers whether a year has
+        # anything announced before a billed call goes to look.
+        result = await self._request("getThemes", {})
+        years: dict[str, int] = {}
+        for theme in result.get("themes") or []:
+            name = theme.get("theme")
+            year_to = theme.get("yearTo")
+            if name and isinstance(year_to, int):
+                years[str(name)] = year_to
+        return years
+
     async def get_sets(self, params: dict[str, Any]) -> list[LegoSet]:
         """Run a getSets query, the only method billed against the daily allowance."""
         if self._quota is not None:

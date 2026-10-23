@@ -17,20 +17,17 @@ from .const import (
     CONF_CATALOGUE_INTERVAL,
     CONF_CATALOGUE_RICH,
     CONF_DAILY_CALL_BUDGET,
-    CONF_RELEASES,
     CONF_USER_HASH,
     DEFAULT_CATALOGUE,
     DEFAULT_CATALOGUE_INTERVAL_DAYS,
     DEFAULT_CATALOGUE_RICH,
     DEFAULT_DAILY_CALL_BUDGET,
-    DEFAULT_RELEASES,
     DOMAIN,
 )
 from .coordinator import (
     LegoCollectionCoordinator,
     LegoConfigEntry,
     LegoFeedsCoordinator,
-    LegoReleasesCoordinator,
     LegoRuntimeData,
 )
 from .panel import (
@@ -103,15 +100,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
         catalogue=catalogue,
     )
 
-    if entry.options.get(CONF_RELEASES, DEFAULT_RELEASES):
-        releases = LegoReleasesCoordinator(hass, entry, client, quota, catalogue)
-        entry.runtime_data.releases = releases
-        # Only the panel reads this feed, on request, so no entity listens; the
-        # coordinator schedules polls only while something does.
-        entry.async_on_unload(releases.async_add_listener(lambda: None))
+    if feeds.releases and not feeds.themes:
         # Rows the panel can live without must not hold up setup by a few pages.
         entry.async_create_background_task(
-            hass, releases.async_refresh(), "lego_releases_refresh"
+            hass, feeds.async_refresh(), "lego_feeds_refresh"
         )
 
     if catalogue is not None:

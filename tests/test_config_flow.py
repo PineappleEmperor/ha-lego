@@ -337,7 +337,7 @@ async def test_options_flow(
     assert collection.update_interval == timedelta(hours=2)
 
 
-@pytest.mark.usefixtures("brickset")
+@pytest.mark.usefixtures("brickset", "spring")
 async def test_options_flow_estimates_an_unloaded_entry(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
@@ -368,29 +368,34 @@ async def test_options_flow_falls_back_to_saved_themes(
 
 
 def test_estimated_daily_calls() -> None:
-    """The estimate follows the schedule the budget yields."""
+    """The estimate follows the schedule the budget yields, on the day it is made."""
+    spring, autumn = date(2026, 5, 15), date(2026, 10, 1)
     themes = {CONF_THEMES: ["Technic"]}
     # 24 hourly polls of owned + wanted, plus 2 feed polls of one call each.
-    assert estimated_daily_calls(themes) == 50
+    assert estimated_daily_calls(themes, today=spring) == 50
     # Themes ride in one comma-joined call, so five cost the same as one.
-    assert (
-        estimated_daily_calls(
-            {CONF_THEMES: ["Technic", "Icons", "City", "Star Wars", "Botanicals"]}
-        )
-        == 50
-    )
+    five = {CONF_THEMES: ["Technic", "Icons", "City", "Star Wars", "Botanicals"]}
+    assert estimated_daily_calls(five, today=spring) == 50
     # No themes means no feed polls at all.
-    assert estimated_daily_calls({}) == 48
+    assert estimated_daily_calls({}, today=spring) == 48
     # A tighter budget polls less often: every 4 h is 6 polls of 2, plus the feeds.
-    assert estimated_daily_calls({**themes, CONF_DAILY_CALL_BUDGET: 20}) == 14
+    tight = {**themes, CONF_DAILY_CALL_BUDGET: 20}
+    assert estimated_daily_calls(tight, today=spring) == 14
     # A collection past a page costs more a poll, so it is polled every 2 h.
-    assert estimated_daily_calls(themes, poll_cost=4) == 50
-    # From September next year's sets cost a second call a feed poll.
-    assert estimated_daily_calls(themes, today=date(2026, 10, 1)) == 52
-    # The release rows page through the year once a day, next year too in autumn.
+    assert estimated_daily_calls(themes, poll_cost=4, today=spring) == 50
+    # Until a poll has asked getThemes, next year is assumed from September.
+    assert estimated_daily_calls(themes, today=autumn) == 52
+
+    # Following every theme reads the year once a day, about 3 calls, and the
+    # watched themes come out of that read rather than costing their own.
     releases = {**themes, CONF_RELEASES: True}
-    assert estimated_daily_calls(releases) == 53
-    assert estimated_daily_calls(releases, today=date(2026, 10, 1)) == 56
-    # Their pages come out of the collection's share on a tight budget: 15 calls
-    # less 2 for the feeds and 3 for releases leaves 10, so polls every 6 h.
-    assert estimated_daily_calls({**releases, CONF_DAILY_CALL_BUDGET: 20}) == 13
+    assert estimated_daily_calls(releases, today=spring) == 51
+    assert estimated_daily_calls(releases, today=autumn) == 52
+    # January reads last year whole as well.
+    assert estimated_daily_calls(releases, today=date(2026, 1, 10)) == 54
+    # On a tight budget its calls come out of the collection's share: 15 less 3
+    # leaves 12, so the collection polls every 4 h.
+    tight = {**releases, CONF_DAILY_CALL_BUDGET: 20}
+    assert estimated_daily_calls(tight, today=spring) == 15
+    # Once a poll has measured itself, that replaces the estimate.
+    assert estimated_daily_calls(releases, today=spring, feeds_cost=2) == 50

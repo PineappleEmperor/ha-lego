@@ -1,10 +1,12 @@
-"""Tests for the all-themes release feed behind the panel's release rows."""
+"""Tests for following releases across all themes, behind the panel's release rows."""
 
-from datetime import timedelta
+from datetime import date, timedelta
+from typing import Any
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.const import CONF_REGION
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
@@ -14,37 +16,38 @@ from custom_components.lego.const import (
     CONF_RELEASES,
     CONF_THEMES,
 )
+from custom_components.lego.diagnostics import async_get_config_entry_diagnostics
 from custom_components.lego.panel import dashboard_payload
 
 from .conftest import BricksetServer, make_set, setup_integration
 
 
-def _with_releases(entry: MockConfigEntry) -> MockConfigEntry:
-    """Switch the release rows on for the fixture entry."""
+def _with_releases(entry: MockConfigEntry, **options: Any) -> MockConfigEntry:
+    """Return the fixture's account following releases across all themes."""
     return MockConfigEntry(
         domain=entry.domain,
         title=entry.title,
         unique_id=entry.unique_id,
         version=entry.version,
         data=dict(entry.data),
-        options={CONF_REGION: "UK", CONF_THEMES: [], CONF_RELEASES: True},
+        options={CONF_REGION: "UK", CONF_THEMES: [], CONF_RELEASES: True, **options},
     )
 
 
-def _dated(set_id: int, name: str, day: str, **kwargs: object) -> dict[str, object]:
-    """Build a 2026 set that went, or goes, on sale in the UK on a given day."""
+def _on(day: date, set_id: int, name: str, **kwargs: Any) -> dict[str, Any]:
+    """Build a set that goes on sale in the UK on a day, filed under its year."""
     return make_set(
         set_id,
         f"{set_id}-1",
         name,
-        year=2026,
-        first_available=f"{day}T00:00:00Z",
-        **kwargs,  # type: ignore[arg-type]
+        year=day.year,
+        first_available=f"{day.isoformat()}T00:00:00Z",
+        **kwargs,
     )
 
 
-def _year_calls(brickset: BricksetServer) -> list[dict[str, object]]:
-    """Return the year-only getSets calls the release feed made."""
+def _year_calls(brickset: BricksetServer) -> list[dict[str, Any]]:
+    """Return the whole-year getSets calls the feeds made."""
     return [
         call
         for call in brickset.get_sets_calls
@@ -52,13 +55,15 @@ def _year_calls(brickset: BricksetServer) -> list[dict[str, object]]:
     ]
 
 
-async def _dashboard(
-    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
-) -> dict[str, object]:
-    client = await hass_ws_client(hass)
-    await client.send_json_auto_id({"type": "lego/dashboard"})
-    result: dict[str, object] = (await client.receive_json())["result"]
-    return result
+def _rows(entry: MockConfigEntry) -> dict[str, Any]:
+    """Return the panel's release rows, by name, with their status."""
+    rows = dashboard_payload(entry, [], [])["releases"]
+    assert rows is not None
+    return {
+        "recent": [item["name"] for item in rows["recent"]],
+        "upcoming": [item["name"] for item in rows["upcoming"]],
+        "status": rows["status"],
+    }
 
 
 async def test_existing_entries_keep_the_rows_off(
@@ -70,113 +75,163 @@ async def test_existing_entries_keep_the_rows_off(
     """An entry from before the option spends nothing and offers no release rows."""
     await setup_integration(hass, mock_config_entry)
 
-    assert mock_config_entry.runtime_data.releases is None
+    assert mock_config_entry.runtime_data.feeds.data.releases is None
     assert _year_calls(brickset) == []
-    assert (await _dashboard(hass, hass_ws_client))["releases"] is None
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "lego/dashboard"})
+    assert (await client.receive_json())["result"]["releases"] is None
 
 
-async def test_rows_split_out_recently_and_coming_soon(
+async def test_rows_keep_four_weeks_either_side(
     hass: HomeAssistant,
-    hass_ws_client: WebSocketGenerator,
     brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
-    """Four weeks either side of today, newest out first and soonest due first."""
-    # The suite runs on 15 May 2026.
+    """The window's last days count, the day past them does not, on any date."""
+    today = dt_util.now().date()
+
+    def ago(days: int) -> date:
+        return today - timedelta(days=days)
+
+    def ahead(days: int) -> date:
+        return today + timedelta(days=days)
+
     brickset.year_sets[:] = [
-        _dated(1, "Out in March", "2026-03-01"),
-        _dated(2, "Out in late April", "2026-04-20"),
-        _dated(3, "Out today", "2026-05-15"),
-        _dated(4, "Out in May", "2026-05-01"),
-        _dated(5, "Due in June", "2026-06-10"),
-        _dated(6, "Due next week", "2026-05-20"),
-        _dated(7, "Due in August", "2026-08-01"),
-        _dated(8, "A keyring", "2026-05-10", category="Gear"),
+        _on(ago(29), 1, "Out 29 days ago"),
+        _on(ago(28), 2, "Out 28 days ago"),
+        _on(ago(10), 3, "Out 10 days ago"),
+        _on(today, 4, "Out today"),
+        _on(ahead(1), 5, "Due tomorrow"),
+        _on(ahead(28), 6, "Due in 28 days"),
+        _on(ahead(29), 7, "Due in 29 days"),
+        _on(ago(5), 8, "A keyring", category="Gear"),
+        make_set(9, "9-1", "Undated", year=today.year, first_available=None),
         # No UK date yet, so Brickset's set-wide launch date stands in.
         make_set(
             10,
             "10-1",
             "Due worldwide",
-            year=2026,
+            year=ahead(3).year,
             first_available=None,
-            launch_date="2026-05-25T00:00:00Z",
+            launch_date=f"{ahead(3).isoformat()}T00:00:00Z",
         ),
-        make_set(9, "9-1", "Undated", year=2026, first_available=None),
     ]
     entry = await setup_integration(hass, _with_releases(mock_config_entry))
 
-    releases = (await _dashboard(hass, hass_ws_client))["releases"]
-
-    assert isinstance(releases, dict)
-    assert [item["name"] for item in releases["recent"]] == [
-        "Out today",
-        "Out in May",
-        "Out in late April",
-    ]
-    assert [item["name"] for item in releases["upcoming"]] == [
-        "Due next week",
-        "Due worldwide",
-        "Due in June",
-    ]
+    assert _rows(entry) == {
+        "recent": ["Out today", "Out 10 days ago", "Out 28 days ago"],
+        "upcoming": ["Due tomorrow", "Due worldwide", "Due in 28 days"],
+        "status": "ready",
+    }
     # The card shows the date the row was sorted by, not "Date unknown".
-    assert releases["upcoming"][1]["available_from"] == "2026-05-25"
-    assert releases["status"] == "ready"
-    assert entry.runtime_data.releases is not None
+    rows = dashboard_payload(entry, [], [])["releases"]
+    assert rows["upcoming"][1]["available_from"] == ahead(3).isoformat()
 
 
-async def test_feed_pages_through_the_year(
+@pytest.mark.parametrize(
+    ("now", "years", "recent", "upcoming"),
+    [
+        # Early January reaches back into last December.
+        ("2026-01-10", [2025, 2026], ["New Year set", "December set"], []),
+        # Late December reaches on into the January wave, once it is filed.
+        ("2026-12-20", [2026, 2027], ["December set"], ["New Year set"]),
+        # Mid-year needs only this year.
+        ("2026-06-15", [2026], [], []),
+    ],
+)
+async def test_rows_cross_the_new_year(
     hass: HomeAssistant,
     brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+    now: str,
+    years: list[int],
+    recent: list[str],
+    upcoming: list[str],
 ) -> None:
-    """Each page is a billed call, and the next poll is costed from the last."""
+    """Each poll asks for every year the window touches, and only those."""
+    freezer.move_to(f"{now} 12:00:00+00:00")
+    year = dt_util.now().year
+    december = date(year - 1 if now.endswith("01-10") else year, 12, 15)
     brickset.year_sets[:] = [
-        _dated(1000 + n, f"Set {n}", "2026-05-01") for n in range(600)
+        _on(december, 1, "December set"),
+        _on(date(december.year + 1, 1, 1), 2, "New Year set"),
     ]
     entry = await setup_integration(hass, _with_releases(mock_config_entry))
 
-    assert [call["pageNumber"] for call in _year_calls(brickset)] == [1, 2]
-    releases = entry.runtime_data.releases
-    assert releases is not None
-    assert len(releases.data) == 600
-    assert releases.poll_cost == 2
-    assert releases.measured_cost == 2
-
-    # The options dialog counts the measured pages, not the estimate of three:
-    # 24 hourly collection polls of 2, plus 2 for releases.
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["description_placeholders"]["estimated_calls"] == "50"
+    assert [call["year"] for call in _year_calls(brickset)] == years
+    rows = _rows(entry)
+    assert rows["recent"] == recent
+    assert rows["upcoming"] == upcoming
 
 
-async def test_autumn_adds_next_year(
+async def test_december_skips_next_year_until_it_is_filed(
     hass: HomeAssistant,
     brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:
-    """From September next year's sets join, since January's wave lands early."""
+    """getThemes, which is free, says next year holds nothing, so it costs nothing."""
     freezer.move_to("2026-12-20 12:00:00+00:00")
+    brickset.year_sets[:] = [_on(date(2026, 12, 1), 1, "December set")]
+    await setup_integration(hass, _with_releases(mock_config_entry))
+
+    assert [call["year"] for call in _year_calls(brickset)] == [2026]
+
+
+@pytest.mark.usefixtures("spring")
+async def test_followed_themes_come_from_the_same_read(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Reading every theme already holds the followed ones; no call is spent on them.
+
+    Mid-year, so the window reads this year alone.
+    """
+    today = dt_util.now().date()
     brickset.year_sets[:] = [
-        _dated(1, "December set", "2026-12-01"),
-        make_set(
-            2,
-            "2-1",
-            "New Year set",
-            year=2027,
-            first_available="2027-01-01T00:00:00Z",
-        ),
+        _on(today, 1, "Technic set", theme="Technic"),
+        _on(today, 2, "Icons set", theme="Icons"),
     ]
+    entry = await setup_integration(
+        hass, _with_releases(mock_config_entry, **{CONF_THEMES: ["Technic"]})
+    )
+
+    feeds = entry.runtime_data.feeds
+    assert [s.name for s in feeds.data.themes["Technic"]] == ["Technic set"]
+    assert [c for c in brickset.get_sets_calls if "theme" in c] == []
+    assert len(_year_calls(brickset)) == 1
+    diagnostics = (await async_get_config_entry_diagnostics(hass, entry))[
+        "coordinators"
+    ]["feeds"]
+    assert diagnostics["release_sets"] == 2
+    assert diagnostics["themes"] == {"Technic": 1}
+
+
+@pytest.mark.usefixtures("spring")
+async def test_feed_pages_through_the_year(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Each page is a billed call, and the budget plans on the pages measured.
+
+    Mid-year, so the window reads this year alone.
+    """
+    today = dt_util.now().date()
+    brickset.year_sets[:] = [_on(today, 1000 + n, f"Set {n}") for n in range(600)]
     entry = await setup_integration(hass, _with_releases(mock_config_entry))
 
-    assert [call["year"] for call in _year_calls(brickset)] == [2026, 2027]
-    # Read directly: the websocket client's token has expired by December.
-    releases = dashboard_payload(entry, [], [])["releases"]
-    assert isinstance(releases, dict)
-    assert [item["name"] for item in releases["recent"]] == ["December set"]
-    assert [item["name"] for item in releases["upcoming"]] == ["New Year set"]
-    feed = entry.runtime_data.releases
-    assert feed is not None
-    assert feed.poll_cost == 2
+    assert [call["pageNumber"] for call in _year_calls(brickset)] == [1, 2]
+    feeds = entry.runtime_data.feeds
+    assert len(feeds.data.releases) == 600
+    assert feeds.measured_cost == 2
+
+    # The options dialog counts the measured pages, not the estimate of three:
+    # 24 hourly collection polls of 2, plus 2 for the year.
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["description_placeholders"]["estimated_calls"] == "50"
 
 
 @pytest.mark.usefixtures("brickset")
@@ -186,13 +241,10 @@ async def test_rows_say_when_not_yet_fetched(
 ) -> None:
     """Empty rows before the first fetch are not passed off as a quiet month."""
     entry = await setup_integration(hass, _with_releases(mock_config_entry))
-    releases = entry.runtime_data.releases
-    assert releases is not None
-    releases.data = None  # as it is until the background fetch returns
+    feeds = entry.runtime_data.feeds
+    feeds.data = None  # as it is until the background fetch returns
 
-    rows = dashboard_payload(entry, [], [])["releases"]
-
-    assert rows == {"recent": [], "upcoming": [], "status": "fetching"}
+    assert _rows(entry) == {"recent": [], "upcoming": [], "status": "fetching"}
 
 
 async def test_feed_spends_nothing_it_cannot_finish(
@@ -201,23 +253,40 @@ async def test_feed_spends_nothing_it_cannot_finish(
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """A poll that would run out of budget part way spends none of it."""
-    brickset.year_sets[:] = [_dated(1, "Out today", "2026-05-15")]
-    entry = _with_releases(mock_config_entry)
-    # The collection's 2 calls leave 2 of 4, short of the 3 pages estimated.
-    entry = MockConfigEntry(
-        domain=entry.domain,
-        title=entry.title,
-        unique_id=entry.unique_id,
-        version=entry.version,
-        data=dict(entry.data),
-        options={**entry.options, CONF_DAILY_CALL_BUDGET: 4},
+    brickset.year_sets[:] = [_on(dt_util.now().date(), 1, "Out today")]
+    # The collection's 2 calls leave 2 of 4, short of the 3 pages a year plans on.
+    entry = await setup_integration(
+        hass, _with_releases(mock_config_entry, **{CONF_DAILY_CALL_BUDGET: 4})
     )
-    await setup_integration(hass, entry)
 
     assert _year_calls(brickset) == []
-    releases = entry.runtime_data.releases
-    assert releases is not None
+    feeds = entry.runtime_data.feeds
     # Nothing to show yet, so it tries again in hours rather than tomorrow.
-    assert releases.update_interval == timedelta(hours=3)
-    rows = dashboard_payload(entry, [], [])["releases"]
-    assert rows == {"recent": [], "upcoming": [], "status": "failed"}
+    assert feeds.update_interval == timedelta(hours=3)
+    assert _rows(entry) == {"recent": [], "upcoming": [], "status": "failed"}
+
+
+async def test_the_window_follows_local_time_while_the_budget_follows_utc(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Where it is New Year's Day locally, Brickset's day is still 31 December.
+
+    "Out recently" is about the user's own today, so the window moves at local
+    midnight; the call budget is Brickset's, which resets at midnight UTC.
+    """
+    await hass.config.async_set_time_zone("Pacific/Auckland")
+    freezer.move_to("2026-12-31 12:00:00+00:00")  # 01:00 on 1 January in Auckland
+    brickset.year_sets[:] = [
+        _on(date(2026, 12, 20), 1, "December set"),
+        _on(date(2027, 1, 1), 2, "New Year set"),
+    ]
+    entry = await setup_integration(hass, _with_releases(mock_config_entry))
+
+    # Local 1 January 2027: this year is 2027, and the window reaches back to 2026.
+    assert [call["year"] for call in _year_calls(brickset)] == [2026, 2027]
+    assert _rows(entry)["recent"] == ["New Year set", "December set"]
+    quota = entry.runtime_data.quota
+    assert quota.resets_at.isoformat() == "2027-01-01T00:00:00+00:00"

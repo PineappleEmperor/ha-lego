@@ -18,7 +18,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .const import DEFAULT_REGION, REGION_CURRENCY
-from .coordinator import LegoCollectionCoordinator, LegoFeedsCoordinator
+from .coordinator import FeedsData, LegoCollectionCoordinator, LegoFeedsCoordinator
 from .entity import LegoCollectionEntity, LegoEntity
 from .models import CollectionSummary, LegoSet
 
@@ -363,7 +363,7 @@ class LegoNextRetirementSensor(LegoCollectionEntity, SensorEntity):
         return _set_attributes(soonest[1], self.coordinator.region)
 
 
-class LegoLatestThemeSetSensor(LegoEntity[dict[str, list[LegoSet]]], SensorEntity):
+class LegoLatestThemeSetSensor(LegoEntity[FeedsData], SensorEntity):
     """The most recent set Brickset lists for a watched theme."""
 
     _attr_translation_key = "latest_theme_set"
@@ -381,7 +381,7 @@ class LegoLatestThemeSetSensor(LegoEntity[dict[str, list[LegoSet]]], SensorEntit
         """Return the newest set for this theme."""
         if not self.coordinator.data:
             return None
-        sets = self.coordinator.data.get(self._theme) or []
+        sets = self.coordinator.data.themes.get(self._theme) or []
         return sets[0] if sets else None
 
     @property
@@ -401,6 +401,9 @@ class LegoLatestThemeSetSensor(LegoEntity[dict[str, list[LegoSet]]], SensorEntit
         region = self.coordinator.config_entry.options.get(CONF_REGION, DEFAULT_REGION)
         attributes = _set_attributes(lego_set, region)
         attributes["sets_this_year"] = len(
-            (self.coordinator.data or {}).get(self._theme) or []
+            (self.coordinator.data.themes if self.coordinator.data else {}).get(
+                self._theme
+            )
+            or []
         )
         return attributes

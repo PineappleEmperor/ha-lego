@@ -286,10 +286,12 @@ def _owned(entry: Any, number: str) -> bool:
 
 
 def _known_sets(entry: LegoConfigEntry) -> dict[str, Any]:
-    """Every set with a Brickset record: the collection and the theme feeds."""
+    """Every set with a Brickset record: the collection and the feeds."""
     known: dict[str, Any] = {}
-    for theme_sets in (entry.runtime_data.feeds.data or {}).values():
-        known.update({lego_set.number: lego_set for lego_set in theme_sets})
+    if (feed := entry.runtime_data.feeds.data) is not None:
+        for theme_sets in feed.themes.values():
+            known.update({lego_set.number: lego_set for lego_set in theme_sets})
+        known.update({lego_set.number: lego_set for lego_set in feed.releases or []})
     data = entry.runtime_data.collection.data
     known.update(data.all_sets)
     return known

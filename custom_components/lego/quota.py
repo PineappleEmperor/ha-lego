@@ -18,53 +18,73 @@ from .const import (
     POLL_SHARE_OF_BUDGET,
     RELEASES_INTERVAL_HOURS,
     RELEASES_PAGES_ESTIMATE,
+    RELEASES_WINDOW_DAYS,
 )
 from .exceptions import BricksetQuotaError
 
 
-def feeds_poll_cost(today: date) -> int:
-    """Return the billed calls one feed poll spends on a given day."""
-    # Every watched theme rides in one comma-joined call, so the cost does not grow
-    # with the theme count; next year's sets take a second call in the autumn.
-    return 2 if today.month >= NEXT_YEAR_FROM_MONTH else 1
+def window_years(today: date) -> list[int]:
+    """Return the years the release window either side of today touches."""
+    # Most of the year that is this year alone; it reaches back into last year
+    # through most of January and on into next year through most of December.
+    window = timedelta(days=RELEASES_WINDOW_DAYS)
+    return sorted({(today - window).year, today.year, (today + window).year})
 
 
-def feeds_calls_per_day(watching_themes: bool, today: date) -> int:
-    """Return the billed calls the theme feeds spend a day."""
-    if not watching_themes:
+def feed_years(today: date, releases: bool, next_year: bool) -> list[int]:
+    """Return the years a feeds poll asks Brickset for."""
+    # next_year says whether next year is worth a call: whether it has sets filed
+    # under it that the feeds want. A year the window touches is fetched whole while
+    # following releases across all themes; otherwise only this year is.
+    years = set(window_years(today)) if releases else {today.year}
+    years.discard(today.year + 1)
+    if next_year:
+        years.add(today.year + 1)
+    return sorted(years)
+
+
+def feeds_poll_estimate(today: date, watching_themes: bool, releases: bool) -> int:
+    """Estimate one feeds poll's billed calls before any poll has measured them."""
+    # Assumes next year is announced from the usual month, as getThemes may not
+    # have been asked yet.
+    if not (watching_themes or releases):
         return 0
-    return math.ceil(24 / FEEDS_INTERVAL_HOURS) * feeds_poll_cost(today)
+    years = feed_years(today, releases, today.month >= NEXT_YEAR_FROM_MONTH)
+    if not releases:
+        # Every watched theme rides in one comma-joined call per year.
+        return len(years)
+    return sum(RELEASES_PAGES_ESTIMATE if year <= today.year else 1 for year in years)
 
 
-def releases_poll_cost(today: date) -> int:
-    """Estimate the billed calls an all-themes release poll spends, before one has."""
-    # One call per page of this year's sets, and a page of next year's in the autumn.
-    return RELEASES_PAGES_ESTIMATE + (1 if today.month >= NEXT_YEAR_FROM_MONTH else 0)
-
-
-def releases_calls_per_day(
-    enabled: bool, today: date, measured: int | None = None
-) -> int:
-    """Return the billed calls the all-themes release feed spends a day."""
-    if not enabled:
-        return 0
-    cost = measured if measured is not None else releases_poll_cost(today)
-    return math.ceil(24 / RELEASES_INTERVAL_HOURS) * cost
-
-
-def collection_interval(
-    budget: int,
-    poll_cost: int,
-    watching_themes: bool,
-    today: date,
-    releases_calls: int = 0,
-) -> timedelta:
-    """Return the shortest collection interval whose polls fit the budget."""
-    available = (
-        budget * POLL_SHARE_OF_BUDGET
-        - feeds_calls_per_day(watching_themes, today)
-        - releases_calls
+def feeds_interval(releases: bool) -> timedelta:
+    """Return how often the feeds poll."""
+    # A poll reading whole years costs a few calls, so it runs daily.
+    return timedelta(
+        hours=RELEASES_INTERVAL_HOURS if releases else FEEDS_INTERVAL_HOURS
     )
+
+
+def feeds_calls_per_day(
+    watching_themes: bool,
+    releases: bool,
+    today: date,
+    measured: int | None = None,
+) -> int:
+    """Return the billed calls the feeds spend a day, measured once a poll has run."""
+    if not (watching_themes or releases):
+        return 0
+    cost = (
+        measured
+        if measured is not None
+        else feeds_poll_estimate(today, watching_themes, releases)
+    )
+    polls = math.ceil(timedelta(days=1) / feeds_interval(releases))
+    return polls * cost
+
+
+def collection_interval(budget: int, poll_cost: int, feeds_calls: int) -> timedelta:
+    """Return the shortest collection interval whose polls fit the budget."""
+    available = budget * POLL_SHARE_OF_BUDGET - feeds_calls
     for hours in COLLECTION_INTERVAL_STEPS_HOURS:
         if math.ceil(24 / hours) * poll_cost <= available:
             return timedelta(hours=hours)

@@ -144,6 +144,10 @@
     "collection_write_failed": {
       "description": "Brickset would not save a change made through {name}: {error}\n\nThe change was not applied. This clears the next time a collection change succeeds.",
       "title": "Brickset rejected a collection change"
+    },
+    "theme_feed_paging": {
+      "description": "The {themes} themes {name} follows now have more sets this year than one Brickset call returns, so each refresh of them costs {pages} calls, about {calls} a day, out of the daily budget.\n\nFollowing fewer themes brings it back to one call. Turning on **Follow releases across all themes** in the options may cost less: it reads every theme once a day, in about 3 calls, and the followed themes come from that.\n\nThis clears itself once the followed themes fit one call again.",
+      "title": "Followed themes take more than one call to refresh"
     }
   },
   "options": {
@@ -166,10 +170,10 @@
           "daily_call_budget": "The most calls Home Assistant spends a day. Refresh intervals are set from it, and polling pauses until midnight UTC once it is spent.",
           "panel": "Adds a page for browsing your collection, your wishlist and new releases in the themes you follow. Turning it off removes the sidebar entry.",
           "region": "Which LEGO.com market supplies recommended retail prices and retirement dates.",
-          "releases": "Fills the panel's Out recently and Coming soon rows with every set out in the last four weeks or due in the next four, whatever its theme. Checks once a day, paging through the year's sets at about 3 calls, 4 from September.",
+          "releases": "Fills the panel's Out recently and Coming soon rows with every set out in the last four weeks or due in the next four, whatever its theme. Checks once a day, reading the whole year at about 3 calls, and your watched themes then come from the same read instead of costing calls of their own.",
           "themes": "However many themes you pick, they are fetched together in one API call per refresh."
         },
-        "description": "Brickset allows 100 catalogue calls per API key per day. Within your budget of {budget}, your collection refreshes every {collection_hours} h, watched themes every 12 h and releases across all themes once a day if followed, about {estimated_calls} calls a day. A quarter of the budget is kept free for actions such as a manual refresh.",
+        "description": "Brickset allows 100 catalogue calls per API key per day. Within your budget of {budget}, your collection refreshes every {collection_hours} h and new releases every 12 h, or once a day when following releases across all themes, about {estimated_calls} calls a day. A quarter of the budget is kept free for actions such as a manual refresh.",
         "title": "LEGO options"
       }
     }

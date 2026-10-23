@@ -4,6 +4,8 @@ from datetime import timedelta
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.helpers import issue_registry as ir
+from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -12,6 +14,7 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.lego.const import (
     CONF_THEMES,
+    DOMAIN,
     EVENT_NEW_SET,
     EVENT_WANTED_CHANGED,
 )
@@ -174,7 +177,7 @@ async def test_two_themes_cost_one_call(
     theme_calls = [call for call in brickset.get_sets_calls if "theme" in call]
     assert [call["theme"] for call in theme_calls] == ["Technic,Icons"]
 
-    feeds = mock_config_entry.runtime_data.feeds.data
+    feeds = mock_config_entry.runtime_data.feeds.data.themes
     assert [s.number for s in feeds["Technic"]] == ["42200-1", "42199-1"]
     assert [s.number for s in feeds["Icons"]] == ["10333-1"]
 
@@ -199,24 +202,26 @@ async def test_theme_batching_falls_back_when_brickset_stops_accepting_it(
     theme_calls = [call["theme"] for call in brickset.get_sets_calls if "theme" in call]
     assert theme_calls == ["Technic,Icons", "Technic", "Icons"]
 
-    feeds = mock_config_entry.runtime_data.feeds.data
+    feeds = mock_config_entry.runtime_data.feeds.data.themes
     assert [s.number for s in feeds["Technic"]] == ["42200-1", "42199-1"]
     assert [s.number for s in feeds["Icons"]] == ["10333-1"]
     assert "falling back to one call per theme" in caplog.text
 
 
-async def test_autumn_feeds_include_next_year(
+async def test_next_year_joins_once_brickset_files_a_set_under_it(
     hass: HomeAssistant,
     brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:
-    """From September next year's announced sets join the feed, newest first."""
+    """getThemes, which is free, decides when next year is worth a call."""
     freezer.move_to("2026-09-10 12:00:00+00:00")
     brickset.filter_theme_year = True
     await setup_integration(hass, mock_config_entry)
     feeds = mock_config_entry.runtime_data.feeds
-    assert feeds.poll_cost == 2
+    # September, but nothing is filed under 2027 yet, so nothing is asked of it.
+    assert [c["year"] for c in brickset.get_sets_calls if "theme" in c] == [2026]
+    assert feeds.poll_cost == 1
 
     events: list[Event] = []
 
@@ -233,7 +238,8 @@ async def test_autumn_feeds_include_next_year(
 
     theme_years = [c["year"] for c in brickset.get_sets_calls if "theme" in c]
     assert theme_years[-2:] == [2026, 2027]
-    assert [s.number for s in feeds.data["Technic"]] == [
+    assert feeds.poll_cost == 2
+    assert [s.number for s in feeds.data.themes["Technic"]] == [
         "42250-1",
         "42200-1",
         "42199-1",
@@ -243,12 +249,86 @@ async def test_autumn_feeds_include_next_year(
     assert latest.attributes["set_number"] == "42250-1"
 
 
-async def test_spring_feeds_ask_for_this_year_only(
+async def test_next_year_falls_back_to_the_season_without_get_themes(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Should getThemes fail, next year is asked for from September as before."""
+    brickset.themes_error = "Service temporarily unavailable"
+    freezer.move_to("2026-08-31 12:00:00+00:00")
+    await setup_integration(hass, mock_config_entry)
+    feeds = mock_config_entry.runtime_data.feeds
+    assert [c["year"] for c in brickset.get_sets_calls if "theme" in c] == [2026]
+
+    freezer.move_to("2026-09-01 12:00:00+00:00")
+    await feeds.async_refresh()
+
+    theme_years = [c["year"] for c in brickset.get_sets_calls if "theme" in c]
+    assert theme_years[-2:] == [2026, 2027]
+
+
+async def test_feeds_ask_for_this_year_only_until_next_is_announced(
     hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Before September nothing is asked of next year, so a poll is one call."""
+    """On any day, with nothing filed under next year, a poll is one call."""
     await setup_integration(hass, mock_config_entry)
 
     theme_years = [c["year"] for c in brickset.get_sets_calls if "theme" in c]
-    assert theme_years == [2026]
+    assert theme_years == [dt_util.now().year]
     assert mock_config_entry.runtime_data.feeds.poll_cost == 1
+
+
+async def test_feeds_poll_nothing_with_nothing_followed(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """No themes and no all-theme rows: no feed calls, even in the autumn."""
+    freezer.move_to("2026-10-01 12:00:00+00:00")
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry, options={**mock_config_entry.options, CONF_THEMES: []}
+    )
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    feeds = mock_config_entry.runtime_data.feeds
+    assert feeds.update_interval is None
+
+    await feeds.async_refresh()
+
+    assert [c for c in brickset.get_sets_calls if "theme" in c or "year" in c] == []
+    assert feeds.data.themes == {}
+
+
+async def test_themes_past_a_page_raise_a_repair(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    issue_registry: ir.IssueRegistry,
+) -> None:
+    """The user hears when the followed themes stop fitting one call."""
+    year = dt_util.now().year
+    brickset.theme_sets[:] = [
+        make_set(1000 + n, f"{50000 + n}-1", f"Set {n}", theme="Technic", year=year)
+        for n in range(600)
+    ]
+    await setup_integration(hass, mock_config_entry)
+    feeds = mock_config_entry.runtime_data.feeds
+    issue_id = f"theme_feed_paging_{mock_config_entry.entry_id}"
+
+    issue = issue_registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.translation_key == "theme_feed_paging"
+    assert issue.translation_placeholders["pages"] == "2"
+    assert issue.translation_placeholders["calls"] == "4"
+    assert feeds.poll_cost == 2
+    assert len(feeds.data.themes["Technic"]) == 600
+
+    del brickset.theme_sets[400:]
+    await feeds.async_refresh()
+
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+    assert feeds.poll_cost == 1

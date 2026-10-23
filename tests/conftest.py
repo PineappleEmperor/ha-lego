@@ -29,12 +29,13 @@ def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Let Home Assistant load integrations from custom_components/ in every test."""
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def spring(freezer: FrozenDateTimeFactory) -> None:
-    """Run every test on a spring day unless it sets its own date.
+    """Freeze the clock on a spring day, for a test whose answer depends on it.
 
-    From September the feeds spend a second call on next year's sets, so a test
-    counting calls on the real clock would pass or fail with the season.
+    Only tests that count calls or read a fixed date ask for this; the rest run
+    on the real clock. A spring day is neither end of the release window nor
+    past the month next year's sets are assumed announced.
     """
     freezer.move_to("2026-05-15 12:00:00+00:00")
 
@@ -275,12 +276,16 @@ class BricksetServer:
     async def _get_themes(self, method: str, url: str, data: Any) -> Any:
         if self.themes_error is not None:
             return self._error(self.themes_error)
+        # yearTo follows the sets the fake holds, as Brickset's follows its catalogue.
+        latest: dict[str, int] = {"Technic": 2024, "Icons": 2024}
+        for item in [*self.theme_sets, *self.year_sets]:
+            latest[item["theme"]] = max(latest.get(item["theme"], 0), item["year"])
         return self._ok(
             {
-                "matches": 2,
+                "matches": len(latest),
                 "themes": [
-                    {"theme": "Technic", "setCount": 900},
-                    {"theme": "Icons", "setCount": 200},
+                    {"theme": theme, "setCount": 100, "yearFrom": 1977, "yearTo": year}
+                    for theme, year in latest.items()
                 ],
             }
         )
@@ -334,14 +339,14 @@ class BricksetServer:
             pool = [*self.owned, *self.wanted, *self.theme_sets]
             sets = [item for item in pool if needle in item["name"].lower()]
         elif "year" in params:
-            pool = [item for item in self.year_sets if item["year"] == params["year"]]
-            size = int(params.get("pageSize", 20))
-            start = (int(params.get("pageNumber", 1)) - 1) * size
-            sets = pool[start : start + size]
+            sets = [item for item in self.year_sets if item["year"] == params["year"]]
         else:
             sets = []
 
-        return self._ok({"matches": len(sets), "sets": sets})
+        # Every query pages as Brickset's does, 20 to a page unless asked for more.
+        size = int(params.get("pageSize", 20))
+        start = (int(params.get("pageNumber", 1)) - 1) * size
+        return self._ok({"matches": len(sets), "sets": sets[start : start + size]})
 
     async def _set_collection(self, method: str, url: str, data: Any) -> Any:
         if not self.hash_valid:
