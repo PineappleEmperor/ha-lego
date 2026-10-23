@@ -19,6 +19,7 @@ from .const import (
     DEFAULT_PANEL,
     DOMAIN,
     PANEL_COMPONENT,
+    PANEL_DEFAULT_COLLAPSED,
     PANEL_DEFAULT_HIDDEN,
     PANEL_ICON_URL,
     PANEL_MODULE_URL,
@@ -26,6 +27,8 @@ from .const import (
     PANEL_STORAGE_KEY,
     PANEL_URL_PATH,
     REGION_CURRENCY,
+    RELEASE_MODES,
+    RELEASE_ROWS,
     RELEASES_WINDOW_DAYS,
     STORAGE_VERSION,
 )
@@ -42,7 +45,7 @@ REGISTERED: HassKey[bool] = HassKey(f"{DOMAIN}_panel_registered")
 
 
 class PanelStore:
-    """Remembers each user's row order and chosen account for the panel."""
+    """Remembers each user's panel layout, release filters and chosen account."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialise an empty store."""
@@ -51,19 +54,34 @@ class PanelStore:
         )
         self._rows: dict[str, list[str]] = {}
         self._hidden: dict[str, list[str]] = {}
+        self._collapsed: dict[str, list[str]] = {}
+        self._release_mode: dict[str, str] = {}
+        self._release_filters: dict[str, dict[str, dict[str, Any]]] = {}
         self._accounts: dict[str, str] = {}
 
     async def async_load(self) -> None:
-        """Read the stored orders and account choices."""
+        """Read everything stored, each user's settings under one key."""
         stored = await self._store.async_load() or {}
         self._rows = {k: list(v) for k, v in stored.get("rows", {}).items()}
         self._hidden = {k: list(v) for k, v in stored.get("hidden", {}).items()}
+        self._collapsed = {k: list(v) for k, v in stored.get("collapsed", {}).items()}
+        self._release_mode = dict(stored.get("release_mode", {}))
+        self._release_filters = {
+            k: dict(v) for k, v in stored.get("release_filters", {}).items()
+        }
         self._accounts = {k: str(v) for k, v in stored.get("accounts", {}).items()}
 
     async def _async_save(self) -> None:
-        """Write both maps, since they share one storage key."""
+        """Write every map, since they share one storage key."""
         await self._store.async_save(
-            {"rows": self._rows, "hidden": self._hidden, "accounts": self._accounts}
+            {
+                "rows": self._rows,
+                "hidden": self._hidden,
+                "collapsed": self._collapsed,
+                "release_mode": self._release_mode,
+                "release_filters": self._release_filters,
+                "accounts": self._accounts,
+            }
         )
 
     def rows(self, user_id: str | None) -> list[str]:
@@ -71,10 +89,18 @@ class PanelStore:
         saved = self._rows.get(user_id or "")
         if not saved:
             return list(PANEL_ROWS)
-        # A row added by a later version has no saved position, so it goes last
-        # rather than disappearing.
         kept = [row for row in saved if row in PANEL_ROWS]
-        return kept + [row for row in PANEL_ROWS if row not in kept]
+        missing = [row for row in PANEL_ROWS if row not in kept]
+        if "releases" in missing:
+            # The combined row replaces the release rows a user already placed, so
+            # it takes their position rather than sinking to the bottom.
+            missing.remove("releases")
+            at = next(
+                (i for i, row in enumerate(kept) if row in RELEASE_ROWS), len(kept)
+            )
+            kept.insert(at, "releases")
+        # Any other row added by a later version goes last rather than disappearing.
+        return kept + missing
 
     def hidden(self, user_id: str | None) -> list[str]:
         """Return the rows a user has taken off their panel."""
@@ -83,16 +109,58 @@ class PanelStore:
             return list(PANEL_DEFAULT_HIDDEN)
         return [row for row in saved if row in PANEL_ROWS]
 
-    async def async_set_rows(
-        self, user_id: str, rows: list[str] | None, hidden: list[str] | None = None
-    ) -> tuple[list[str], list[str]]:
-        """Save a user's row order and hidden rows, ignoring anything unrecognised."""
+    def collapsed(self, user_id: str | None) -> list[str]:
+        """Return the rows that open folded to their header for this user."""
+        saved = self._collapsed.get(user_id or "")
+        if saved is None:
+            return list(PANEL_DEFAULT_COLLAPSED)
+        return [row for row in saved if row in PANEL_ROWS]
+
+    def settings(self, user_id: str | None) -> dict[str, Any]:
+        """Return everything the panel lays itself out from, for one user."""
+        key = user_id or ""
+        return {
+            "rows": self.rows(user_id),
+            "hidden": self.hidden(user_id),
+            "collapsed": self.collapsed(user_id),
+            "release_mode": self._release_mode.get(key, RELEASE_MODES[0]),
+            "release_filters": {
+                row: dict(value)
+                for row, value in self._release_filters.get(key, {}).items()
+                if row in RELEASE_ROWS
+            },
+        }
+
+    async def async_update(
+        self,
+        user_id: str,
+        *,
+        rows: list[str] | None = None,
+        hidden: list[str] | None = None,
+        collapsed: list[str] | None = None,
+        release_mode: str | None = None,
+        release_filters: dict[str, dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Save whichever settings were sent, ignoring rows this version lacks."""
         if rows is not None:
             self._rows[user_id] = [row for row in rows if row in PANEL_ROWS]
         if hidden is not None:
             self._hidden[user_id] = [row for row in hidden if row in PANEL_ROWS]
+        if collapsed is not None:
+            self._collapsed[user_id] = [row for row in collapsed if row in PANEL_ROWS]
+        if release_mode is not None:
+            self._release_mode[user_id] = release_mode
+        if release_filters is not None:
+            merged = self._release_filters.setdefault(user_id, {})
+            merged.update(
+                {
+                    row: value
+                    for row, value in release_filters.items()
+                    if row in RELEASE_ROWS
+                }
+            )
         await self._async_save()
-        return self.rows(user_id), self.hidden(user_id)
+        return self.settings(user_id)
 
     def account(self, user_id: str | None) -> str | None:
         """Return the entry id this user last looked at, if any."""
@@ -377,7 +445,7 @@ def _statistic_ids(
 
 
 def dashboard_payload(
-    entry: LegoConfigEntry, rows: list[str], hidden: list[str]
+    entry: LegoConfigEntry, settings: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """Build everything the panel's home view needs in one reply."""
     collection = entry.runtime_data.collection
@@ -394,15 +462,21 @@ def dashboard_payload(
         data.wanted if data else [],
         key=lambda item: _wishlist_key(item, region, today),
     )
+    settings = settings or {
+        "rows": list(PANEL_ROWS),
+        "hidden": list(PANEL_DEFAULT_HIDDEN),
+        "collapsed": list(PANEL_DEFAULT_COLLAPSED),
+        "release_mode": RELEASE_MODES[0],
+        "release_filters": {},
+    }
     return {
         "entry_id": entry.entry_id,
         "device_id": device.id if device else None,
-        "hidden": hidden,
+        **settings,
         # Current totals per theme, and the sensors whose recorded statistics
         # give the same totals over time.
         "by_theme": _by_theme(data.owned if data else [], region),
         "history": _statistic_ids(collection.hass, entry),
-        "rows": rows,
         "region": region,
         # Prices are LEGO.com RRP in the region's own currency.
         "currency": REGION_CURRENCY.get(region),

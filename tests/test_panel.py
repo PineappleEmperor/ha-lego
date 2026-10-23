@@ -404,6 +404,9 @@ async def test_dashboard_returns_the_home_view(
     assert result["stats"]["pieces_owned"] == 7122
     assert [item["set_number"] for item in result["wishlist"]] == ["10294-1"]
     assert result["followed"] == ["Technic"]
+    # Collection value starts folded; the release rows start combined.
+    assert result["collapsed"] == ["value", "pieces"]
+    assert result["release_mode"] == "combined"
     assert result["release_status"] == {"all": None, "mine": "ready"}
     # Cards show LEGO.com RRP, so the panel needs the region's currency.
     assert result["currency"] == "GBP"
@@ -489,12 +492,14 @@ async def test_row_order_is_saved_and_returned(
         {"type": "lego/panel_config/set", "rows": ["collection", "wishlist", "themes"]}
     )
     saved = await client.receive_json()
-    # Rows the saved order does not mention follow it, so none goes missing.
-    assert saved["result"]["rows"][:3] == ["collection", "wishlist", "themes"]
+    # Rows the saved order does not mention follow it, so none goes missing; the
+    # combined release row joins its siblings rather than the end.
+    expected = ["collection", "wishlist", "releases", "themes"]
+    assert saved["result"]["rows"][:4] == expected
 
     await client.send_json_auto_id({"type": "lego/dashboard"})
     rows = (await client.receive_json())["result"]["rows"]
-    assert rows[:3] == ["collection", "wishlist", "themes"]
+    assert rows[:4] == expected
     assert sorted(rows) == sorted(PANEL_ROWS)
 
 
@@ -588,7 +593,7 @@ async def test_value_by_theme_runs_most_valuable_first(
     ]
     await setup_integration(hass, mock_config_entry)
 
-    rows = dashboard_payload(mock_config_entry, [], [])["by_theme"]
+    rows = dashboard_payload(mock_config_entry)["by_theme"]
 
     assert [(row["theme"], row["value"], row["sets"]) for row in rows] == [
         ("Technic", 300.0, 1),
@@ -620,7 +625,7 @@ async def test_wishlist_runs_soonest_retirement_first_retired_last(
     ]
     await setup_integration(hass, mock_config_entry)
 
-    wishlist = dashboard_payload(mock_config_entry, [], [])["wishlist"]
+    wishlist = dashboard_payload(mock_config_entry)["wishlist"]
 
     assert [item["name"] for item in wishlist] == [
         "Retires soon",
@@ -689,6 +694,99 @@ async def test_panel_settings_survive_a_restart(
     restarted = PanelStore(hass)
     await restarted.async_load()
 
-    assert restarted.rows(hass_admin_user.id)[:2] == ["wishlist", "themes"]
+    assert restarted.rows(hass_admin_user.id)[:2] == ["wishlist", "releases"]
     assert restarted.hidden(hass_admin_user.id) == ["value"]
     assert restarted.account(hass_admin_user.id) == mock_config_entry.entry_id
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_release_and_collapse_settings_are_saved(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    hass_admin_user: MockUser,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Which rows start folded, the release layout and each row's filters persist."""
+    await setup_integration(hass, mock_config_entry)
+    client = await hass_ws_client(hass)
+
+    await client.send_json_auto_id(
+        {
+            "type": "lego/panel_config/set",
+            "collapsed": ["wishlist", "mocs"],
+            "release_mode": "separate",
+            "release_filters": {
+                "themes": {"themes": ["Technic"], "span": "year"},
+            },
+        }
+    )
+    saved = await client.receive_json()
+    assert saved["success"], saved
+    assert saved["result"]["collapsed"] == ["wishlist"]
+    assert saved["result"]["release_mode"] == "separate"
+
+    # A later save of one row's filters leaves the others alone.
+    await client.send_json_auto_id(
+        {
+            "type": "lego/panel_config/set",
+            "release_filters": {"recent": {"span": "past3"}},
+        }
+    )
+    filters = (await client.receive_json())["result"]["release_filters"]
+    assert filters == {
+        "themes": {"themes": ["Technic"], "span": "year"},
+        "recent": {"span": "past3"},
+    }
+
+    restarted = PanelStore(hass)
+    await restarted.async_load()
+    assert restarted.settings(hass_admin_user.id)["release_mode"] == "separate"
+    assert restarted.collapsed(hass_admin_user.id) == ["wishlist"]
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_release_filters_reject_an_unknown_row_or_span(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A filter for a row that has none, or a span the panel lacks, is refused."""
+    await setup_integration(hass, mock_config_entry)
+    client = await hass_ws_client(hass)
+
+    for filters in (
+        {"wishlist": {"span": "year"}},
+        {"recent": {"span": "decade"}},
+    ):
+        await client.send_json_auto_id(
+            {"type": "lego/panel_config/set", "release_filters": filters}
+        )
+        message = await client.receive_json()
+        assert not message["success"], filters
+
+
+async def test_saved_orders_gain_the_combined_row_where_releases_were(
+    hass: HomeAssistant,
+) -> None:
+    """An order saved before the combined row existed places it with its siblings."""
+    store = PanelStore(hass)
+    await store.async_update("user", rows=["wishlist", "recent", "collection"])
+
+    rows = store.rows("user")
+
+    assert rows[:4] == ["wishlist", "releases", "recent", "collection"]
+    assert sorted(rows) == sorted(PANEL_ROWS)
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_the_bundle_loads_on_every_page_for_the_cards(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """The cards ship in the panel bundle, loaded at the very URL the panel uses."""
+    await setup_integration(hass, mock_config_entry)
+
+    modules = hass.data[frontend.DATA_EXTRA_MODULE_URL].urls
+    panel_url = hass.data[frontend.DATA_PANELS][PANEL_URL_PATH].config["_panel_custom"][
+        "module_url"
+    ]
+    assert panel_url in modules
