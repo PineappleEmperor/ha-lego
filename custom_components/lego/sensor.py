@@ -1,11 +1,9 @@
 """Sensor platform for the LEGO integration."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date
-from typing import TYPE_CHECKING, Any
+from datetime import date, datetime
+from typing import TYPE_CHECKING, Any, override
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -13,12 +11,13 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory, UnitOfTime
+from homeassistant.const import CONF_REGION, EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_REGION, DEFAULT_REGION, REGION_CURRENCY
+from .const import DEFAULT_REGION, REGION_CURRENCY
 from .coordinator import LegoCollectionCoordinator, LegoFeedsCoordinator
 from .entity import LegoCollectionEntity, LegoEntity
 from .models import CollectionSummary, LegoSet
@@ -50,7 +49,7 @@ def _wishlist_items(sets: list[LegoSet], region: str) -> list[dict[str, Any]]:
     today = dt_util.now().date().isoformat()
     # The full per-set payload is 16 fields, which a long wishlist would push to
     # every connected browser on each update. These are what a card needs.
-    items = [
+    items: list[dict[str, Any]] = [
         {
             "set_number": lego_set.number,
             "set_name": lego_set.name,
@@ -69,8 +68,8 @@ def _wishlist_items(sets: list[LegoSet], region: str) -> list[dict[str, Any]]:
         for lego_set in sets
     ]
     for item in items:
-        retirement = item["retirement_date"]
-        item["retired"] = retirement is not None and retirement < today
+        retires = item["retirement_date"]
+        item["retired"] = retires is not None and retires < today
     # A retired set is the least actionable thing on a wishlist, so it sinks
     # rather than floats. Brickset exposes no date a set was added, so set
     # number breaks the remaining ties.
@@ -139,6 +138,7 @@ async def async_setup_entry(
     ]
     entities.append(LegoValueSensor(collection))
     entities.append(LegoQuotaSensor(collection))
+    entities.append(LegoLastSyncedSensor(collection))
     entities.append(LegoNextRetirementSensor(collection))
     entities.extend(
         LegoLatestThemeSetSensor(runtime.feeds, theme) for theme in runtime.feeds.themes
@@ -166,17 +166,17 @@ class LegoSummarySensor(LegoCollectionEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{description.key}"
 
     @property
+    @override
     def native_value(self) -> int | float | None:
         """Return the total."""
-        if self.coordinator.data is None:
-            return None
         return self.entity_description.value_fn(self.coordinator.data.summary)
 
     @property
+    @override
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return the sets behind the total, for the sensors that carry them."""
         items_fn = self.entity_description.items_fn
-        if items_fn is None or self.coordinator.data is None:
+        if items_fn is None:
             return None
         return {"sets": items_fn(self.coordinator.data.wanted, self.coordinator.region)}
 
@@ -194,22 +194,21 @@ class LegoValueSensor(LegoCollectionEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_collection_value"
 
     @property
+    @override
     def native_unit_of_measurement(self) -> str | None:
         """Return the currency for the configured pricing region."""
         return REGION_CURRENCY.get(self.coordinator.region)
 
     @property
+    @override
     def native_value(self) -> float | None:
         """Return the summed RRP."""
-        if self.coordinator.data is None:
-            return None
         return self.coordinator.data.summary.value
 
     @property
+    @override
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return how much of the collection has no published price."""
-        if self.coordinator.data is None:
-            return None
         return {
             "region": self.coordinator.region,
             "sets_missing_price": self.coordinator.data.summary.sets_missing_price,
@@ -230,16 +229,19 @@ class LegoQuotaSensor(LegoCollectionEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_api_calls_today"
 
     @property
+    @override
     def available(self) -> bool:
         """Report quota even when a poll failed, since that is when it matters."""
         return True
 
     @property
+    @override
     def native_value(self) -> int:
         """Return calls used today."""
         return self.coordinator.quota.calls_today
 
     @property
+    @override
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return budget headroom and recent daily usage."""
         quota = self.coordinator.quota
@@ -252,6 +254,41 @@ class LegoQuotaSensor(LegoCollectionEntity, SensorEntity):
                 for day, count in sorted(quota.server_usage.items(), reverse=True)
             },
         }
+
+
+class LegoLastSyncedSensor(LegoCollectionEntity, SensorEntity):
+    """When Brickset last answered a collection poll."""
+
+    _attr_translation_key = "last_synced"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(self, coordinator: LegoCollectionCoordinator) -> None:
+        """Initialise the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_last_synced"
+
+    @override
+    async def async_added_to_hass(self) -> None:
+        """Follow every successful poll, not only the ones that changed data."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, self.coordinator.signal_synced, self.async_write_ha_state
+            )
+        )
+
+    @property
+    @override
+    def available(self) -> bool:
+        """Stay up while polls fail, since that is when the age of the data matters."""
+        return True
+
+    @property
+    @override
+    def native_value(self) -> datetime | None:
+        """Return when the collection was last synced."""
+        return self.coordinator.last_synced
 
 
 def _set_attributes(lego_set: LegoSet, region: str) -> dict[str, Any]:
@@ -292,8 +329,6 @@ class LegoNextRetirementSensor(LegoCollectionEntity, SensorEntity):
     @property
     def _next(self) -> tuple[date, LegoSet] | None:
         """Return the soonest wishlist retirement still to come."""
-        if self.coordinator.data is None:
-            return None
         today = dt_util.now().date()
         region = self.coordinator.region
         # Already-retired sets are excluded rather than reported as negative days;
@@ -309,6 +344,7 @@ class LegoNextRetirementSensor(LegoCollectionEntity, SensorEntity):
         return min(upcoming, key=lambda item: item[0])
 
     @property
+    @override
     def native_value(self) -> int | None:
         """Return days remaining until that retirement."""
         soonest = self._next
@@ -317,6 +353,7 @@ class LegoNextRetirementSensor(LegoCollectionEntity, SensorEntity):
         return (soonest[0] - dt_util.now().date()).days
 
     @property
+    @override
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return the full record of the set that is retiring."""
         soonest = self._next
@@ -347,12 +384,14 @@ class LegoLatestThemeSetSensor(LegoEntity[dict[str, list[LegoSet]]], SensorEntit
         return sets[0] if sets else None
 
     @property
+    @override
     def native_value(self) -> str | None:
         """Return the newest set's number."""
         lego_set = self._lego_set
         return lego_set.number if lego_set else None
 
     @property
+    @override
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return the newest set's details plus how many launched this year."""
         lego_set = self._lego_set

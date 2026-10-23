@@ -1,6 +1,4 @@
-"""Shared fixtures for the LEGO integration tests."""
-
-from __future__ import annotations
+"""Fixtures for the integration's tests."""
 
 from copy import deepcopy
 import gzip
@@ -8,8 +6,9 @@ import json
 from typing import Any
 from unittest.mock import patch
 
-from homeassistant.const import CONF_API_KEY, CONF_USERNAME
+from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -18,14 +17,17 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMockResponse,
 )
 
-from custom_components.lego.const import (
-    CONF_REGION,
-    CONF_THEMES,
-    CONF_USER_HASH,
-    DOMAIN,
-)
+# Without this import, setup fails with "Integration not found".
+import custom_components  # noqa: F401
+from custom_components.lego.const import CONF_THEMES, CONF_USER_HASH, DOMAIN
 
 pytest_plugins = "pytest_homeassistant_custom_component"
+
+
+@pytest.fixture(autouse=True)
+def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
+    """Let Home Assistant load integrations from custom_components/ in every test."""
+
 
 SETS_CSV_URL = "https://cdn.rebrickable.com/media/downloads/sets.csv.gz"
 THEMES_CSV_URL = "https://cdn.rebrickable.com/media/downloads/themes.csv.gz"
@@ -199,6 +201,8 @@ class BricksetServer:
         self.get_sets_error: str | None = None
         # When set, every setCollection call fails with this message.
         self.set_collection_error: str | None = None
+        # When set, every getThemes call fails with this message.
+        self.themes_error: str | None = None
         # Clear this to act like a Brickset that stopped accepting comma-joined themes.
         self.themes_batchable = True
 
@@ -252,6 +256,8 @@ class BricksetServer:
         return self._ok({"hash": USER_HASH})
 
     async def _get_themes(self, method: str, url: str, data: Any) -> Any:
+        if self.themes_error is not None:
+            return self._error(self.themes_error)
         return self._ok(
             {
                 "matches": 2,
@@ -366,3 +372,10 @@ def no_platforms():
     """Set the entry up without loading entity platforms."""
     with patch("custom_components.lego.PLATFORMS", []):
         yield
+
+
+def lego_device_id(hass: HomeAssistant, entry: MockConfigEntry) -> str:
+    """Return the id of the Brickset device an entry creates."""
+    return dr.async_get_device_id_by_identifier(
+        hass, (DOMAIN, entry.entry_id), config_entry_id=entry.entry_id
+    )

@@ -1,7 +1,5 @@
 """Exceptions raised by the LEGO integration."""
 
-from __future__ import annotations
-
 
 class BricksetError(Exception):
     """Base error for Brickset API failures."""

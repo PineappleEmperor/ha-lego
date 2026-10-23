@@ -1,0 +1,21 @@
+name: Panel Bundle
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'custom_components/*/panel/**'
+      - '.github/workflows/panel-bundle.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'custom_components/*/panel/**'
+      - '.github/workflows/panel-bundle.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  panel:
+    uses: PineappleEmperor/ha-panel-ci/.github/workflows/panel-bundle.yml@cf32b7da07f7a31f68b6af1a3a80ef8b6f6ac3b7 # v1.1.2

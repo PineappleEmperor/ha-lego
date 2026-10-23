@@ -1,16 +1,13 @@
 """Calendar platform for the LEGO integration."""
 
-from __future__ import annotations
-
 from datetime import date, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_REGION, DEFAULT_REGION
 from .coordinator import LegoCollectionCoordinator, LegoFeedsCoordinator
 from .entity import LegoCollectionEntity
 from .models import LegoSet
@@ -61,13 +58,14 @@ class LegoCalendarBase(LegoCollectionEntity, CalendarEntity):
     @property
     def region(self) -> str:
         """Return the configured pricing region."""
-        return self._collection.config_entry.options.get(CONF_REGION, DEFAULT_REGION)
+        return self._collection.region
 
     def _build_events(self, start: date, end: date) -> list[CalendarEvent]:
         """Build every event falling inside the range."""
         raise NotImplementedError
 
     @property
+    @override
     def event(self) -> CalendarEvent | None:
         """Return the next upcoming event."""
         today = dt_util.now().date()
@@ -76,6 +74,7 @@ class LegoCalendarBase(LegoCollectionEntity, CalendarEntity):
             return None
         return min(events, key=lambda item: item.start)
 
+    @override
     async def async_get_events(
         self, hass: HomeAssistant, start_date: datetime, end_date: datetime
     ) -> list[CalendarEvent]:
@@ -94,10 +93,9 @@ class LegoRetirementCalendar(LegoCalendarBase):
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_retirements"
 
+    @override
     def _build_events(self, start: date, end: date) -> list[CalendarEvent]:
         """Build a retirement event per set with a published exit date."""
-        if self.coordinator.data is None:
-            return []
         region = self.region
         events: list[CalendarEvent] = []
         for lego_set in self.coordinator.data.all_sets.values():
@@ -125,6 +123,7 @@ class LegoReleaseCalendar(LegoCalendarBase):
         self._feeds = feeds
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_releases"
 
+    @override
     def _build_events(self, start: date, end: date) -> list[CalendarEvent]:
         """Build a release event per wanted or followed-theme set."""
         region = self.region
@@ -159,10 +158,9 @@ class LegoAnniversaryCalendar(LegoCalendarBase):
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_anniversaries"
 
+    @override
     def _build_events(self, start: date, end: date) -> list[CalendarEvent]:
         """Build an anniversary per owned set, per year in the range."""
-        if self.coordinator.data is None:
-            return []
         region = self.region
         events: list[CalendarEvent] = []
         for lego_set in self.coordinator.data.owned:

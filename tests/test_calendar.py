@@ -1,10 +1,9 @@
 """Tests for the LEGO calendars."""
 
-from __future__ import annotations
-
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from .conftest import BricksetServer, make_set, setup_integration
@@ -28,9 +27,9 @@ async def _events(
     return response[entity_id]["events"]
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_retirement_events(
     hass: HomeAssistant,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:
@@ -50,9 +49,9 @@ async def test_retirement_events(
     assert events[0]["start"] == "2099-12-31"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_release_events_cover_wanted_and_watched_themes(
     hass: HomeAssistant,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:
@@ -67,9 +66,9 @@ async def test_release_events_cover_wanted_and_watched_themes(
     assert "42200-1 New Technic Thing released" in summaries
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_anniversary_events(
     hass: HomeAssistant,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:
@@ -88,9 +87,9 @@ async def test_anniversary_events(
     assert "Alienator turns 41" in summaries
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_next_event_property(
     hass: HomeAssistant,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:

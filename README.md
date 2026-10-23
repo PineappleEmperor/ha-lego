@@ -7,9 +7,9 @@
 <a href="https://github.com/hacs/integration"><img alt="hacs" src="https://img.shields.io/badge/hacs-custom-blue?style=flat-square"></a>
 <a href="LICENSE"><img alt="licence" src="https://img.shields.io/github/license/PineappleEmperor/ha-lego?style=flat-square"></a>
 <br>
-<img alt="python" src="https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-lego/python_validate.yml?style=flat-square&amp;label=python">
-<img alt="hassfest" src="https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-lego/hassfest_validate.yml?style=flat-square&amp;label=hassfest">
-<img alt="hacs valid" src="https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-lego/hacs_validate.yml?style=flat-square&amp;label=hacs%20valid">
+<img alt="python" src="https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-lego/python-validate.yml?style=flat-square&amp;label=python">
+<img alt="hassfest" src="https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-lego/hassfest-validate.yml?style=flat-square&amp;label=hassfest">
+<img alt="hacs valid" src="https://img.shields.io/github/actions/workflow/status/PineappleEmperor/ha-lego/hacs-validate.yml?style=flat-square&amp;label=hacs%20valid">
 <a href="https://buymeacoffee.com/PineappleEmperor"><img alt="Buy me a coffee" height="20" src="https://cdn.buymeacoffee.com/buttons/default-yellow.png"></a>
 </p>
 
@@ -81,9 +81,7 @@ Reachable via **Configure** on the integration entry.
 |--------|---------|-------|
 | Pricing region | from HA's country | Which LEGO.com market supplies prices and availability dates (`UK`, `US`, `CA`, `DE`). |
 | Themes to watch | none | Which themes to follow for new releases. However many you pick, they ride in one call per refresh. |
-| Collection refresh interval | 1 h | How often owned and wanted sets are re-fetched. Each refresh costs two calls. |
-| New release refresh interval | 12 h | How often watched themes are checked. Each refresh costs one call. |
-| Daily call budget | 80 | How many calls polling may spend before it pauses, leaving headroom for anything you ask for by hand. |
+| Daily call budget | 80 | The most calls Home Assistant spends a day. The refresh intervals are set from it (see [Data updates](#data-updates)), and polling pauses until midnight UTC once it is spent. |
 | Show the LEGO panel in the sidebar | on | Whether to add the sidebar page for browsing your collection, your wishlist and new releases. |
 | Keep a local set index | on | Whether to keep a local copy of Rebrickable's set list, so looking a set up costs no Brickset calls. |
 | Include set names in the index | on | Whether that index stores names as well as numbers, which is what searching by name needs. Takes roughly 1.8 MB on disk instead of 450 KB. |
@@ -119,6 +117,7 @@ exceeded rather than failing at the API.
 | Sets wanted | Size of your Brickset wishlist. A `sets` attribute lists them, soonest to retire first with already-retired sets last, carrying your Brickset priority, and is kept out of the recorder. |
 | Collection value | Sum of LEGO.com RRP × quantity in the chosen region. |
 | Brickset calls today | Diagnostic; usage against the daily limit. |
+| Last synced | Diagnostic timestamp of the last time Brickset answered a poll. Stays available, so a dashboard can show how old the data is. |
 | Next wishlist retirement | Days until the soonest set on your wishlist leaves sale, with that set's full record in attributes. Sets already gone are excluded. |
 | Latest *theme* set | One per watched theme; newest set number, with details in attributes. |
 | Set retirements / releases / anniversaries | Three calendar entities. |
@@ -135,13 +134,21 @@ exceeded rather than failing at the API.
 `lego.set_collection` spends a call only for a set no poll has returned; the local index
 remembers the Brickset ID of everything already seen.
 
+Every action targets an account by its **Brickset device** (`device_id`), picked from a
+device list in the action editor. Automations written for 0.4.0 or 1.0.0rc1 passed
+`config_entry_id` instead and need that field swapped for the device.
+
 ## Data updates
 
 Brickset allows **100 `getSets` calls per API key per day**; no other method counts. The
-integration polls on two schedules and self-limits:
+integration polls on two schedules, which it sets itself from the daily call budget:
 
-- **Collection** (default every 1 h): one call for owned sets and one for wanted.
-- **Themes** (default every 12 h): one call for all of them, comma joined. A theme with
+- **Collection**: one call for owned sets and one for wanted, plus one per extra page of
+  500. It polls as often as fits in three quarters of the budget, stepping from every
+  hour through 2, 3, 4, 6, 8 and 12 hours to once a day. The default budget of 80 polls
+  hourly; a budget of 20 polls every 4 hours. The rest of the budget is kept for actions
+  such as a manual refresh.
+- **Themes** (every 12 h): one call for all of them, comma joined. A theme with
   no releases this year is confirmed separately, which costs one more.
 - `getKeyUsageStats` does not count against the 100. It is polled at most every 30
   minutes to reconcile the local tally with Brickset's own count, which also catches
@@ -154,8 +161,11 @@ is configurable; Rebrickable publishes whole snapshots rather than deltas, so a 
 is always a full 511 KB download.
 
 The options dialog shows the estimated calls/day for your current settings. When the
-budget is spent, polling pauses and entities keep serving the last successful poll rather
-than going unavailable. `sensor.brickset_*_brickset_calls_today` shows usage, budget and
+budget is spent, polling pauses until Brickset's day resets at midnight UTC and the
+entities keep serving the last successful poll rather than going unavailable. To tell
+how old that data is, `sensor.brickset_*_last_synced` holds the time of the last sync,
+and the panel shows it beside **Update now** ("Updated 3 hours ago") along with when
+updates resume. `sensor.brickset_*_brickset_calls_today` shows usage, budget and
 remaining headroom.
 
 ## Removal

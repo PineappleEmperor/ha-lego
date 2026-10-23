@@ -1,26 +1,21 @@
 """Tests for LEGO config entry setup and teardown."""
 
-from __future__ import annotations
-
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_API_KEY, CONF_USERNAME
+from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.lego import async_remove_config_entry_device
-from custom_components.lego.const import (
-    CONF_REGION,
-    CONF_THEMES,
-    CONF_USER_HASH,
-    DOMAIN,
-)
+from custom_components.lego.const import CONF_THEMES, CONF_USER_HASH, DOMAIN
 
 from .conftest import API_KEY, USER_HASH, USERNAME, BricksetServer, setup_integration
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_migrate_watchlist_entry_to_the_wishlist(
-    hass: HomeAssistant, brickset: BricksetServer
+    hass: HomeAssistant, entity_registry: er.EntityRegistry
 ) -> None:
     """A version 1 entry loses the watchlist option and the sensors it created."""
     entry = MockConfigEntry(
@@ -37,7 +32,7 @@ async def test_migrate_watchlist_entry_to_the_wishlist(
     )
     entry.add_to_hass(hass)
 
-    registry = er.async_get(hass)
+    registry = entity_registry
     legacy = [
         registry.async_get_or_create(
             "sensor", DOMAIN, f"{entry.entry_id}_watch_{number}", config_entry=entry
@@ -55,8 +50,11 @@ async def test_migrate_watchlist_entry_to_the_wishlist(
     assert all(registry.async_get(item.entity_id) is None for item in legacy)
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_setup_and_unload(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant,
+    device_registry: dr.DeviceRegistry,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
     """The entry loads, creates its device, and unloads cleanly."""
     await setup_integration(hass, mock_config_entry)
@@ -64,7 +62,7 @@ async def test_setup_and_unload(
     assert mock_config_entry.state is ConfigEntryState.LOADED
 
     devices = dr.async_entries_for_config_entry(
-        dr.async_get(hass), mock_config_entry.entry_id
+        device_registry, mock_config_entry.entry_id
     )
     assert len(devices) == 1
     assert devices[0].manufacturer == "Brickset"
@@ -74,8 +72,11 @@ async def test_setup_and_unload(
     assert mock_config_entry.state is ConfigEntryState.NOT_LOADED
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_setup_two_entries(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant,
+    device_registry: dr.DeviceRegistry,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
     """Two Brickset accounts load side by side."""
     second = MockConfigEntry(
@@ -97,7 +98,6 @@ async def test_setup_two_entries(
     assert mock_config_entry.state is ConfigEntryState.LOADED
     assert second.state is ConfigEntryState.LOADED
 
-    device_registry = dr.async_get(hass)
     assert len(dr.async_entries_for_config_entry(device_registry, second.entry_id)) == 1
 
 
@@ -125,8 +125,9 @@ async def test_setup_starts_reauth_on_bad_hash(
     assert [flow["context"]["source"] for flow in flows] == ["reauth"]
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_options_update_reloads(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Changing options reloads the entry so coordinators pick them up."""
     await setup_integration(hass, mock_config_entry)
@@ -141,13 +142,16 @@ async def test_options_update_reloads(
     assert mock_config_entry.runtime_data.collection.region == "US"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_device_removal_refused(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant,
+    device_registry: dr.DeviceRegistry,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
     """The service device cannot be removed while the entry is loaded."""
     await setup_integration(hass, mock_config_entry)
     device = dr.async_entries_for_config_entry(
-        dr.async_get(hass), mock_config_entry.entry_id
+        device_registry, mock_config_entry.entry_id
     )[0]
 
     assert (
@@ -155,8 +159,9 @@ async def test_device_removal_refused(
     )
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_user_hash_is_used_not_password(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Only the stored token reaches Brickset; no password is ever held."""
     await setup_integration(hass, mock_config_entry)

@@ -13,6 +13,12 @@ rules:
   docs-high-level-description: done
   docs-installation-instructions: done
   docs-removal-instructions: done
+  docs-triggers:
+    status: exempt
+    comment: The integration provides no triggers of its own.
+  docs-conditions:
+    status: exempt
+    comment: The integration provides no conditions of its own.
   entity-event-setup:
     status: exempt
     comment: Entities subscribe only through CoordinatorEntity; no external callbacks.
@@ -26,7 +32,12 @@ rules:
   # Silver
   config-entry-unloading: done
   log-when-unavailable: done
-  entity-unavailable: done
+  entity-unavailable:
+    status: done
+    comment: >-
+      A failed poll makes the entities unavailable. A spent daily call budget is a
+      limit the integration sets itself, not a failure, so the last sync's data is
+      kept and the Last synced sensor and the panel show its age.
   action-exceptions: done
   reauthentication-flow: done
   parallel-updates: done

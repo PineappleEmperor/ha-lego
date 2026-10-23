@@ -1,15 +1,16 @@
 """The optional sidebar panel: registration and its per-user row order."""
 
-from __future__ import annotations
-
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http.server import StaticPathConfig
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.storage import Store
 from homeassistant.loader import async_get_integration
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_PANEL,
@@ -26,6 +27,7 @@ from .const import (
 
 if TYPE_CHECKING:
     from . import LegoConfigEntry
+    from .models import LegoSet
 
 REGISTERED = f"{DOMAIN}_panel_registered"
 
@@ -115,6 +117,7 @@ async def async_refresh_panel(hass: HomeAssistant) -> None:
             sidebar_title="LEGO",
             sidebar_icon="mdi:toy-brick",
             require_admin=False,
+            handle_safe_area=False,  # the panel sets no insets, so keep HA's padding
         )
     elif registered and not want:
         frontend.async_remove_panel(hass, PANEL_URL_PATH)
@@ -151,14 +154,40 @@ def summarise(lego_set: Any, region: str) -> dict[str, Any]:
     }
 
 
+def _wishlist_key(
+    item: LegoSet, region: str, today: date
+) -> tuple[bool, bool, date, str, str]:
+    """Sort a wishlist soonest to retire first, as the wishlist sensor does."""
+    retires = item.retirement_date(region)
+    # A retired set is the least actionable thing on a wishlist, so it sinks.
+    return (
+        retires is not None and retires < today,
+        retires is None,
+        retires or date.max,
+        item.name,
+        item.number,
+    )
+
+
 def dashboard_payload(entry: LegoConfigEntry, rows: list[str]) -> dict[str, Any]:
     """Build everything the panel's home view needs in one reply."""
-    data = entry.runtime_data.collection.data
-    region = entry.runtime_data.collection.region
+    collection = entry.runtime_data.collection
+    data = collection.data
+    region = collection.region
     summary = data.summary if data else None
-    quota = entry.runtime_data.collection.quota
+    quota = collection.quota
+    # Actions target the account's device, so the panel needs its id to call them.
+    device = dr.async_get(collection.hass).async_get_device_by_identifier(
+        (DOMAIN, entry.entry_id), entry.entry_id
+    )
+    today = dt_util.now().date()
+    wanted = sorted(
+        data.wanted if data else [],
+        key=lambda item: _wishlist_key(item, region, today),
+    )
     return {
         "entry_id": entry.entry_id,
+        "device_id": device.id if device else None,
         "rows": rows,
         "region": region,
         "quota": {
@@ -166,7 +195,13 @@ def dashboard_payload(entry: LegoConfigEntry, rows: list[str]) -> dict[str, Any]
             "budget": quota.budget,
             "remaining": quota.remaining,
             "refresh_cost": entry.runtime_data.collection.poll_cost,
+            "resets_at": quota.resets_at.isoformat(),
         },
+        # The panel shows how old the data is, which matters once the budget is spent
+        # and polls keep serving the last sync.
+        "last_synced": (
+            collection.last_synced.isoformat() if collection.last_synced else None
+        ),
         "stats": {
             "sets_owned": summary.sets_owned if summary else 0,
             "sets_distinct": summary.sets_distinct if summary else 0,
@@ -176,7 +211,7 @@ def dashboard_payload(entry: LegoConfigEntry, rows: list[str]) -> dict[str, Any]
             "value": summary.value if summary else 0.0,
             "sets_missing_price": summary.sets_missing_price if summary else 0,
         },
-        "wishlist": [summarise(item, region) for item in (data.wanted if data else [])],
+        "wishlist": [summarise(item, region) for item in wanted],
         "themes": {
             theme: [summarise(item, region) for item in sets]
             for theme, sets in (entry.runtime_data.feeds.data or {}).items()

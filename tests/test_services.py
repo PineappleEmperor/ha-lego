@@ -1,7 +1,5 @@
 """Tests for the LEGO actions."""
 
-from __future__ import annotations
-
 import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
@@ -20,7 +18,13 @@ from custom_components.lego.const import (
     SERVICE_SET_COLLECTION,
 )
 
-from .conftest import SETS_CSV_URL, BricksetServer, make_set, setup_integration
+from .conftest import (
+    SETS_CSV_URL,
+    BricksetServer,
+    lego_device_id,
+    make_set,
+    setup_integration,
+)
 
 
 async def test_refresh_catalogue(
@@ -34,7 +38,7 @@ async def test_refresh_catalogue(
     response = await hass.services.async_call(
         DOMAIN,
         SERVICE_REFRESH_CATALOGUE,
-        {"config_entry_id": mock_config_entry.entry_id},
+        {"device_id": lego_device_id(hass, mock_config_entry)},
         blocking=True,
         return_response=True,
     )
@@ -44,8 +48,9 @@ async def test_refresh_catalogue(
     assert len(brickset.get_sets_calls) == before
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_refresh_catalogue_ignores_the_interval(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Asking by hand refreshes a fresh index, which is the point of asking."""
     await setup_integration(hass, mock_config_entry)
@@ -55,7 +60,7 @@ async def test_refresh_catalogue_ignores_the_interval(
     response = await hass.services.async_call(
         DOMAIN,
         SERVICE_REFRESH_CATALOGUE,
-        {"config_entry_id": mock_config_entry.entry_id},
+        {"device_id": lego_device_id(hass, mock_config_entry)},
         blocking=True,
         return_response=True,
     )
@@ -63,8 +68,9 @@ async def test_refresh_catalogue_ignores_the_interval(
     assert response["updated"] is True
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_refresh_catalogue_needs_the_index_enabled(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Refreshing an index the user turned off is a validation error, not a crash."""
     mock_config_entry.add_to_hass(hass)
@@ -78,7 +84,7 @@ async def test_refresh_catalogue_needs_the_index_enabled(
         await hass.services.async_call(
             DOMAIN,
             SERVICE_REFRESH_CATALOGUE,
-            {"config_entry_id": mock_config_entry.entry_id},
+            {"device_id": lego_device_id(hass, mock_config_entry)},
             blocking=True,
         )
 
@@ -100,7 +106,7 @@ async def test_refresh_catalogue_reports_a_failed_download(
         await hass.services.async_call(
             DOMAIN,
             SERVICE_REFRESH_CATALOGUE,
-            {"config_entry_id": mock_config_entry.entry_id},
+            {"device_id": lego_device_id(hass, mock_config_entry)},
             blocking=True,
         )
 
@@ -126,7 +132,7 @@ async def test_set_collection(
         DOMAIN,
         SERVICE_SET_COLLECTION,
         {
-            "config_entry_id": mock_config_entry.entry_id,
+            "device_id": lego_device_id(hass, mock_config_entry),
             "set_number": "10497-1",
             "owned": True,
             "qty_owned": 3,
@@ -151,7 +157,7 @@ async def test_set_collection_reuses_a_harvested_id(
         DOMAIN,
         SERVICE_SET_COLLECTION,
         {
-            "config_entry_id": mock_config_entry.entry_id,
+            "device_id": lego_device_id(hass, mock_config_entry),
             "set_number": "42200-1",
             "wanted": True,
         },
@@ -174,7 +180,7 @@ async def test_set_collection_looks_up_an_unseen_set(
         DOMAIN,
         SERVICE_SET_COLLECTION,
         {
-            "config_entry_id": mock_config_entry.entry_id,
+            "device_id": lego_device_id(hass, mock_config_entry),
             "set_number": "21034-1",
             "wanted": True,
         },
@@ -185,8 +191,9 @@ async def test_set_collection_looks_up_an_unseen_set(
     assert _lookups(brickset, before) == ["21034-1"]
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_set_collection_unknown_set_raises(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """An unknown set number is a validation error, not a crash."""
     await setup_integration(hass, mock_config_entry)
@@ -196,7 +203,7 @@ async def test_set_collection_unknown_set_raises(
             DOMAIN,
             SERVICE_SET_COLLECTION,
             {
-                "config_entry_id": mock_config_entry.entry_id,
+                "device_id": lego_device_id(hass, mock_config_entry),
                 "set_number": "00000-1",
                 "owned": True,
             },
@@ -218,7 +225,7 @@ async def test_set_collection_expired_token_raises(
             DOMAIN,
             SERVICE_SET_COLLECTION,
             {
-                "config_entry_id": mock_config_entry.entry_id,
+                "device_id": lego_device_id(hass, mock_config_entry),
                 "set_number": "10497-1",
                 "owned": True,
             },
@@ -239,7 +246,7 @@ async def test_set_collection_folds_the_change_into_the_cache(
         DOMAIN,
         SERVICE_SET_COLLECTION,
         {
-            "config_entry_id": mock_config_entry.entry_id,
+            "device_id": lego_device_id(hass, mock_config_entry),
             "set_number": "10294-1",
             "owned": True,
             "qty_owned": 1,
@@ -272,7 +279,7 @@ async def test_set_collection_rejection_raises_a_repair_issue(
             DOMAIN,
             SERVICE_SET_COLLECTION,
             {
-                "config_entry_id": mock_config_entry.entry_id,
+                "device_id": lego_device_id(hass, mock_config_entry),
                 "set_number": "10497-1",
                 "owned": True,
             },
@@ -288,7 +295,7 @@ async def test_set_collection_rejection_raises_a_repair_issue(
         DOMAIN,
         SERVICE_SET_COLLECTION,
         {
-            "config_entry_id": mock_config_entry.entry_id,
+            "device_id": lego_device_id(hass, mock_config_entry),
             "set_number": "10497-1",
             "owned": True,
         },
@@ -298,25 +305,27 @@ async def test_set_collection_rejection_raises_a_repair_issue(
     assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
 
 
-async def test_unknown_entry_raises(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+@pytest.mark.usefixtures("brickset")
+async def test_unknown_device_raises(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Targeting a non-existent entry is a validation error."""
+    """Targeting a device that is not a Brickset device is a validation error."""
     await setup_integration(hass, mock_config_entry)
 
     with pytest.raises(ServiceValidationError) as err:
         await hass.services.async_call(
             DOMAIN,
             SERVICE_SET_COLLECTION,
-            {"config_entry_id": "does-not-exist", "set_number": "10497-1"},
+            {"device_id": "does-not-exist", "set_number": "10497-1"},
             blocking=True,
         )
 
-    assert err.value.translation_key == "entry_not_found"
+    assert err.value.translation_key == "device_not_found"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_search_sets_returns_matches(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """The search action returns a response payload."""
     await setup_integration(hass, mock_config_entry)
@@ -324,7 +333,7 @@ async def test_search_sets_returns_matches(
     response = await hass.services.async_call(
         DOMAIN,
         SERVICE_SEARCH_SETS,
-        {"config_entry_id": mock_config_entry.entry_id, "query": "castle"},
+        {"device_id": lego_device_id(hass, mock_config_entry), "query": "castle"},
         blocking=True,
         return_response=True,
     )
@@ -333,8 +342,9 @@ async def test_search_sets_returns_matches(
     assert response["sets"][0]["name"] == "Lion Knights' Castle"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_search_without_criteria_raises(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """An unbounded search is refused rather than pulling the whole catalogue."""
     await setup_integration(hass, mock_config_entry)
@@ -343,7 +353,7 @@ async def test_search_without_criteria_raises(
         await hass.services.async_call(
             DOMAIN,
             SERVICE_SEARCH_SETS,
-            {"config_entry_id": mock_config_entry.entry_id},
+            {"device_id": lego_device_id(hass, mock_config_entry)},
             blocking=True,
             return_response=True,
         )
@@ -361,7 +371,7 @@ async def test_refresh_collection_polls_now(
     result = await hass.services.async_call(
         DOMAIN,
         SERVICE_REFRESH_COLLECTION,
-        {"config_entry_id": mock_config_entry.entry_id},
+        {"device_id": lego_device_id(hass, mock_config_entry)},
         blocking=True,
         return_response=True,
     )
@@ -384,9 +394,29 @@ async def test_refresh_collection_refuses_when_the_budget_is_spent(
         await hass.services.async_call(
             DOMAIN,
             SERVICE_REFRESH_COLLECTION,
-            {"config_entry_id": mock_config_entry.entry_id},
+            {"device_id": lego_device_id(hass, mock_config_entry)},
             blocking=True,
         )
 
     assert err.value.translation_key == "quota_spent"
     assert len(brickset.get_sets_calls) == billed
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_unloaded_account_raises(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """The device of an unloaded account is refused with a reason."""
+    await setup_integration(hass, mock_config_entry)
+    device_id = lego_device_id(hass, mock_config_entry)
+    await hass.config_entries.async_unload(mock_config_entry.entry_id)
+
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_COLLECTION,
+            {"device_id": device_id, "set_number": "10497-1"},
+            blocking=True,
+        )
+
+    assert err.value.translation_key == "entry_not_loaded"

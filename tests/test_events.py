@@ -1,7 +1,5 @@
 """Tests for the events the LEGO coordinators fire."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from freezegun.api import FrozenDateTimeFactory
@@ -133,9 +131,9 @@ async def test_wanted_set_change_event(
     assert events[0].data["retirement_date"] == "2027-01-31"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_unchanged_wanted_set_fires_nothing(
     hass: HomeAssistant,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:

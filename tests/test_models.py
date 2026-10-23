@@ -1,7 +1,5 @@
 """Tests for the Brickset payload parsers."""
 
-from __future__ import annotations
-
 from datetime import date
 
 from custom_components.lego.models import CollectionSummary, LegoSet

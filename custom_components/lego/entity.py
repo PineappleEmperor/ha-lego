@@ -1,7 +1,5 @@
 """Base entity for the LEGO integration."""
 
-from __future__ import annotations
-
 from homeassistant.const import CONF_USERNAME
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity

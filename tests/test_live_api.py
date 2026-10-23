@@ -18,8 +18,6 @@ environment that needs a human approval. Four billed calls per run: owned,
 wanted, the catalogue sample and the theme batch.
 """
 
-from __future__ import annotations
-
 import csv
 import gzip
 import io

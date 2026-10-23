@@ -1,12 +1,11 @@
 """Tests for the sidebar panel and its websocket commands."""
 
-from __future__ import annotations
-
 from http import HTTPStatus
 
 from homeassistant.components import frontend
-from homeassistant.const import CONF_API_KEY, CONF_USERNAME
+from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import (
     ClientSessionGenerator,
@@ -15,7 +14,6 @@ from pytest_homeassistant_custom_component.typing import (
 
 from custom_components.lego.const import (
     CONF_PANEL,
-    CONF_REGION,
     CONF_THEMES,
     CONF_USER_HASH,
     DOMAIN,
@@ -24,7 +22,7 @@ from custom_components.lego.const import (
     PANEL_URL_PATH,
 )
 
-from .conftest import API_KEY, BricksetServer, setup_integration
+from .conftest import API_KEY, BricksetServer, lego_device_id, setup_integration
 
 
 async def _second_account(hass: HomeAssistant) -> MockConfigEntry:
@@ -44,10 +42,10 @@ async def _second_account(hass: HomeAssistant) -> MockConfigEntry:
     return await setup_integration(hass, entry)
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_accounts_lists_every_loaded_entry(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """The panel can ask which accounts exist and which to show first."""
@@ -66,10 +64,10 @@ async def test_accounts_lists_every_loaded_entry(
     assert result["selected"] == mock_config_entry.entry_id
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_dashboard_serves_two_accounts(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """Naming an account returns that account, not an error."""
@@ -84,12 +82,17 @@ async def test_dashboard_serves_two_accounts(
         message = await client.receive_json()
         assert message["success"], message
         assert message["result"]["entry_id"] == entry.entry_id
+        # The panel's actions target the account's device, so it must arrive too.
+        assert message["result"]["device_id"] == lego_device_id(hass, entry)
+        # So the panel can say how old the data is once the budget is spent.
+        assert message["result"]["last_synced"] is not None
+        assert message["result"]["quota"]["resets_at"].endswith("T00:00:00+00:00")
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_dashboard_without_an_account_falls_back(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """An unnamed request picks the first account rather than failing."""
@@ -104,10 +107,10 @@ async def test_dashboard_without_an_account_falls_back(
     assert message["result"]["entry_id"] == mock_config_entry.entry_id
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_chosen_account_is_remembered(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """A stored choice decides both the listing and an unnamed dashboard call."""
@@ -128,10 +131,10 @@ async def test_chosen_account_is_remembered(
     assert message["result"]["entry_id"] == second.entry_id
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_stored_account_falls_back_once_removed(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """Unloading the chosen account does not leave the panel pointing at nothing."""
@@ -155,10 +158,10 @@ async def test_stored_account_falls_back_once_removed(
     assert result["selected"] == mock_config_entry.entry_id
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_setting_an_unknown_account_is_rejected(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """A stale entry id from an old browser tab is refused, not stored."""
@@ -174,8 +177,9 @@ async def test_setting_an_unknown_account_is_rejected(
     assert message["error"]["code"] == "not_found"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_panel_is_registered_by_default(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """A new install gets the sidebar entry without being asked."""
     await setup_integration(hass, mock_config_entry)
@@ -183,8 +187,9 @@ async def test_panel_is_registered_by_default(
     assert PANEL_URL_PATH in hass.data[frontend.DATA_PANELS]
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_panel_can_be_turned_off(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Opting out leaves no sidebar entry behind."""
     mock_config_entry.add_to_hass(hass)
@@ -197,10 +202,10 @@ async def test_panel_can_be_turned_off(
     assert PANEL_URL_PATH not in hass.data[frontend.DATA_PANELS]
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_the_fallback_icon_is_served(
     hass: HomeAssistant,
     hass_client: ClientSessionGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """Cards without art point at the brand icon, so it has to be reachable."""
@@ -243,10 +248,10 @@ async def test_dashboard_returns_the_home_view(
     assert result["quota"]["budget"] >= result["quota"]["calls_today"]
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_dashboard_carries_dates_for_the_wishlist(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """A wishlist card needs a date to be worth showing."""
@@ -262,10 +267,10 @@ async def test_dashboard_carries_dates_for_the_wishlist(
     assert "available_until" in wanted
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_collection_filters_and_sorts(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """The grid is sorted for a person scanning it, not by API order."""
@@ -279,10 +284,10 @@ async def test_collection_filters_and_sorts(
     assert owned == sorted(owned, key=lambda item: (item["theme"], item["name"]))
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_collection_can_return_the_wishlist(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """The same command backs the wanted filter."""
@@ -295,10 +300,10 @@ async def test_collection_can_return_the_wishlist(
     assert [item["set_number"] for item in sets] == ["10294-1"]
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_row_order_is_saved_and_returned(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """Reordering survives, because the dashboard reads back what was saved."""
@@ -319,10 +324,10 @@ async def test_row_order_is_saved_and_returned(
     ]
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_unknown_rows_are_dropped_and_new_ones_appended(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """A saved order from another version must not lose or invent a row."""

@@ -1,7 +1,5 @@
 """Constants for the LEGO integration."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 from typing import Final
 
@@ -9,15 +7,9 @@ DOMAIN: Final = "lego"
 
 ATTRIBUTION: Final = "Data provided by Brickset.com"
 
-CONF_API_KEY: Final = "api_key"
-CONF_USERNAME: Final = "username"
-CONF_PASSWORD: Final = "password"
 CONF_USER_HASH: Final = "user_hash"
 
-CONF_REGION: Final = "region"
 CONF_THEMES: Final = "themes"
-CONF_COLLECTION_INTERVAL: Final = "collection_interval_hours"
-CONF_FEEDS_INTERVAL: Final = "feeds_interval_hours"
 CONF_DAILY_CALL_BUDGET: Final = "daily_call_budget"
 CONF_PANEL: Final = "panel"
 CONF_CATALOGUE: Final = "catalogue"
@@ -33,15 +25,20 @@ DEFAULT_REGION: Final = "UK"
 # to be asked rather than guessed.
 COUNTRY_TO_REGION: Final = {"GB": "UK", "US": "US", "CA": "CA", "DE": "DE"}
 
-DEFAULT_COLLECTION_INTERVAL_HOURS: Final = 1
-DEFAULT_FEEDS_INTERVAL_HOURS: Final = 12
+# The collection changes only when its owner edits it, so an hour is the floor; the
+# interval steps up from there until the polls fit the budget. Theme feeds gain a few
+# sets a week, so twice a day is plenty.
+COLLECTION_INTERVAL_STEPS_HOURS: Final = (1, 2, 3, 4, 6, 8, 12, 24)
+FEEDS_INTERVAL_HOURS: Final = 12
+# Polls may spend this share of the budget; the rest is kept for actions such as a
+# manual refresh or a set lookup, which would otherwise find the budget spent.
+POLL_SHARE_OF_BUDGET: Final = 0.75
+# Owned and wanted cost one call each until either list passes a page.
+MIN_COLLECTION_POLL_COST: Final = 2
 
 # Brickset caps getSets at 100 calls per key per day; no other method counts.
 BRICKSET_DAILY_CALL_LIMIT: Final = 100
 DEFAULT_DAILY_CALL_BUDGET: Final = 80
-
-MIN_INTERVAL_HOURS: Final = 1
-MAX_INTERVAL_HOURS: Final = 168
 
 PAGE_SIZE: Final = 500
 
@@ -81,7 +78,6 @@ SERVICE_SEARCH_SETS: Final = "search_sets"
 SERVICE_REFRESH_CATALOGUE: Final = "refresh_catalogue"
 SERVICE_REFRESH_COLLECTION: Final = "refresh_collection"
 
-ATTR_CONFIG_ENTRY_ID: Final = "config_entry_id"
 ATTR_SET_NUMBER: Final = "set_number"
 ATTR_OWNED: Final = "owned"
 ATTR_WANTED: Final = "wanted"

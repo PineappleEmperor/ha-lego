@@ -1,0 +1,13 @@
+name: Lint PR
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  lint:
+    permissions:
+      pull-requests: read
+    uses: PineappleEmperor/release-flow/.github/workflows/lint-pr.yml@ca36eb9b5bae9840a119a2a6fc2f7628de90d1ba # v1.1.5

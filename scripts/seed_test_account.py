@@ -12,8 +12,6 @@ writes through setCollection. Run it against the TEST account, never your own.
     python3 scripts/seed_test_account.py --dry-run   # prints what it would do
 """
 
-from __future__ import annotations
-
 import argparse
 import asyncio
 import json

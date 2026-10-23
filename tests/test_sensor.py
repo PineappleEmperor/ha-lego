@@ -1,26 +1,24 @@
 """Tests for the LEGO sensors."""
 
-from __future__ import annotations
-
 from datetime import timedelta
 
 from freezegun.api import FrozenDateTimeFactory
-from homeassistant.const import STATE_UNKNOWN
+from homeassistant.const import CONF_REGION, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
+import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
-
-from custom_components.lego.const import CONF_REGION
 
 from .conftest import BricksetServer, make_set, setup_integration
 
 PREFIX = "sensor.brickset_brickfan"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_summary_sensors(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Collection totals reach the state machine."""
     await setup_integration(hass, mock_config_entry)
@@ -32,8 +30,9 @@ async def test_summary_sensors(
     assert hass.states.get(f"{PREFIX}_sets_wanted").state == "1"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_wishlist_sensor_carries_the_sets_unrecorded(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """The count is the state, the sets ride along, and history stays out of it."""
     await setup_integration(hass, mock_config_entry)
@@ -90,8 +89,9 @@ async def test_wishlist_order_sinks_retired_sets(
     assert [item["retired"] for item in sets] == [False, False, False, False, True]
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_value_sensor_reports_missing_prices(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """The value sensor states its currency and admits what it could not price."""
     await setup_integration(hass, mock_config_entry)
@@ -104,8 +104,9 @@ async def test_value_sensor_reports_missing_prices(
     assert state.attributes["attribution"] == "Data provided by Brickset.com"
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_value_sensor_follows_the_region(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """Switching region changes the currency and drops UK-only prices."""
     mock_config_entry.add_to_hass(hass)
@@ -122,8 +123,9 @@ async def test_value_sensor_follows_the_region(
     assert state.attributes["sets_missing_price"] == 3
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_quota_sensor(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """The diagnostic sensor exposes usage against the budget."""
     await setup_integration(hass, mock_config_entry)
@@ -213,8 +215,9 @@ async def test_next_retirement_without_any_dates(
     assert hass.states.get(f"{PREFIX}_next_wishlist_retirement").state == STATE_UNKNOWN
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_wishlist_sets_get_no_sensor_of_their_own(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """The entity count does not track the wishlist length."""
     await setup_integration(hass, mock_config_entry)
@@ -223,8 +226,9 @@ async def test_wishlist_sets_get_no_sensor_of_their_own(
     assert hass.states.get(f"{PREFIX}_set_10497_1_retires_in") is None
 
 
+@pytest.mark.usefixtures("brickset")
 async def test_latest_theme_sensor(
-    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
     """The theme feed surfaces the newest set number."""
     await setup_integration(hass, mock_config_entry)

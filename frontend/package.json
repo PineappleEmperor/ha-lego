@@ -1,20 +1,16 @@
 {
   "name": "lego-panel",
-  "version": "1.0.0rc1",
   "private": true,
-  "description": "Sidebar panel for the LEGO Home Assistant integration",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/panel.ts --bundle --format=esm --minify --outfile=../custom_components/lego/panel/lego-panel.js",
     "check": "tsc --noEmit",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "lit": "^3.1.0"
+    "build": "esbuild src/lego-panel.ts --bundle --minify --format=esm --target=es2021 --outfile=../custom_components/lego/panel/lego-panel.js",
+    "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
-    "esbuild": "^0.24.0",
-    "typescript": "^5.4.0",
-    "vitest": "^2.1.0"
+    "esbuild": "^0.28.0",
+    "lit": "^3.2.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
   }
 }

@@ -1,1 +1,1 @@
-"""Tests for the LEGO integration."""
+"""Tests for the integration."""

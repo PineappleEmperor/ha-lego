@@ -24,31 +24,28 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           {
-            "context": "Label from title"
+            "context": "pr / CC labelling"
           },
           {
-            "context": "Title is labellable"
+            "context": "pr / CC label validation"
           },
           {
-            "context": "Manifest version bumped vs last release"
+            "context": "lint / CC title validation"
           },
           {
-            "context": "Commit summary in PR body"
+            "context": "Hassfest manifest validation"
           },
           {
-            "context": "Validate PR title"
+            "context": "HACS validation"
           },
           {
-            "context": "hassfest"
+            "context": "validate / Python validation"
           },
           {
-            "context": "hacs"
+            "context": "audit / ha-integration conformance check"
           },
           {
-            "context": "lint-and-type (3.14)"
-          },
-          {
-            "context": "audit"
+            "context": "Dependency review"
           }
         ]
       }

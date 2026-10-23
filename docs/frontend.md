@@ -5,7 +5,7 @@ cards are still to come.
 
 ## What exists
 
-`frontend/src/panel.ts` is a single Lit element, built by esbuild to the committed
+`frontend/src/lego-panel.ts` is a single Lit element, built by esbuild to the committed
 `custom_components/lego/panel/lego-panel.js`. HACS ships the repo as-is with no
 build step on the user's machine, so the bundle has to be in the repo — and a
 stale bundle is invisible, because it still runs. `frontend_build.yml` rebuilds

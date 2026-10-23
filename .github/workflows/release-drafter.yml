@@ -1,0 +1,15 @@
+name: Release Drafter
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    uses: PineappleEmperor/release-flow/.github/workflows/release-drafter.yml@ca36eb9b5bae9840a119a2a6fc2f7628de90d1ba # v1.1.5
