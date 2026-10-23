@@ -188,6 +188,39 @@ async def test_panel_is_registered_by_default(
 
 
 @pytest.mark.usefixtures("brickset")
+async def test_panel_goes_when_the_last_account_unloads(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Unloading or disabling the only account removes the sidebar entry."""
+    await setup_integration(hass, mock_config_entry)
+    assert PANEL_URL_PATH in hass.data[frontend.DATA_PANELS]
+
+    await hass.config_entries.async_unload(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert PANEL_URL_PATH not in hass.data[frontend.DATA_PANELS]
+
+    # Loading it again brings the entry back.
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert PANEL_URL_PATH in hass.data[frontend.DATA_PANELS]
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_panel_stays_while_another_account_is_loaded(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Unloading one of two accounts keeps the sidebar entry for the other."""
+    await setup_integration(hass, mock_config_entry)
+    await _second_account(hass)
+
+    await hass.config_entries.async_unload(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert PANEL_URL_PATH in hass.data[frontend.DATA_PANELS]
+
+
+@pytest.mark.usefixtures("brickset")
 async def test_panel_can_be_turned_off(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http.server import StaticPathConfig
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.storage import Store
@@ -93,10 +94,13 @@ async def async_setup_panel_static(hass: HomeAssistant) -> None:
 
 
 def panel_wanted(hass: HomeAssistant) -> bool:
-    """Whether any config entry asks for the sidebar panel."""
+    """Whether any set-up config entry asks for the sidebar panel."""
+    # An entry being unloaded or disabled still exists, so counting every entry
+    # left the panel in the sidebar with nothing behind it.
     return any(
         entry.options.get(CONF_PANEL, DEFAULT_PANEL)
         for entry in hass.config_entries.async_entries(DOMAIN)
+        if entry.state in (ConfigEntryState.LOADED, ConfigEntryState.SETUP_IN_PROGRESS)
     )
 
 
