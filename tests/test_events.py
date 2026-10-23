@@ -332,3 +332,62 @@ async def test_themes_past_a_page_raise_a_repair(
 
     assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
     assert feeds.poll_cost == 1
+
+
+async def test_a_get_themes_failure_reuses_its_last_answer(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """One failed getThemes keeps next year, so its sets are not announced twice."""
+    freezer.move_to("2026-07-10 12:00:00+00:00")
+    brickset.filter_theme_year = True
+    brickset.theme_sets.append(
+        make_set(70, "42250-1", "January Technic", theme="Technic", year=2027)
+    )
+    await setup_integration(hass, mock_config_entry)
+    feeds = mock_config_entry.runtime_data.feeds
+
+    events: list[Event] = []
+
+    @callback
+    def record(event: Event) -> None:
+        events.append(event)
+
+    hass.bus.async_listen(EVENT_NEW_SET, record)
+    # July is before the September fallback, so the month rule would drop 2027.
+    brickset.themes_error = "Service temporarily unavailable"
+    await feeds.async_refresh()
+    brickset.themes_error = None
+    await feeds.async_refresh()
+    await hass.async_block_till_done()
+
+    theme_years = [c["year"] for c in brickset.get_sets_calls if "theme" in c]
+    assert theme_years == [2026, 2027] * 3
+    assert events == []
+
+
+async def test_the_paging_repair_goes_when_no_theme_is_followed(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    issue_registry: ir.IssueRegistry,
+) -> None:
+    """Following the Repair's advice to the letter must not leave it behind."""
+    year = dt_util.now().year
+    brickset.theme_sets[:] = [
+        make_set(1000 + n, f"{50000 + n}-1", f"Set {n}", theme="Technic", year=year)
+        for n in range(600)
+    ]
+    await setup_integration(hass, mock_config_entry)
+    issue_id = f"theme_feed_paging_{mock_config_entry.entry_id}"
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    hass.config_entries.async_update_entry(
+        mock_config_entry, options={**mock_config_entry.options, CONF_THEMES: []}
+    )
+    await hass.config_entries.async_reload(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is None

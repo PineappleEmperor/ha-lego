@@ -47,7 +47,7 @@ from .quota import (
     feeds_calls_per_day,
     feeds_interval,
     feeds_poll_estimate,
-    window_years,
+    poll_window_years,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -395,6 +395,11 @@ def theme_query(themes: list[str], year: int) -> dict[str, Any]:
     return {"theme": ",".join(themes), "year": year, "orderBy": "NumberDESC"}
 
 
+def paging_issue_id(entry_id: str) -> str:
+    """Return the id of the Repair raised while the followed themes need paging."""
+    return f"theme_feed_paging_{entry_id}"
+
+
 def _pages(count: int) -> int:
     """Return the billed pages a paged query that returned count sets spent."""
     # Paging stops at the first short page, so a full last page costs one more.
@@ -436,6 +441,12 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         # Billed pages each year took the last time a poll fetched it.
         self._pages: dict[int, int] = {}
         self._measured: int | None = None
+        # getThemes' last good answer, so one failure does not drop next year
+        # from a poll and bring it back, as new sets, in the one after.
+        self._theme_years: dict[str, int] | None = None
+        if releases or not options.get(CONF_THEMES):
+            # Only a theme-only feed can page, and nothing else would clear it.
+            ir.async_delete_issue(hass, DOMAIN, paging_issue_id(config_entry.entry_id))
 
     @property
     def themes(self) -> list[str]:
@@ -483,16 +494,18 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         """Ask getThemes, unbilled, whether next year has sets these feeds want."""
         next_year = today.year + 1
         try:
-            theme_years = await self.client.get_theme_years()
+            self._theme_years = await self.client.get_theme_years()
         except BricksetError as err:
             _LOGGER.debug("Could not ask Brickset which years have sets: %s", err)
-            return today.month >= NEXT_YEAR_FROM_MONTH
+            if self._theme_years is None:
+                return today.month >= NEXT_YEAR_FROM_MONTH
+        theme_years = self._theme_years
         if any(theme_years.get(theme, 0) >= next_year for theme in self.themes):
             return True
         # The release rows want next year only once the window reaches it.
         return (
             self.releases
-            and next_year in window_years(today)
+            and next_year in poll_window_years(today)
             and max(theme_years.values(), default=0) >= next_year
         )
 
@@ -542,9 +555,12 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         # Reading every theme costs the same however many are followed.
         self._clear_paging_issue()
         themes: dict[str, list[LegoSet]] = {theme: [] for theme in self.themes}
+        # A theme typed by hand need not match Brickset's capitals, which its own
+        # theme filter forgives.
+        followed = {theme.casefold(): theme for theme in self.themes}
         for lego_set in sorted(sets, key=lambda s: (s.year, s.number), reverse=True):
-            if lego_set.theme in themes:
-                themes[lego_set.theme].append(lego_set)
+            if (theme := followed.get((lego_set.theme or "").casefold())) is not None:
+                themes[theme].append(lego_set)
         return FeedsData(themes=themes, releases=sets)
 
     async def _fetch_themes(
@@ -591,7 +607,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
 
     @property
     def _paging_issue_id(self) -> str:
-        return f"theme_feed_paging_{self.config_entry.entry_id}"
+        return paging_issue_id(self.config_entry.entry_id)
 
     def _update_paging_issue(self, pages: int) -> None:
         """Tell the user once the followed themes no longer fit one call."""

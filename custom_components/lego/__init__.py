@@ -4,7 +4,11 @@ from datetime import datetime, timedelta
 
 from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_validation as cv, entity_registry as er
+from homeassistant.helpers import (
+    config_validation as cv,
+    entity_registry as er,
+    issue_registry as ir,
+)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import AnyDeviceEntry
 from homeassistant.helpers.event import async_track_time_interval
@@ -29,6 +33,7 @@ from .coordinator import (
     LegoConfigEntry,
     LegoFeedsCoordinator,
     LegoRuntimeData,
+    paging_issue_id,
 )
 from .panel import (
     PANEL_STORE,
@@ -89,7 +94,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
     feeds = LegoFeedsCoordinator(hass, entry, client, quota, catalogue)
 
     await collection.async_config_entry_first_refresh()
-    if feeds.themes:
+    # A theme feed is one call, worth having before the entities appear; a read of
+    # whole years is a few, which a tight budget must not let fail the entry.
+    if feeds.themes and not feeds.releases:
         await feeds.async_config_entry_first_refresh()
 
     entry.runtime_data = LegoRuntimeData(
@@ -100,8 +107,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
         catalogue=catalogue,
     )
 
-    if feeds.releases and not feeds.themes:
-        # Rows the panel can live without must not hold up setup by a few pages.
+    if feeds.active:
+        # A coordinator schedules polls only while something listens, and the
+        # panel and the new-set events need them even with every entity disabled.
+        entry.async_on_unload(feeds.async_add_listener(lambda: None))
+    if feeds.releases:
         entry.async_create_background_task(
             hass, feeds.async_refresh(), "lego_feeds_refresh"
         )
@@ -167,7 +177,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> boo
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> None:
-    """Drop the sidebar panel once the last entry is gone."""
+    """Drop the sidebar panel once the last entry is gone, and its repairs."""
+    ir.async_delete_issue(hass, DOMAIN, paging_issue_id(entry.entry_id))
     await async_refresh_panel(hass)
 
 

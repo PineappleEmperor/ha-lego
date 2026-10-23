@@ -31,12 +31,20 @@ def window_years(today: date) -> list[int]:
     return sorted({(today - window).year, today.year, (today + window).year})
 
 
+def poll_window_years(today: date) -> list[int]:
+    """Return the years the window touches before the next daily poll comes round."""
+    # The panel cuts the window when it is viewed, up to a day after the poll, so
+    # 3 December's poll already reads the January wave 4 December's window holds.
+    ahead = today + timedelta(hours=RELEASES_INTERVAL_HOURS)
+    return sorted(set(window_years(today)) | set(window_years(ahead)))
+
+
 def feed_years(today: date, releases: bool, next_year: bool) -> list[int]:
     """Return the years a feeds poll asks Brickset for."""
     # next_year says whether next year is worth a call: whether it has sets filed
     # under it that the feeds want. A year the window touches is fetched whole while
     # following releases across all themes; otherwise only this year is.
-    years = set(window_years(today)) if releases else {today.year}
+    years = set(poll_window_years(today)) if releases else {today.year}
     years.discard(today.year + 1)
     if next_year:
         years.add(today.year + 1)

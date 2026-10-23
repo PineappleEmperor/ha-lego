@@ -4,17 +4,23 @@ from datetime import date, timedelta
 from typing import Any
 
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_REGION
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
 from custom_components.lego.const import (
     CONF_DAILY_CALL_BUDGET,
     CONF_RELEASES,
     CONF_THEMES,
+    DOMAIN,
 )
 from custom_components.lego.diagnostics import async_get_config_entry_diagnostics
 from custom_components.lego.panel import dashboard_payload
@@ -290,3 +296,107 @@ async def test_the_window_follows_local_time_while_the_budget_follows_utc(
     assert _rows(entry)["recent"] == ["New Year set", "December set"]
     quota = entry.runtime_data.quota
     assert quota.resets_at.isoformat() == "2027-01-01T00:00:00+00:00"
+
+
+async def test_a_tight_budget_does_not_fail_setup(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Watched themes read from whole years load in the background, not at setup."""
+    brickset.year_sets[:] = [_on(dt_util.now().date(), 1, "Technic set")]
+    # The collection's 2 calls fit a budget of 4; a year's 3 pages after them do not.
+    entry = await setup_integration(
+        hass,
+        _with_releases(
+            mock_config_entry,
+            **{CONF_THEMES: ["Technic"], CONF_DAILY_CALL_BUDGET: 4},
+        ),
+    )
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert _rows(entry)["status"] == "failed"
+
+
+async def test_feeds_keep_polling_with_the_calendar_disabled(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    entity_registry: er.EntityRegistry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The panel and events need the daily poll even when no entity listens."""
+    entry = _with_releases(mock_config_entry)
+    entry.add_to_hass(hass)
+    entity_registry.async_get_or_create(
+        "calendar",
+        DOMAIN,
+        f"{entry.entry_id}_releases",
+        config_entry=entry,
+        disabled_by=er.RegistryEntryDisabler.USER,
+    )
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    polls = len(_year_calls(brickset))
+
+    freezer.tick(timedelta(hours=25))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert len(_year_calls(brickset)) > polls
+
+
+async def test_this_years_count_leaves_out_last_year_in_january(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """January reads last year too, but sets this year still means this year."""
+    freezer.move_to("2027-01-10 12:00:00+00:00")
+    brickset.year_sets[:] = [
+        _on(date(2026, 12, 20), 1, "December Technic", theme="Technic"),
+        _on(date(2027, 1, 5), 2, "January Technic", theme="Technic"),
+    ]
+    await setup_integration(
+        hass, _with_releases(mock_config_entry, **{CONF_THEMES: ["Technic"]})
+    )
+
+    latest = hass.states.get("sensor.brickset_brickfan_latest_technic_set")
+    assert latest.attributes["sets_this_year"] == 1
+
+
+async def test_a_theme_typed_in_other_capitals_still_matches(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Brickset's theme filter forgives capitals, so cutting a year does too."""
+    brickset.year_sets[:] = [
+        _on(dt_util.now().date(), 1, "Technic set", theme="Technic")
+    ]
+    entry = await setup_integration(
+        hass, _with_releases(mock_config_entry, **{CONF_THEMES: ["technic"]})
+    )
+
+    themes = entry.runtime_data.feeds.data.themes
+    assert [s.name for s in themes["technic"]] == ["Technic set"]
+
+
+async def test_3_december_already_reads_the_january_wave(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The day's poll covers the window as it stands the next day, before the next."""
+    freezer.move_to("2026-12-03 15:00:00+00:00")
+    brickset.year_sets[:] = [
+        _on(date(2026, 12, 1), 1, "December set"),
+        _on(date(2027, 1, 1), 2, "New Year set"),
+    ]
+    entry = await setup_integration(hass, _with_releases(mock_config_entry))
+
+    assert [call["year"] for call in _year_calls(brickset)] == [2026, 2027]
+    freezer.move_to("2026-12-04 10:00:00+00:00")
+    assert _rows(entry)["upcoming"] == ["New Year set"]

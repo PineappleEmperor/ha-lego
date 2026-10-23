@@ -19,6 +19,7 @@ from custom_components.lego.quota import (
     feed_years,
     feeds_calls_per_day,
     feeds_poll_estimate,
+    poll_window_years,
     window_years,
 )
 
@@ -179,6 +180,22 @@ def test_window_years_follow_four_weeks_either_side(
 ) -> None:
     """The release rows ask for a year only while the window touches it."""
     assert window_years(today) == years
+
+
+@pytest.mark.parametrize(
+    ("today", "years"),
+    [
+        # A daily poll reads a day ahead: 3 December's covers 4 December's window.
+        (date(2026, 12, 2), [2026]),
+        (date(2026, 12, 3), [2026, 2027]),
+        # And keeps last year through the 28 January poll, which 28 January needs.
+        (date(2026, 1, 28), [2025, 2026]),
+        (date(2026, 1, 29), [2026]),
+    ],
+)
+def test_poll_window_years_look_a_poll_ahead(today: date, years: list[int]) -> None:
+    """The window is cut when viewed, up to a day after the poll that fed it."""
+    assert poll_window_years(today) == years
 
 
 @pytest.mark.parametrize(

@@ -400,10 +400,10 @@ class LegoLatestThemeSetSensor(LegoEntity[FeedsData], SensorEntity):
             return None
         region = self.coordinator.config_entry.options.get(CONF_REGION, DEFAULT_REGION)
         attributes = _set_attributes(lego_set, region)
-        attributes["sets_this_year"] = len(
-            (self.coordinator.data.themes if self.coordinator.data else {}).get(
-                self._theme
-            )
-            or []
-        )
+        # The feed can hold next year's sets, and last year's through January.
+        year = dt_util.now().year
+        sets = (self.coordinator.data.themes if self.coordinator.data else {}).get(
+            self._theme
+        ) or []
+        attributes["sets_this_year"] = sum(1 for item in sets if item.year == year)
         return attributes
