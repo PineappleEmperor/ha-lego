@@ -41,7 +41,7 @@ from .exceptions import BricksetError, BricksetQuotaError, BricksetUserHashError
 from .models import LegoSet
 
 if TYPE_CHECKING:
-    from . import LegoConfigEntry
+    from .coordinator import LegoConfigEntry
 
 ENTRY_SCHEMA = {probatio.Required(ATTR_DEVICE_ID): cv.string}
 

@@ -7,13 +7,13 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 import probatio
 
-from .const import DOMAIN, PANEL_STORE
-from .panel import dashboard_payload, summarise
+from .const import DOMAIN
+from .panel import PANEL_STORE, dashboard_payload, summarise
 
 if TYPE_CHECKING:
     from homeassistant.auth.models import User
 
-    from . import LegoConfigEntry
+    from .coordinator import LegoConfigEntry
 
 
 @callback

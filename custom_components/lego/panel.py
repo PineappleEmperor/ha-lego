@@ -12,6 +12,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.storage import Store
 from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
+from homeassistant.util.hass_dict import HassKey
 
 from .const import (
     CONF_PANEL,
@@ -27,10 +28,10 @@ from .const import (
 )
 
 if TYPE_CHECKING:
-    from . import LegoConfigEntry
+    from .coordinator import LegoConfigEntry
     from .models import LegoSet
 
-REGISTERED = f"{DOMAIN}_panel_registered"
+REGISTERED: HassKey[bool] = HassKey(f"{DOMAIN}_panel_registered")
 
 
 class PanelStore:
@@ -78,6 +79,9 @@ class PanelStore:
         """Remember which account this user's panel is showing."""
         self._accounts[user_id] = entry_id
         await self._async_save()
+
+
+PANEL_STORE: HassKey[PanelStore] = HassKey(f"{DOMAIN}_panel_store")
 
 
 async def async_setup_panel_static(hass: HomeAssistant) -> None:

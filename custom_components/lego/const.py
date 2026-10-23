@@ -64,7 +64,6 @@ PANEL_MODULE_URL: Final = "/lego_panel/lego-panel.js"
 PANEL_ICON_URL: Final = "/lego_panel/icon.png"
 PANEL_COMPONENT: Final = "lego-panel"
 PANEL_STORAGE_KEY: Final = "lego_panel"
-PANEL_STORE: Final = "lego_panel_store"
 # Row ids the panel may order; unknown ids from a newer build are dropped.
 PANEL_ROWS: Final = ("themes", "wishlist", "collection")
 

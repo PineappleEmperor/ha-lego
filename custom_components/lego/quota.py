@@ -52,11 +52,6 @@ class QuotaManager:
         """Return the configured daily budget."""
         return self._budget
 
-    @budget.setter
-    def budget(self, value: int) -> None:
-        """Update the budget, e.g. after an options change."""
-        self._budget = min(value, BRICKSET_DAILY_CALL_LIMIT)
-
     @property
     def calls_today(self) -> int:
         """Return the best known number of billed calls made today."""

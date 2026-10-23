@@ -4,7 +4,6 @@ from copy import deepcopy
 import gzip
 import json
 from typing import Any
-from unittest.mock import patch
 
 from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
 from homeassistant.core import HomeAssistant
@@ -365,13 +364,6 @@ async def setup_integration(
     # Setup seeds the catalogue in a background task that hops to an executor.
     await hass.async_block_till_done(wait_background_tasks=True)
     return entry
-
-
-@pytest.fixture
-def no_platforms():
-    """Set the entry up without loading entity platforms."""
-    with patch("custom_components.lego.PLATFORMS", []):
-        yield
 
 
 def lego_device_id(hass: HomeAssistant, entry: MockConfigEntry) -> str:

@@ -60,7 +60,7 @@ from .exceptions import (
 from .quota import collection_interval, feeds_calls_per_day
 
 if TYPE_CHECKING:
-    from . import LegoConfigEntry
+    from .coordinator import LegoConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 

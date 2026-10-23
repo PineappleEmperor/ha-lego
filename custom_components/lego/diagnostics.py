@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from .const import BRICKSET_DAILY_CALL_LIMIT, CONF_USER_HASH
 
 if TYPE_CHECKING:
-    from . import LegoConfigEntry
+    from .coordinator import LegoConfigEntry
 
 TO_REDACT = {CONF_API_KEY, CONF_USER_HASH, CONF_USERNAME}
 

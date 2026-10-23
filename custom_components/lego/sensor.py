@@ -23,7 +23,7 @@ from .entity import LegoCollectionEntity, LegoEntity
 from .models import CollectionSummary, LegoSet
 
 if TYPE_CHECKING:
-    from . import LegoConfigEntry
+    from .coordinator import LegoConfigEntry
 
 PARALLEL_UPDATES = 0
 

@@ -1,9 +1,7 @@
 """The LEGO integration, backed by Brickset."""
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv, entity_registry as er
@@ -25,10 +23,19 @@ from .const import (
     DEFAULT_CATALOGUE_RICH,
     DEFAULT_DAILY_CALL_BUDGET,
     DOMAIN,
-    PANEL_STORE,
 )
-from .coordinator import LegoCollectionCoordinator, LegoFeedsCoordinator
-from .panel import PanelStore, async_refresh_panel, async_setup_panel_static
+from .coordinator import (
+    LegoCollectionCoordinator,
+    LegoConfigEntry,
+    LegoFeedsCoordinator,
+    LegoRuntimeData,
+)
+from .panel import (
+    PANEL_STORE,
+    PanelStore,
+    async_refresh_panel,
+    async_setup_panel_static,
+)
 from .quota import QuotaManager
 from .services import async_setup_services
 from .websocket import async_setup_websocket
@@ -43,20 +50,6 @@ LEGACY_COUNTDOWN_PREFIX = "_watch_"
 CATALOGUE_CHECK_INTERVAL = timedelta(hours=6)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-
-
-@dataclass(slots=True)
-class LegoRuntimeData:
-    """Everything a config entry needs at runtime."""
-
-    client: BricksetClient
-    quota: QuotaManager
-    collection: LegoCollectionCoordinator
-    feeds: LegoFeedsCoordinator
-    catalogue: SetCatalogue | None
-
-
-type LegoConfigEntry = ConfigEntry[LegoRuntimeData]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:

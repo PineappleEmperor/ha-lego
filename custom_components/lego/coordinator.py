@@ -4,8 +4,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import logging
 import math
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import Any, cast, override
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_REGION
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -34,9 +35,6 @@ from .exceptions import (
 )
 from .models import CollectionSummary, LegoSet
 from .quota import QuotaManager, collection_interval
-
-if TYPE_CHECKING:
-    from . import LegoConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -455,3 +453,17 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
                         "region": region,
                     },
                 )
+
+
+@dataclass(slots=True)
+class LegoRuntimeData:
+    """Everything a config entry needs at runtime."""
+
+    client: BricksetClient
+    quota: QuotaManager
+    collection: LegoCollectionCoordinator
+    feeds: LegoFeedsCoordinator
+    catalogue: SetCatalogue | None
+
+
+type LegoConfigEntry = ConfigEntry[LegoRuntimeData]
