@@ -29,7 +29,27 @@ COUNTRY_TO_REGION: Final = {"GB": "UK", "US": "US", "CA": "CA", "DE": "DE"}
 # interval steps up from there until the polls fit the budget. Theme feeds gain a few
 # sets a week, so twice a day is plenty.
 COLLECTION_INTERVAL_STEPS_HOURS: Final = (1, 2, 3, 4, 6, 8, 12, 24)
+# The feeds poll this often while they ask Brickset for the followed themes alone.
 FEEDS_INTERVAL_HOURS: Final = 12
+# Following releases across all themes fills the panel's "Out recently" and "Coming
+# soon" rows: the feeds then read every set of each year the window either side of
+# today touches, and cut the followed themes from that too, so one daily poll does
+# both jobs. Off for entries made before it existed, so an upgrade spends no new
+# calls; the config flow turns it on for new entries.
+CONF_RELEASES: Final = "releases"
+DEFAULT_RELEASES: Final = False
+RELEASES_INTERVAL_HOURS: Final = 24
+RELEASES_WINDOW_DAYS: Final = 28
+# Until a first poll lands there is nothing to show, so a failed one is retried sooner.
+FEEDS_RETRY_HOURS: Final = 3
+# A whole year passes a thousand entries once gear and books count, three pages of
+# 500; a year not yet started holds a page at most. The budget plans on these until
+# a poll measures the real count, and the cap bounds a bad day.
+RELEASES_PAGES_ESTIMATE: Final = 3
+YEAR_MAX_PAGES: Final = 4
+# getThemes, which is free, says when next year has sets filed under it. Without
+# that answer the budget assumes LEGO announces its January wave from this month.
+NEXT_YEAR_FROM_MONTH: Final = 9
 # Polls may spend this share of the budget; the rest is kept for actions such as a
 # manual refresh or a set lookup, which would otherwise find the budget spent.
 POLL_SHARE_OF_BUDGET: Final = 0.75
@@ -64,9 +84,18 @@ PANEL_MODULE_URL: Final = "/lego_panel/lego-panel.js"
 PANEL_ICON_URL: Final = "/lego_panel/icon.png"
 PANEL_COMPONENT: Final = "lego-panel"
 PANEL_STORAGE_KEY: Final = "lego_panel"
-PANEL_STORE: Final = "lego_panel_store"
 # Row ids the panel may order; unknown ids from a newer build are dropped.
-PANEL_ROWS: Final = ("themes", "wishlist", "collection")
+PANEL_ROWS: Final = (
+    "recent",
+    "upcoming",
+    "themes",
+    "wishlist",
+    "collection",
+    "value",
+    "pieces",
+)
+# Rows a user starts without; the panel's Customise list adds them.
+PANEL_DEFAULT_HIDDEN: Final = ("pieces",)
 
 MIN_TIME_BETWEEN_QUOTA_CHECKS: Final = timedelta(minutes=30)
 

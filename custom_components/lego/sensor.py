@@ -18,12 +18,12 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .const import DEFAULT_REGION, REGION_CURRENCY
-from .coordinator import LegoCollectionCoordinator, LegoFeedsCoordinator
+from .coordinator import FeedsData, LegoCollectionCoordinator, LegoFeedsCoordinator
 from .entity import LegoCollectionEntity, LegoEntity
 from .models import CollectionSummary, LegoSet
 
 if TYPE_CHECKING:
-    from . import LegoConfigEntry
+    from .coordinator import LegoConfigEntry
 
 PARALLEL_UPDATES = 0
 
@@ -88,35 +88,35 @@ SUMMARY_SENSORS: tuple[LegoSummaryEntityDescription, ...] = (
     LegoSummaryEntityDescription(
         key="sets_owned",
         translation_key="sets_owned",
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="sets",
         value_fn=lambda summary: summary.sets_owned,
     ),
     LegoSummaryEntityDescription(
         key="sets_distinct",
         translation_key="sets_distinct",
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="sets",
         value_fn=lambda summary: summary.sets_distinct,
     ),
     LegoSummaryEntityDescription(
         key="pieces_owned",
         translation_key="pieces_owned",
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="pieces",
         value_fn=lambda summary: summary.pieces_owned,
     ),
     LegoSummaryEntityDescription(
         key="minifigs_owned",
         translation_key="minifigs_owned",
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="minifigs",
         value_fn=lambda summary: summary.minifigs_owned,
     ),
     LegoSummaryEntityDescription(
         key="sets_wanted",
         translation_key="sets_wanted",
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="sets",
         value_fn=lambda summary: summary.sets_wanted,
         items_fn=_wishlist_items,
@@ -319,6 +319,7 @@ class LegoNextRetirementSensor(LegoCollectionEntity, SensorEntity):
     """Days until the next set on the wishlist retires."""
 
     _attr_translation_key = "next_wishlist_retirement"
+    _attr_device_class = SensorDeviceClass.DURATION
     _attr_native_unit_of_measurement = UnitOfTime.DAYS
 
     def __init__(self, coordinator: LegoCollectionCoordinator) -> None:
@@ -362,7 +363,7 @@ class LegoNextRetirementSensor(LegoCollectionEntity, SensorEntity):
         return _set_attributes(soonest[1], self.coordinator.region)
 
 
-class LegoLatestThemeSetSensor(LegoEntity[dict[str, list[LegoSet]]], SensorEntity):
+class LegoLatestThemeSetSensor(LegoEntity[FeedsData], SensorEntity):
     """The most recent set Brickset lists for a watched theme."""
 
     _attr_translation_key = "latest_theme_set"
@@ -380,7 +381,7 @@ class LegoLatestThemeSetSensor(LegoEntity[dict[str, list[LegoSet]]], SensorEntit
         """Return the newest set for this theme."""
         if not self.coordinator.data:
             return None
-        sets = self.coordinator.data.get(self._theme) or []
+        sets = self.coordinator.data.themes.get(self._theme) or []
         return sets[0] if sets else None
 
     @property
@@ -399,7 +400,10 @@ class LegoLatestThemeSetSensor(LegoEntity[dict[str, list[LegoSet]]], SensorEntit
             return None
         region = self.coordinator.config_entry.options.get(CONF_REGION, DEFAULT_REGION)
         attributes = _set_attributes(lego_set, region)
-        attributes["sets_this_year"] = len(
-            (self.coordinator.data or {}).get(self._theme) or []
-        )
+        # The feed can hold next year's sets, and last year's through January.
+        year = dt_util.now().year
+        sets = (self.coordinator.data.themes if self.coordinator.data else {}).get(
+            self._theme
+        ) or []
+        attributes["sets_this_year"] = sum(1 for item in sets if item.year == year)
         return attributes

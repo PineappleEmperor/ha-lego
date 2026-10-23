@@ -1,35 +1,45 @@
 """The optional sidebar panel: registration and its per-user row order."""
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http.server import StaticPathConfig
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
+from homeassistant.util.hass_dict import HassKey
 
 from .const import (
     CONF_PANEL,
     DEFAULT_PANEL,
     DOMAIN,
     PANEL_COMPONENT,
+    PANEL_DEFAULT_HIDDEN,
     PANEL_ICON_URL,
     PANEL_MODULE_URL,
     PANEL_ROWS,
     PANEL_STORAGE_KEY,
     PANEL_URL_PATH,
+    REGION_CURRENCY,
+    RELEASES_WINDOW_DAYS,
     STORAGE_VERSION,
 )
 
 if TYPE_CHECKING:
-    from . import LegoConfigEntry
+    from .catalogue import CatalogueEntry
+    from .coordinator import LegoConfigEntry
     from .models import LegoSet
 
-REGISTERED = f"{DOMAIN}_panel_registered"
+# The feeds hold a whole year of sets; the panel's "New in my themes" row shows only
+# those out within this window, or still to come.
+NEW_FOR = timedelta(days=90)
+
+REGISTERED: HassKey[bool] = HassKey(f"{DOMAIN}_panel_registered")
 
 
 class PanelStore:
@@ -41,17 +51,21 @@ class PanelStore:
             hass, STORAGE_VERSION, PANEL_STORAGE_KEY
         )
         self._rows: dict[str, list[str]] = {}
+        self._hidden: dict[str, list[str]] = {}
         self._accounts: dict[str, str] = {}
 
     async def async_load(self) -> None:
         """Read the stored orders and account choices."""
         stored = await self._store.async_load() or {}
         self._rows = {k: list(v) for k, v in stored.get("rows", {}).items()}
+        self._hidden = {k: list(v) for k, v in stored.get("hidden", {}).items()}
         self._accounts = {k: str(v) for k, v in stored.get("accounts", {}).items()}
 
     async def _async_save(self) -> None:
         """Write both maps, since they share one storage key."""
-        await self._store.async_save({"rows": self._rows, "accounts": self._accounts})
+        await self._store.async_save(
+            {"rows": self._rows, "hidden": self._hidden, "accounts": self._accounts}
+        )
 
     def rows(self, user_id: str | None) -> list[str]:
         """Return a user's row order, falling back to the default."""
@@ -63,11 +77,23 @@ class PanelStore:
         kept = [row for row in saved if row in PANEL_ROWS]
         return kept + [row for row in PANEL_ROWS if row not in kept]
 
-    async def async_set_rows(self, user_id: str, rows: list[str]) -> list[str]:
-        """Save a user's row order, ignoring anything unrecognised."""
-        self._rows[user_id] = [row for row in rows if row in PANEL_ROWS]
+    def hidden(self, user_id: str | None) -> list[str]:
+        """Return the rows a user has taken off their panel."""
+        saved = self._hidden.get(user_id or "")
+        if saved is None:
+            return list(PANEL_DEFAULT_HIDDEN)
+        return [row for row in saved if row in PANEL_ROWS]
+
+    async def async_set_rows(
+        self, user_id: str, rows: list[str] | None, hidden: list[str] | None = None
+    ) -> tuple[list[str], list[str]]:
+        """Save a user's row order and hidden rows, ignoring anything unrecognised."""
+        if rows is not None:
+            self._rows[user_id] = [row for row in rows if row in PANEL_ROWS]
+        if hidden is not None:
+            self._hidden[user_id] = [row for row in hidden if row in PANEL_ROWS]
         await self._async_save()
-        return self.rows(user_id)
+        return self.rows(user_id), self.hidden(user_id)
 
     def account(self, user_id: str | None) -> str | None:
         """Return the entry id this user last looked at, if any."""
@@ -77,6 +103,9 @@ class PanelStore:
         """Remember which account this user's panel is showing."""
         self._accounts[user_id] = entry_id
         await self._async_save()
+
+
+PANEL_STORE: HassKey[PanelStore] = HassKey(f"{DOMAIN}_panel_store")
 
 
 async def async_setup_panel_static(hass: HomeAssistant) -> None:
@@ -93,10 +122,13 @@ async def async_setup_panel_static(hass: HomeAssistant) -> None:
 
 
 def panel_wanted(hass: HomeAssistant) -> bool:
-    """Whether any config entry asks for the sidebar panel."""
+    """Whether any set-up config entry asks for the sidebar panel."""
+    # An entry being unloaded or disabled still exists, so counting every entry
+    # left the panel in the sidebar with nothing behind it.
     return any(
         entry.options.get(CONF_PANEL, DEFAULT_PANEL)
         for entry in hass.config_entries.async_entries(DOMAIN)
+        if entry.state in (ConfigEntryState.LOADED, ConfigEntryState.SETUP_IN_PROGRESS)
     )
 
 
@@ -127,6 +159,8 @@ async def async_refresh_panel(hass: HomeAssistant) -> None:
 def summarise(lego_set: Any, region: str) -> dict[str, Any]:
     """Reduce a set to what the panel draws."""
     pricing = lego_set.pricing.get(region)
+    released = lego_set.release_date(region)
+    retires = lego_set.retirement_date(region)
     return {
         "set_number": lego_set.number,
         "name": lego_set.name,
@@ -141,16 +175,32 @@ def summarise(lego_set: Any, region: str) -> dict[str, Any]:
         "qty_owned": lego_set.collection.qty_owned,
         "retail_price": pricing.retail_price if pricing else None,
         "released": lego_set.released,
-        "available_from": (
-            pricing.date_first_available.isoformat()
-            if pricing and pricing.date_first_available
-            else None
-        ),
-        "available_until": (
-            pricing.date_last_available.isoformat()
-            if pricing and pricing.date_last_available
-            else None
-        ),
+        # The region's own dates, else Brickset's set-wide ones, as the rows sort by.
+        "available_from": released.isoformat() if released else None,
+        "available_until": retires.isoformat() if retires else None,
+    }
+
+
+def summarise_entry(entry: CatalogueEntry, owned: bool) -> dict[str, Any]:
+    """Give a set known only to the local index the shape summarise() returns."""
+    # The index holds number, name, year and theme only, so a card shows those and
+    # links to the set's plain Brickset page for the rest.
+    return {
+        "set_number": entry.number,
+        "name": entry.name,
+        "year": entry.year,
+        "theme": entry.theme,
+        "pieces": None,
+        "minifigs": None,
+        "image": None,
+        "url": f"https://brickset.com/sets/{entry.number}",
+        "owned": owned,
+        "wanted": False,
+        "qty_owned": 1 if owned else 0,
+        "retail_price": None,
+        "released": False,
+        "available_from": None,
+        "available_until": None,
     }
 
 
@@ -169,7 +219,83 @@ def _wishlist_key(
     )
 
 
-def dashboard_payload(entry: LegoConfigEntry, rows: list[str]) -> dict[str, Any]:
+def _new_in_theme(sets: list[LegoSet], region: str, today: date) -> list[LegoSet]:
+    """Keep what is still news: upcoming or out within NEW_FOR, newest first."""
+
+    def is_new(item: LegoSet) -> bool:
+        released = item.release_date(region)
+        if released is None:
+            # Announced without a date yet is news; released without one is not.
+            return not item.released
+        return released >= today - NEW_FOR
+
+    def newest_first(item: LegoSet) -> tuple[bool, int, str]:
+        released = item.release_date(region)
+        return (released is None, -(released or date.min).toordinal(), item.number)
+
+    return sorted(filter(is_new, sets), key=newest_first)
+
+
+def _releases(
+    sets: list[LegoSet], region: str, today: date
+) -> dict[str, list[LegoSet]]:
+    """Split the year's sets into out recently, newest first, and due soon."""
+    window = timedelta(days=RELEASES_WINDOW_DAYS)
+    recent: list[tuple[date, LegoSet]] = []
+    upcoming: list[tuple[date, LegoSet]] = []
+    for item in sets:
+        # Keyrings, magnets and books share the year's list with the sets.
+        if item.category not in ("", "Normal"):
+            continue
+        released = item.release_date(region)
+        if released is None:
+            continue
+        if today - window <= released <= today:
+            recent.append((released, item))
+        elif today < released <= today + window:
+            upcoming.append((released, item))
+    recent.sort(key=lambda pair: (-pair[0].toordinal(), pair[1].number))
+    upcoming.sort(key=lambda pair: (pair[0], pair[1].number))
+    return {
+        "recent": [item for _, item in recent],
+        "upcoming": [item for _, item in upcoming],
+    }
+
+
+def _by_theme(owned: list[LegoSet], region: str) -> list[dict[str, Any]]:
+    """Total the owned collection per theme, most valuable first."""
+    themes: dict[str, dict[str, Any]] = {}
+    for lego_set in owned:
+        qty = max(lego_set.collection.qty_owned, 1)
+        row = themes.setdefault(
+            lego_set.theme or "Other",
+            {"theme": lego_set.theme or "Other", "value": 0.0, "pieces": 0, "sets": 0},
+        )
+        row["value"] += (lego_set.price(region) or 0.0) * qty
+        row["pieces"] += (lego_set.pieces or 0) * qty
+        row["sets"] += qty
+    return sorted(themes.values(), key=lambda row: (-row["value"], row["theme"]))
+
+
+def _statistic_ids(
+    hass: HomeAssistant, entry: LegoConfigEntry
+) -> dict[str, str | None]:
+    """Name the sensors whose long-term statistics the panel draws as history."""
+    registry = er.async_get(hass)
+    return {
+        key: registry.async_get_entity_id(
+            "sensor", DOMAIN, f"{entry.entry_id}_{unique_suffix}"
+        )
+        for key, unique_suffix in (
+            ("value", "collection_value"),
+            ("pieces", "pieces_owned"),
+        )
+    }
+
+
+def dashboard_payload(
+    entry: LegoConfigEntry, rows: list[str], hidden: list[str]
+) -> dict[str, Any]:
     """Build everything the panel's home view needs in one reply."""
     collection = entry.runtime_data.collection
     data = collection.data
@@ -185,11 +311,37 @@ def dashboard_payload(entry: LegoConfigEntry, rows: list[str]) -> dict[str, Any]
         data.wanted if data else [],
         key=lambda item: _wishlist_key(item, region, today),
     )
+    # None tells the panel the option is off, so it offers no release rows at all.
+    feeds = entry.runtime_data.feeds
+    feed = feeds.data
+    release_rows: dict[str, Any] | None = None
+    if feeds.releases:
+        release_rows = {
+            key: [summarise(item, region) for item in sets]
+            for key, sets in _releases(
+                (feed.releases if feed else None) or [], region, today
+            ).items()
+        }
+        # Fetched in the background after setup, so empty may only mean not yet.
+        release_rows["status"] = (
+            "ready"
+            if feed is not None and feed.releases is not None
+            else "fetching"
+            if feeds.last_update_success
+            else "failed"
+        )
     return {
         "entry_id": entry.entry_id,
         "device_id": device.id if device else None,
+        "hidden": hidden,
+        # Current totals per theme, and the sensors whose recorded statistics
+        # give the same totals over time.
+        "by_theme": _by_theme(data.owned if data else [], region),
+        "history": _statistic_ids(collection.hass, entry),
         "rows": rows,
         "region": region,
+        # Prices are LEGO.com RRP in the region's own currency.
+        "currency": REGION_CURRENCY.get(region),
         "quota": {
             "calls_today": quota.calls_today,
             "budget": quota.budget,
@@ -212,8 +364,11 @@ def dashboard_payload(entry: LegoConfigEntry, rows: list[str]) -> dict[str, Any]
             "sets_missing_price": summary.sets_missing_price if summary else 0,
         },
         "wishlist": [summarise(item, region) for item in wanted],
+        "releases": release_rows,
         "themes": {
-            theme: [summarise(item, region) for item in sets]
-            for theme, sets in (entry.runtime_data.feeds.data or {}).items()
+            theme: [
+                summarise(item, region) for item in _new_in_theme(sets, region, today)
+            ]
+            for theme, sets in (feed.themes if feed else {}).items()
         },
     }

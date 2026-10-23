@@ -1,30 +1,35 @@
 """Data update coordinators for the LEGO integration."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import logging
-import math
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import Any, cast, override
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_REGION
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import BricksetClient
+from .api import BricksetClient, pages_spent
 from .catalogue import SetCatalogue
 from .const import (
+    CONF_RELEASES,
     CONF_THEMES,
     DEFAULT_REGION,
+    DEFAULT_RELEASES,
     DOMAIN,
     EVENT_NEW_SET,
     EVENT_WANTED_CHANGED,
-    FEEDS_INTERVAL_HOURS,
+    FEEDS_RETRY_HOURS,
     MIN_COLLECTION_POLL_COST,
     MIN_TIME_BETWEEN_QUOTA_CHECKS,
-    PAGE_SIZE,
+    NEXT_YEAR_FROM_MONTH,
+    RELEASES_PAGES_ESTIMATE,
+    YEAR_MAX_PAGES,
 )
 from .exceptions import (
     BricksetAuthError,
@@ -32,11 +37,16 @@ from .exceptions import (
     BricksetQuotaError,
     BricksetUserHashError,
 )
-from .models import CollectionSummary, LegoSet
-from .quota import QuotaManager, collection_interval
-
-if TYPE_CHECKING:
-    from . import LegoConfigEntry
+from .models import CollectionSummary, LegoSet, ThemeSpan
+from .quota import (
+    QuotaManager,
+    collection_interval,
+    feed_years,
+    feeds_calls_per_day,
+    feeds_interval,
+    feeds_poll_estimate,
+    poll_window_years,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,13 +75,27 @@ class CollectionData:
 
 def _collection_poll_cost(data: CollectionData | None) -> int:
     """Return the billed calls a collection poll spends, given the last result."""
-    # Owned and wanted are one call each until a list passes a page.
+    # Owned and wanted are one call each until a list fills a page.
     if data is None:
         return MIN_COLLECTION_POLL_COST
-    pages = math.ceil(len(data.owned) / PAGE_SIZE) + math.ceil(
-        len(data.wanted) / PAGE_SIZE
-    )
+    pages = pages_spent(len(data.owned)) + pages_spent(len(data.wanted))
     return max(pages, MIN_COLLECTION_POLL_COST)
+
+
+def _collection_interval(
+    config_entry: LegoConfigEntry, quota: QuotaManager, poll_cost: int
+) -> timedelta:
+    """Return the collection interval left over by the entry's other polls."""
+    options = config_entry.options
+    # Runtime data is set after the first collection poll, which uses the estimate.
+    runtime: LegoRuntimeData | None = getattr(config_entry, "runtime_data", None)
+    feeds_calls = feeds_calls_per_day(
+        bool(options.get(CONF_THEMES)),
+        bool(options.get(CONF_RELEASES, DEFAULT_RELEASES)),
+        dt_util.now().date(),
+        runtime.feeds.measured_cost if runtime is not None else None,
+    )
+    return collection_interval(quota.budget, poll_cost, feeds_calls)
 
 
 class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
@@ -88,7 +112,7 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         catalogue: SetCatalogue | None,
         *,
         name: str,
-        update_interval: timedelta,
+        update_interval: timedelta | None,
     ) -> None:
         """Initialise the coordinator."""
         super().__init__(
@@ -150,6 +174,14 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         # the sync time goes out on its own signal.
         async_dispatcher_send(self.hass, self.signal_synced)
         return data
+
+    @property
+    def device_id(self) -> str | None:
+        """Return the id of the account's Brickset device, which actions target."""
+        device = dr.async_get(self.hass).async_get_device_by_identifier(
+            (DOMAIN, self.config_entry.entry_id), self.config_entry.entry_id
+        )
+        return device.id if device else None
 
     @property
     def signal_synced(self) -> str:
@@ -223,10 +255,8 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
             quota,
             catalogue,
             name=f"{DOMAIN} collection",
-            update_interval=collection_interval(
-                quota.budget,
-                MIN_COLLECTION_POLL_COST,
-                bool(config_entry.options.get(CONF_THEMES)),
+            update_interval=_collection_interval(
+                config_entry, quota, MIN_COLLECTION_POLL_COST
             ),
         )
 
@@ -298,10 +328,8 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
         self._fire_wanted_events(data)
         # A collection that grows past a page costs more per poll, so the interval
         # stretches to keep the polls inside the budget.
-        self.update_interval = collection_interval(
-            self.quota.budget,
-            _collection_poll_cost(data),
-            bool(self.config_entry.options.get(CONF_THEMES)),
+        self.update_interval = _collection_interval(
+            self.config_entry, self.quota, _collection_poll_cost(data)
         )
         return data
 
@@ -311,6 +339,7 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
             return
         previous = {lego_set.number: lego_set for lego_set in data.wanted}
         region = self.region
+        device_id = self.device_id
         for lego_set in new_data.wanted:
             before = previous.get(lego_set.number)
             if before is None:
@@ -328,6 +357,7 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
                     EVENT_WANTED_CHANGED,
                     {
                         "entry_id": self.config_entry.entry_id,
+                        "device_id": device_id,
                         "set_number": lego_set.number,
                         "name": lego_set.name,
                         "brickset_url": lego_set.brickset_url,
@@ -336,8 +366,61 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
                 )
 
 
-class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
-    """Poll new releases for each watched theme."""
+@dataclass(slots=True)
+class FeedsData:
+    """Everything the feeds poll produced."""
+
+    # The followed themes' sets, the newest year first.
+    themes: dict[str, list[LegoSet]] = field(default_factory=dict)
+    # Every set of each year fetched, while following releases across all themes.
+    releases: list[LegoSet] | None = None
+
+
+def year_query(year: int) -> dict[str, Any]:
+    """Return the getSets query that reads one whole year."""
+    # Ascending, so if the page cap ever bites it drops gear numbered in the
+    # millions rather than the sets the rows are for. The live API tests run this
+    # same query, so the two cannot drift apart.
+    return {"year": year, "orderBy": "Number"}
+
+
+def theme_query(themes: list[str], year: int) -> dict[str, Any]:
+    """Return the getSets query for one year of the followed themes."""
+    # Brickset accepts a comma-separated theme, turning one call per theme into
+    # one call for them all.
+    return {"theme": ",".join(themes), "year": year, "orderBy": "NumberDESC"}
+
+
+def newest_first(sets: list[LegoSet], region: str, today: date) -> list[LegoSet]:
+    """Order a theme's sets so the most recently released comes first."""
+    # Then the dated ones still to come, soonest first, and the announced sets
+    # with no date last, since they are furthest away. Within a day the higher
+    # set number, the later one, goes first: the sort keeps that order.
+
+    def key(item: LegoSet) -> tuple[int, int]:
+        released = item.release_date(region)
+        if released is None:
+            return (2, 0)
+        if released <= today:
+            return (0, -released.toordinal())
+        return (1, released.toordinal())
+
+    by_number = sorted(sets, key=lambda item: item.number_key, reverse=True)
+    return sorted(by_number, key=key)
+
+
+def paging_issue_id(entry_id: str) -> str:
+    """Return the id of the Repair raised while the followed themes need paging."""
+    return f"theme_feed_paging_{entry_id}"
+
+
+class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
+    """Poll new sets in the followed themes, and in every theme if asked to."""
+
+    # Following releases across all themes reads each year the release window
+    # touches whole, and cuts the followed themes from that, so one poll serves
+    # both. Otherwise only the followed themes are asked for. Either way next year
+    # costs a call only once getThemes, which is free, says it has sets.
 
     def __init__(
         self,
@@ -348,6 +431,9 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
         catalogue: SetCatalogue | None = None,
     ) -> None:
         """Initialise the feeds coordinator."""
+        options = config_entry.options
+        releases = bool(options.get(CONF_RELEASES, DEFAULT_RELEASES))
+        active = releases or bool(options.get(CONF_THEMES))
         super().__init__(
             hass,
             config_entry,
@@ -355,14 +441,234 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
             quota,
             catalogue,
             name=f"{DOMAIN} feeds",
-            update_interval=timedelta(hours=FEEDS_INTERVAL_HOURS),
+            # With nothing to follow there is nothing to poll, even though the
+            # release calendar still listens.
+            update_interval=feeds_interval(releases) if active else None,
         )
         self._batching_warned = False
+        # Billed pages each year took the last time a poll fetched it.
+        self._pages: dict[int, int] = {}
+        self._measured: int | None = None
+        # getThemes' last good answer, so one failure does not drop next year
+        # from a poll and bring it back, as new sets, in the one after.
+        self._theme_years: dict[str, ThemeSpan] | None = None
+        # getThemes can file a theme under next year while getSets returns nothing
+        # for it yet. What it claimed when next year last came back empty, so the
+        # call is skipped until the claim changes: a new set filed in the theme, or
+        # a later year.
+        self._empty_claim: frozenset[tuple[str, ThemeSpan]] | None = None
+        self._claim: frozenset[tuple[str, ThemeSpan]] | None = None
+        # Sets each year returned at the last poll that fetched it.
+        self._found: dict[int, int] = {}
+        if releases or not options.get(CONF_THEMES):
+            # Only a theme-only feed can page, and nothing else would clear it.
+            ir.async_delete_issue(hass, DOMAIN, paging_issue_id(config_entry.entry_id))
 
     @property
     def themes(self) -> list[str]:
         """Return the themes being watched for new releases."""
         return list(self.config_entry.options.get(CONF_THEMES, []))
+
+    @property
+    def releases(self) -> bool:
+        """Whether releases across all themes are followed."""
+        return bool(self.config_entry.options.get(CONF_RELEASES, DEFAULT_RELEASES))
+
+    @property
+    def active(self) -> bool:
+        """Whether there is anything for the feeds to poll."""
+        return self.releases or bool(self.themes)
+
+    @property
+    def measured_cost(self) -> int | None:
+        """Return the billed calls the last poll spent, or None before one has."""
+        return self._measured
+
+    @property
+    @override
+    def poll_cost(self) -> int:
+        """Return the billed calls one refresh would spend."""
+        if self._measured is not None:
+            return self._measured
+        return feeds_poll_estimate(
+            dt_util.now().date(), bool(self.themes), self.releases
+        )
+
+    @override
+    async def _async_update_data(self) -> FeedsData:
+        """Poll on schedule, or retry sooner while there is nothing to show yet."""
+        try:
+            data = await super()._async_update_data()
+        except UpdateFailed:
+            if self._previous is None and self.active:
+                self.update_interval = timedelta(hours=FEEDS_RETRY_HOURS)
+            raise
+        self.update_interval = feeds_interval(self.releases) if self.active else None
+        return data
+
+    async def _next_year_wanted(self, today: date) -> bool:
+        """Ask getThemes, unbilled, whether next year has sets these feeds want."""
+        next_year = today.year + 1
+        try:
+            self._theme_years = await self.client.get_theme_years()
+        except BricksetError as err:
+            _LOGGER.debug("Could not ask Brickset which years have sets: %s", err)
+            if self._theme_years is None:
+                return today.month >= NEXT_YEAR_FROM_MONTH
+        claims = {
+            theme: span
+            for theme, span in self._theme_years.items()
+            if span.year_to >= next_year
+        }
+        followed = {theme.casefold() for theme in self.themes}
+        watched = {
+            theme: span
+            for theme, span in claims.items()
+            if theme.casefold() in followed
+        }
+        if watched:
+            claim = frozenset(watched.items())
+        elif self.releases and next_year in poll_window_years(today) and claims:
+            # The release rows want next year only once the window reaches it.
+            claim = frozenset(claims.items())
+        else:
+            return False
+        self._claim = claim
+        return claim != self._empty_claim
+
+    def _planned_cost(self, years: list[int], today: date) -> int:
+        """Return what fetching these years should cost, by the last poll's pages."""
+        return sum(
+            self._pages.get(
+                year,
+                RELEASES_PAGES_ESTIMATE if self.releases and year <= today.year else 1,
+            )
+            for year in years
+        )
+
+    @override
+    async def _fetch(self) -> FeedsData:
+        """Fetch the years these feeds need, and cut the followed themes from them."""
+        if not self.active:
+            return FeedsData()
+        today = dt_util.now().date()
+        years = feed_years(today, self.releases, await self._next_year_wanted(today))
+        # Every page is reserved up front: a poll that ran out of budget part way
+        # would spend its pages and keep none of them.
+        self.quota.reserve(self._planned_cost(years, today))
+        if self.releases:
+            data = await self._fetch_years(years)
+        else:
+            data = FeedsData(themes=await self._fetch_themes(years, today))
+        # Neither query returns the sets in release order, so they are put in it.
+        data.themes = {
+            theme: newest_first(sets, self.region, today)
+            for theme, sets in data.themes.items()
+        }
+        self._measured = sum(self._pages[year] for year in years)
+        if today.year + 1 in years:
+            # Remembered only when it came back empty, so a later poll skips it.
+            self._empty_claim = None if self._found[today.year + 1] else self._claim
+        if self.catalogue is not None:
+            fetched = data.releases or [
+                s for sets in data.themes.values() for s in sets
+            ]
+            self.catalogue.remember(fetched)
+            await self.catalogue.async_save_if_dirty()
+        self._fire_new_set_events(data.themes)
+        return data
+
+    async def _fetch_years(self, years: list[int]) -> FeedsData:
+        """Read whole years, then pick the followed themes out of them."""
+        sets: list[LegoSet] = []
+        for year in years:
+            fetched = await self.client.get_all_sets(
+                year_query(year), max_pages=YEAR_MAX_PAGES
+            )
+            self._pages[year] = pages_spent(len(fetched), YEAR_MAX_PAGES)
+            self._found[year] = len(fetched)
+            sets.extend(fetched)
+        # Reading every theme costs the same however many are followed.
+        self._clear_paging_issue()
+        themes: dict[str, list[LegoSet]] = {theme: [] for theme in self.themes}
+        # A theme typed by hand need not match Brickset's capitals, which its own
+        # theme filter forgives.
+        followed = {theme.casefold(): theme for theme in self.themes}
+        for lego_set in sets:
+            if (theme := followed.get((lego_set.theme or "").casefold())) is not None:
+                themes[theme].append(lego_set)
+        return FeedsData(themes=themes, releases=sets)
+
+    async def _fetch_themes(
+        self, years: list[int], today: date
+    ) -> dict[str, list[LegoSet]]:
+        """Ask for the followed themes alone, one batched query per year."""
+        themes = self.themes
+        feeds: dict[str, list[LegoSet]] = {theme: [] for theme in themes}
+        for year in years:
+            found = await self._theme_year(themes, year, today)
+            for theme in themes:
+                feeds[theme] += found[theme]
+        return feeds
+
+    async def _theme_year(
+        self, themes: list[str], year: int, today: date
+    ) -> dict[str, list[LegoSet]]:
+        """Fetch one year of the followed themes, counting the pages it took."""
+        batched = await self.client.get_all_sets(
+            theme_query(themes, year), max_pages=YEAR_MAX_PAGES
+        )
+        found: dict[str, list[LegoSet]] = {theme: [] for theme in themes}
+        for lego_set in batched:
+            if lego_set.theme in found:
+                found[lego_set.theme].append(lego_set)
+        pages = pages_spent(len(batched), YEAR_MAX_PAGES)
+        if year == today.year:
+            self._update_paging_issue(pages)
+            # The comma-joined theme is undocumented, so a theme it returned
+            # nothing for this year is asked for on its own rather than silently
+            # dropped. Next year is skipped: most themes have nothing there yet.
+            missing = [theme for theme in themes if not found[theme]]
+            if len(themes) > 1 and len(missing) == len(themes):
+                self._warn_batching_lost(themes)
+            for theme in missing if len(themes) > 1 else []:
+                alone = await self.client.get_all_sets(
+                    theme_query([theme], year), max_pages=YEAR_MAX_PAGES
+                )
+                pages += pages_spent(len(alone), YEAR_MAX_PAGES)
+                found[theme] = alone
+        self._pages[year] = pages
+        self._found[year] = sum(len(sets) for sets in found.values())
+        return found
+
+    @property
+    def _paging_issue_id(self) -> str:
+        return paging_issue_id(self.config_entry.entry_id)
+
+    def _update_paging_issue(self, pages: int) -> None:
+        """Tell the user once the followed themes no longer fit one call."""
+        if pages <= 1:
+            self._clear_paging_issue()
+            return
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            self._paging_issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="theme_feed_paging",
+            translation_placeholders={
+                "name": self.config_entry.title,
+                "themes": str(len(self.themes)),
+                "pages": str(pages),
+                "calls": str(
+                    feeds_calls_per_day(True, False, dt_util.now().date(), pages)
+                ),
+            },
+        )
+
+    def _clear_paging_issue(self) -> None:
+        ir.async_delete_issue(self.hass, DOMAIN, self._paging_issue_id)
 
     def _warn_batching_lost(self, themes: list[str]) -> None:
         """Say once that the batched theme query stopped working."""
@@ -376,61 +682,14 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
             len(themes),
         )
 
-    async def _theme_query(self, theme: str, year: int) -> list[LegoSet]:
-        """Ask Brickset for this year's sets in one theme, or several comma joined."""
-        # This path does not paginate, and a call costs the same whatever the page
-        # size, so ask for the maximum rather than risk dropping sets off the end.
-        sets = await self.client.get_sets(
-            {
-                "theme": theme,
-                "year": year,
-                "orderBy": "NumberDESC",
-                "pageSize": PAGE_SIZE,
-            }
-        )
-        if len(sets) == PAGE_SIZE:
-            _LOGGER.warning(
-                "Theme query for %s filled a page of %s sets, so some may be missing",
-                theme,
-                PAGE_SIZE,
-            )
-        return sets
-
-    @override
-    async def _fetch(self) -> dict[str, list[LegoSet]]:
-        """Fetch this year's sets for each watched theme."""
-        year = dt_util.now().year
-        themes = self.themes
-        feeds: dict[str, list[LegoSet]] = {theme: [] for theme in themes}
-
-        if len(themes) > 1:
-            # Brickset accepts a comma-separated theme, turning one call per theme
-            # into one call. Undocumented, so anything it does not return is asked
-            # for individually rather than silently dropped from the feed.
-            for lego_set in await self._theme_query(",".join(themes), year):
-                if lego_set.theme in feeds:
-                    feeds[lego_set.theme].append(lego_set)
-            missing = [theme for theme in themes if not feeds[theme]]
-            if len(missing) == len(themes):
-                self._warn_batching_lost(themes)
-        else:
-            missing = themes
-
-        for theme in missing:
-            feeds[theme] = await self._theme_query(theme, year)
-        if self.catalogue is not None:
-            self.catalogue.remember([s for sets in feeds.values() for s in sets])
-            await self.catalogue.async_save_if_dirty()
-        self._fire_new_set_events(feeds)
-        return feeds
-
     def _fire_new_set_events(self, feeds: dict[str, list[LegoSet]]) -> None:
         """Fire an event per set new since the previous poll, baselining the first."""
         if (previous := self._previous) is None:
             return
         region = self.region
+        device_id = self.device_id
         for theme, sets in feeds.items():
-            seen = {lego_set.number for lego_set in previous.get(theme, [])}
+            seen = {lego_set.number for lego_set in previous.themes.get(theme, [])}
             for lego_set in sets:
                 if lego_set.number in seen:
                     continue
@@ -440,6 +699,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
                     EVENT_NEW_SET,
                     {
                         "entry_id": self.config_entry.entry_id,
+                        "device_id": device_id,
                         "theme": theme,
                         "set_number": lego_set.number,
                         "name": lego_set.name,
@@ -455,3 +715,17 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[dict[str, list[LegoSet]]]):
                         "region": region,
                     },
                 )
+
+
+@dataclass(slots=True)
+class LegoRuntimeData:
+    """Everything a config entry needs at runtime."""
+
+    client: BricksetClient
+    quota: QuotaManager
+    collection: LegoCollectionCoordinator
+    feeds: LegoFeedsCoordinator
+    catalogue: SetCatalogue | None
+
+
+type LegoConfigEntry = ConfigEntry[LegoRuntimeData]

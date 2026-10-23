@@ -7,13 +7,13 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 import probatio
 
-from .const import DOMAIN, PANEL_STORE
-from .panel import dashboard_payload, summarise
+from .const import DOMAIN
+from .panel import PANEL_STORE, dashboard_payload, summarise, summarise_entry
 
 if TYPE_CHECKING:
     from homeassistant.auth.models import User
 
-    from . import LegoConfigEntry
+    from .coordinator import LegoConfigEntry
 
 
 @callback
@@ -55,17 +55,17 @@ def websocket_search(
         )
         return
 
+    # A set Home Assistant already holds a Brickset record for draws as fully as
+    # anywhere else in the panel; the rest carry what the local index knows.
+    region = entry.runtime_data.collection.region
+    known = _known_sets(entry)
     connection.send_result(
         msg["id"],
         {
             "sets": [
-                {
-                    "set_number": found.number,
-                    "name": found.name,
-                    "year": found.year,
-                    "theme": found.theme,
-                    "owned": _owned(entry, found.number),
-                }
+                summarise(known[found.number], region)
+                if found.number in known
+                else summarise_entry(found, _owned(entry, found.number))
                 for found in catalogue.search(msg["query"], msg["limit"])
             ]
         },
@@ -91,7 +91,10 @@ def websocket_dashboard(
 
     store = hass.data[PANEL_STORE]
     user_id = connection.user.id if connection.user else None
-    connection.send_result(msg["id"], dashboard_payload(entry, store.rows(user_id)))
+    connection.send_result(
+        msg["id"],
+        dashboard_payload(entry, store.rows(user_id), store.hidden(user_id)),
+    )
 
 
 @callback
@@ -132,7 +135,8 @@ def websocket_collection(
 @websocket_api.websocket_command(
     {
         probatio.Required("type"): "lego/panel_config/set",
-        probatio.Required("rows"): [str],
+        probatio.Optional("rows"): [str],
+        probatio.Optional("hidden"): [str],
     }
 )
 @websocket_api.async_response
@@ -141,7 +145,7 @@ async def websocket_set_rows(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Save this user's row order and return what was stored."""
+    """Save this user's row order or hidden rows and return what was stored."""
     # websocket_api.ActiveConnection types user as always set; keep the guard anyway, since a
     # write keyed on a missing user would land in another user's slot.
     if (user := cast("User | None", connection.user)) is None:
@@ -151,8 +155,10 @@ async def websocket_set_rows(
         return
 
     store = hass.data[PANEL_STORE]
-    rows = await store.async_set_rows(user.id, msg["rows"])
-    connection.send_result(msg["id"], {"rows": rows})
+    rows, hidden = await store.async_set_rows(
+        user.id, msg.get("rows"), msg.get("hidden")
+    )
+    connection.send_result(msg["id"], {"rows": rows, "hidden": hidden})
 
 
 @callback
@@ -277,3 +283,15 @@ def _owned(entry: Any, number: str) -> bool:
         return False
     lego_set = data.all_sets.get(number)
     return bool(lego_set and lego_set.collection.owned)
+
+
+def _known_sets(entry: LegoConfigEntry) -> dict[str, Any]:
+    """Every set with a Brickset record: the collection and the feeds."""
+    known: dict[str, Any] = {}
+    if (feed := entry.runtime_data.feeds.data) is not None:
+        for theme_sets in feed.themes.values():
+            known.update({lego_set.number: lego_set for lego_set in theme_sets})
+        known.update({lego_set.number: lego_set for lego_set in feed.releases or []})
+    data = entry.runtime_data.collection.data
+    known.update(data.all_sets)
+    return known

@@ -1,13 +1,25 @@
 """Tests for LEGO config entry setup and teardown."""
 
+from datetime import timedelta
+
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
+from homeassistant.const import (
+    CONF_API_KEY,
+    CONF_REGION,
+    CONF_USERNAME,
+    STATE_UNAVAILABLE,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.setup import async_setup_component
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
+from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
-from custom_components.lego import async_remove_config_entry_device
 from custom_components.lego.const import CONF_THEMES, CONF_USER_HASH, DOMAIN
 
 from .conftest import API_KEY, USER_HASH, USERNAME, BricksetServer, setup_integration
@@ -51,12 +63,12 @@ async def test_migrate_watchlist_entry_to_the_wishlist(
 
 
 @pytest.mark.usefixtures("brickset")
-async def test_setup_and_unload(
+async def test_setup_creates_the_device(
     hass: HomeAssistant,
     device_registry: dr.DeviceRegistry,
     mock_config_entry: MockConfigEntry,
 ) -> None:
-    """The entry loads, creates its device, and unloads cleanly."""
+    """The entry loads and creates its service device."""
     await setup_integration(hass, mock_config_entry)
 
     assert mock_config_entry.state is ConfigEntryState.LOADED
@@ -67,9 +79,25 @@ async def test_setup_and_unload(
     assert len(devices) == 1
     assert devices[0].manufacturer == "Brickset"
 
+
+async def test_unload_stops_polling(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Unloading leaves the entry not loaded and spends no more calls."""
+    await setup_integration(hass, mock_config_entry)
+
     assert await hass.config_entries.async_unload(mock_config_entry.entry_id)
     await hass.async_block_till_done()
     assert mock_config_entry.state is ConfigEntryState.NOT_LOADED
+
+    calls = len(brickset.get_sets_calls)
+    freezer.tick(timedelta(days=1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert len(brickset.get_sets_calls) == calls
 
 
 @pytest.mark.usefixtures("brickset")
@@ -145,18 +173,26 @@ async def test_options_update_reloads(
 @pytest.mark.usefixtures("brickset")
 async def test_device_removal_refused(
     hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
     device_registry: dr.DeviceRegistry,
     mock_config_entry: MockConfigEntry,
 ) -> None:
-    """The service device cannot be removed while the entry is loaded."""
+    """Deleting the service device from the UI is refused while its entry exists."""
+    assert await async_setup_component(hass, "config", {})
     await setup_integration(hass, mock_config_entry)
     device = dr.async_entries_for_config_entry(
         device_registry, mock_config_entry.entry_id
     )[0]
 
-    assert (
-        await async_remove_config_entry_device(hass, mock_config_entry, device) is False
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "config/device_registry/remove", "device_id": device.id}
     )
+    response = await client.receive_json()
+
+    assert not response["success"]
+    assert "rejected by integration" in response["error"]["message"]
+    assert device_registry.async_get(device.id) is not None
 
 
 @pytest.mark.usefixtures("brickset")
@@ -168,3 +204,37 @@ async def test_user_hash_is_used_not_password(
 
     assert "password" not in mock_config_entry.data
     assert mock_config_entry.data[CONF_USER_HASH] == USER_HASH
+
+
+async def test_a_failed_poll_after_setup_makes_entities_unavailable(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """A Brickset failure is not shown as current data; recovery brings it back."""
+    await setup_integration(hass, mock_config_entry)
+    collection = mock_config_entry.runtime_data.collection
+    owned = "sensor.brickset_brickfan_sets_owned"
+    assert hass.states.get(owned).state == "4"
+
+    brickset.get_sets_error = "Something broke upstream"
+    await collection.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(owned).state == STATE_UNAVAILABLE
+
+    brickset.get_sets_error = None
+    await collection.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(owned).state == "4"
+
+
+async def test_an_expired_token_after_setup_asks_to_reconnect(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """A password changed on Brickset mid-run starts a reauth, not silent failure."""
+    await setup_integration(hass, mock_config_entry)
+
+    brickset.hash_valid = False
+    await mock_config_entry.runtime_data.collection.async_refresh()
+    await hass.async_block_till_done()
+
+    flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    assert [flow["context"]["source"] for flow in flows] == ["reauth"]

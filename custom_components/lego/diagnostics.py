@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from .const import BRICKSET_DAILY_CALL_LIMIT, CONF_USER_HASH
 
 if TYPE_CHECKING:
-    from . import LegoConfigEntry
+    from .coordinator import LegoConfigEntry
 
 TO_REDACT = {CONF_API_KEY, CONF_USER_HASH, CONF_USERNAME}
 
@@ -58,9 +58,16 @@ async def async_get_config_entry_diagnostics(
                     if feeds.update_interval
                     else None
                 ),
+                "calls_per_poll": feeds.measured_cost,
                 "themes": {
-                    theme: len(sets) for theme, sets in (feeds.data or {}).items()
+                    theme: len(sets)
+                    for theme, sets in (feeds.data.themes if feeds.data else {}).items()
                 },
+                "release_sets": (
+                    len(feeds.data.releases)
+                    if feeds.data and feeds.data.releases is not None
+                    else None
+                ),
             },
         },
         "catalogue": (

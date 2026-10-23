@@ -1,12 +1,14 @@
 """The LEGO integration, backed by Brickset."""
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_validation as cv, entity_registry as er
+from homeassistant.helpers import (
+    config_validation as cv,
+    entity_registry as er,
+    issue_registry as ir,
+)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import AnyDeviceEntry
 from homeassistant.helpers.event import async_track_time_interval
@@ -25,10 +27,20 @@ from .const import (
     DEFAULT_CATALOGUE_RICH,
     DEFAULT_DAILY_CALL_BUDGET,
     DOMAIN,
-    PANEL_STORE,
 )
-from .coordinator import LegoCollectionCoordinator, LegoFeedsCoordinator
-from .panel import PanelStore, async_refresh_panel, async_setup_panel_static
+from .coordinator import (
+    LegoCollectionCoordinator,
+    LegoConfigEntry,
+    LegoFeedsCoordinator,
+    LegoRuntimeData,
+    paging_issue_id,
+)
+from .panel import (
+    PANEL_STORE,
+    PanelStore,
+    async_refresh_panel,
+    async_setup_panel_static,
+)
 from .quota import QuotaManager
 from .services import async_setup_services
 from .websocket import async_setup_websocket
@@ -43,20 +55,6 @@ LEGACY_COUNTDOWN_PREFIX = "_watch_"
 CATALOGUE_CHECK_INTERVAL = timedelta(hours=6)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-
-
-@dataclass(slots=True)
-class LegoRuntimeData:
-    """Everything a config entry needs at runtime."""
-
-    client: BricksetClient
-    quota: QuotaManager
-    collection: LegoCollectionCoordinator
-    feeds: LegoFeedsCoordinator
-    catalogue: SetCatalogue | None
-
-
-type LegoConfigEntry = ConfigEntry[LegoRuntimeData]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -96,7 +94,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
     feeds = LegoFeedsCoordinator(hass, entry, client, quota, catalogue)
 
     await collection.async_config_entry_first_refresh()
-    if feeds.themes:
+    # A theme feed is one call, worth having before the entities appear; a read of
+    # whole years is a few, which a tight budget must not let fail the entry.
+    if feeds.themes and not feeds.releases:
         await feeds.async_config_entry_first_refresh()
 
     entry.runtime_data = LegoRuntimeData(
@@ -106,6 +106,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
         feeds=feeds,
         catalogue=catalogue,
     )
+
+    if feeds.active:
+        # A coordinator schedules polls only while something listens, and the
+        # panel and the new-set events need them even with every entity disabled.
+        entry.async_on_unload(feeds.async_add_listener(lambda: None))
+    if feeds.releases:
+        entry.async_create_background_task(
+            hass, feeds.async_refresh(), "lego_feeds_refresh"
+        )
 
     if catalogue is not None:
         rich = entry.options.get(CONF_CATALOGUE_RICH, DEFAULT_CATALOGUE_RICH)
@@ -168,7 +177,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> boo
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> None:
-    """Drop the sidebar panel once the last entry is gone."""
+    """Drop the sidebar panel once the last entry is gone, and its repairs."""
+    ir.async_delete_issue(hass, DOMAIN, paging_issue_id(entry.entry_id))
     await async_refresh_panel(hass)
 
 

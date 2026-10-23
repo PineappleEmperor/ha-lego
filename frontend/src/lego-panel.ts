@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, svg, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 type Hass = {
@@ -40,6 +40,19 @@ interface Stats {
   sets_missing_price: number;
 }
 
+interface ThemeTotal {
+  theme: string;
+  value: number;
+  pieces: number;
+  sets: number;
+}
+
+/** One recorded statistic: when its period started, and the value for it. */
+export interface Point {
+  t: number;
+  v: number;
+}
+
 interface Quota {
   calls_today: number;
   budget: number;
@@ -63,8 +76,17 @@ interface Dashboard {
   device_id: string | null;
   rows: string[];
   region: string;
+  currency: string | null;
   quota: Quota;
   last_synced: string | null;
+  hidden: string[];
+  by_theme: ThemeTotal[];
+  history: { value: string | null; pieces: string | null };
+  releases?: {
+    recent: LegoSet[];
+    upcoming: LegoSet[];
+    status: "fetching" | "failed" | "ready";
+  } | null;
   stats: Stats;
   wishlist: LegoSet[];
   themes: Record<string, LegoSet[]>;
@@ -128,6 +150,139 @@ export function syncedAgo(lastSynced: string | null, now: Date): string {
   return `Updated ${ago.format(-Math.floor(hours / 24), "day")}`;
 }
 
+/** A LEGO.com RRP in the account's region, or "" when Brickset has none. */
+export function formatPrice(
+  value: number | null | undefined,
+  currency: string | null,
+  language?: string,
+  wholeUnits = false,
+): string {
+  // == null, not === null: a payload that leaves the field out sends undefined,
+  // and Intl turns that into "NaN" rather than failing.
+  if (value == null || !currency) return "";
+  return new Intl.NumberFormat(language, {
+    style: "currency",
+    currency,
+    ...(wholeUnits ? { maximumFractionDigits: 0 } : {}),
+  }).format(value);
+}
+
+/**
+ * The text of a rejected call. Home Assistant's websocket rejects with a plain
+ * {code, message} object rather than an Error, which String() turns into
+ * "[object Object]".
+ */
+export function errorText(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object" && "message" in err) {
+    return String((err as { message: unknown }).message);
+  }
+  return String(err);
+}
+
+/**
+ * Recorder statistics as chart points. A TOTAL sensor records its state, a
+ * MEASUREMENT one a mean; periods with neither are dropped rather than drawn as 0.
+ */
+export function statisticPoints(
+  rows: {
+    start: number | string;
+    state?: number | null;
+    mean?: number | null;
+  }[],
+): Point[] {
+  const points: Point[] = [];
+  for (const row of rows) {
+    const v = row.state ?? row.mean;
+    if (v == null) continue;
+    points.push({ t: new Date(row.start).getTime(), v });
+  }
+  return points;
+}
+
+/** The biggest few themes by a measure, the rest folded into "Other". */
+export function topThemes(
+  totals: ThemeTotal[],
+  measure: "value" | "pieces",
+  keep = 8,
+): { theme: string; amount: number; sets: number }[] {
+  const ranked = [...totals]
+    .filter((row) => row[measure] > 0)
+    .sort((a, b) => b[measure] - a[measure]);
+  const shown = ranked.slice(0, keep).map((row) => ({
+    theme: row.theme,
+    amount: row[measure],
+    sets: row.sets,
+  }));
+  const rest = ranked.slice(keep);
+  if (rest.length) {
+    shown.push({
+      theme: `Other (${count(rest.length, "theme", "themes")})`,
+      amount: rest.reduce((sum, row) => sum + row[measure], 0),
+      sets: rest.reduce((sum, row) => sum + row.sets, 0),
+    });
+  }
+  return shown;
+}
+
+/** "1 set", "12 sets". */
+export function count(n: number, one: string, many: string): string {
+  return `${n.toLocaleString()} ${n === 1 ? one : many}`;
+}
+
+/** Within this many days of leaving sale, a set's exit date is flagged. */
+const RETIRING_SOON_DAYS = 60;
+
+/**
+ * How a card's date reads at a glance, so released and upcoming sets differ without
+ * longer wording: "due" not out yet, "retiring" leaving sale soon, "retired" gone.
+ */
+/**
+ * Which date a card leads with: a row of new releases is about when a set came
+ * out or is due, a wishlist or a collection about when it leaves sale.
+ */
+export type DateFocus = "release" | "retirement";
+
+export function whenTone(
+  item: Pick<LegoSet, "available_from" | "available_until">,
+  now: Date,
+  focus: DateFocus = "retirement",
+): "due" | "retiring" | "retired" | "" {
+  if (focus === "release" && item.available_from) {
+    return new Date(item.available_from) > now ? "due" : "";
+  }
+  if (item.available_until) {
+    const until = new Date(item.available_until).getTime();
+    if (until < now.getTime()) return "retired";
+    const days = (until - now.getTime()) / 86_400_000;
+    return days <= RETIRING_SOON_DAYS ? "retiring" : "";
+  }
+  if (item.available_from && new Date(item.available_from) > now) return "due";
+  return "";
+}
+
+/** What a card says about a set's dates, worded for whether they have passed. */
+export function whenLabel(
+  item: Pick<LegoSet, "available_from" | "available_until" | "name">,
+  now: Date,
+  format: (iso: string) => string,
+  focus: DateFocus = "retirement",
+): string {
+  if (focus === "release" && item.available_from) {
+    const coming = new Date(item.available_from) > now;
+    return `${coming ? "Due" : "Out"} ${format(item.available_from)}`;
+  }
+  if (item.available_until) {
+    const gone = new Date(item.available_until) < now;
+    return `${gone ? "Retired" : "Retires"} ${format(item.available_until)}`;
+  }
+  if (item.available_from) {
+    const coming = new Date(item.available_from) > now;
+    return `${coming ? "Due" : "Out"} ${format(item.available_from)}`;
+  }
+  return isNamed(item) ? "Date unknown" : "Details tbd";
+}
+
 export function isNamed(item: Pick<LegoSet, "name">): boolean {
   const name = (item.name ?? "").trim();
   return name !== "" && name !== UNNAMED;
@@ -137,14 +292,22 @@ export function displayName(item: Pick<LegoSet, "name">): string {
   return isNamed(item) ? item.name : "Name tbd";
 }
 
-// The integration's own icon, served from custom_components/lego/brand/.
-const FALLBACK_ART = "/lego_panel/icon.png";
+// The integration's own icon, served from custom_components/lego/brand/: the
+// header's logo, and the picture on a card Brickset has no art for.
+const BRAND_ICON = "/lego_panel/icon.png";
 
 const ROW_TITLES: Record<string, string> = {
+  recent: "Out recently",
+  upcoming: "Coming soon",
   themes: "New in my themes",
   wishlist: "Your wishlist",
   collection: "Your collection",
+  value: "Collection value",
+  pieces: "Pieces",
 };
+
+/** How far back the value and pieces history reaches. */
+const HISTORY_DAYS = 365;
 
 @customElement("lego-panel")
 export class LegoPanel extends LitElement {
@@ -162,12 +325,30 @@ export class LegoPanel extends LitElement {
   @state() private _query = "";
   @state() private _results: LegoSet[] = [];
   @state() private _dragging = "";
+  @state() private _over = "";
+  @state() private _pending = new Set<string>();
+  @state() private _collectionError = "";
+  @state() private _switching = "";
+  @state() private _customising = false;
+  @state() private _history: Record<string, Point[] | "loading" | "none"> = {};
+  @state() private _hoverPoint: { key: string; index: number } | null = null;
   @state() private _accounts: Account[] = [];
   @state() private _account = "";
 
   public override connectedCallback(): void {
     super.connectedCallback();
     void this._load();
+  }
+
+  /** Fetch a chart's history once its row is on the page, not before. */
+  protected override updated(): void {
+    if (this._tab !== "home" || !this._dash) return;
+    const visible = this._visibleRows();
+    for (const key of ["value", "pieces"] as const) {
+      if (visible.includes(key) && this._history[key] === undefined) {
+        void this._loadHistory(key);
+      }
+    }
   }
 
   private async _refreshCollection(): Promise<void> {
@@ -181,7 +362,7 @@ export class LegoPanel extends LitElement {
       );
       await this._load();
     } catch (err) {
-      this._refreshError = err instanceof Error ? err.message : String(err);
+      this._refreshError = errorText(err);
     } finally {
       this._refreshing = false;
     }
@@ -190,12 +371,19 @@ export class LegoPanel extends LitElement {
   private async _selectAccount(entryId: string): Promise<void> {
     if (entryId === this._account) return;
     this._account = entryId;
+    this._switching =
+      this._accounts.find((item) => item.entry_id === entryId)?.name ??
+      "account";
     this._collection = [];
     this._results = [];
     this._query = "";
     this._theme = "";
-    await this._load();
-    if (this._tab === "collection") await this._loadCollection();
+    try {
+      await this._load();
+      if (this._tab === "collection") await this._loadCollection();
+    } finally {
+      this._switching = "";
+    }
     try {
       await this.hass.callWS({
         type: "lego/account/set",
@@ -218,13 +406,16 @@ export class LegoPanel extends LitElement {
       const dash = await this.hass.callWS<Dashboard>(
         accountCall("lego/dashboard", this._account),
       );
+      // Charts belong to an account: keep them across a reload of the same one, so
+      // an ownership toggle does not refetch a year of statistics.
+      if (dash.entry_id !== this._dash?.entry_id) this._history = {};
       this._dash = dash;
       this._error = "";
       if (!this._theme || !(this._theme in dash.themes)) {
         this._theme = Object.keys(dash.themes)[0] ?? "";
       }
     } catch (err) {
-      this._error = err instanceof Error ? err.message : String(err);
+      this._error = errorText(err);
     }
   }
 
@@ -236,8 +427,10 @@ export class LegoPanel extends LitElement {
         filter: "owned",
       });
       this._collection = res.sets;
+      this._collectionError = "";
     } catch (err) {
-      this._error = err instanceof Error ? err.message : String(err);
+      // Kept apart from _error, which would blank the Home tab too.
+      this._collectionError = errorText(err);
     }
   }
 
@@ -259,8 +452,17 @@ export class LegoPanel extends LitElement {
     }
   }
 
+  private _setPending(number: string, pending: boolean): void {
+    const next = new Set(this._pending);
+    if (pending) next.add(number);
+    else next.delete(number);
+    this._pending = next;
+  }
+
   private async _toggleOwned(item: LegoSet): Promise<void> {
+    if (this._pending.has(item.set_number)) return;
     this._writeError = "";
+    this._setPending(item.set_number, true);
     try {
       await this.hass.callService(
         "lego",
@@ -270,8 +472,10 @@ export class LegoPanel extends LitElement {
     } catch (err) {
       // A rejected write used to fail only in the console, which read as a
       // flaky button rather than a broken one.
-      this._writeError = err instanceof Error ? err.message : String(err);
+      this._writeError = errorText(err);
       return;
+    } finally {
+      this._setPending(item.set_number, false);
     }
     this._collection = [];
     await this._load();
@@ -294,28 +498,60 @@ export class LegoPanel extends LitElement {
     const from = rows.indexOf(this._dragging);
     const to = rows.indexOf(target);
     this._dragging = "";
+    this._over = "";
     if (from < 0 || to < 0 || from === to) return;
     rows.splice(to, 0, ...rows.splice(from, 1));
     void this._saveRows(rows);
   }
 
+  /** Arrow keys on a row's handle move it, since dragging needs a pointer. */
+  private _onHandleKey(ev: KeyboardEvent, row: string): void {
+    const step = ev.key === "ArrowUp" ? -1 : ev.key === "ArrowDown" ? 1 : 0;
+    if (!step) return;
+    ev.preventDefault();
+    const rows = [...(this._dash?.rows ?? [])];
+    const visible = this._visibleRows();
+    const target = visible[visible.indexOf(row) + step];
+    if (!target) return;
+    const from = rows.indexOf(row);
+    rows.splice(from, 1);
+    rows.splice(rows.indexOf(target) + (step > 0 ? 1 : 0), 0, row);
+    void this._saveRows(rows);
+    void this.updateComplete.then(() =>
+      this.renderRoot
+        .querySelector<HTMLButtonElement>(`.drag[data-row="${row}"]`)
+        ?.focus(),
+    );
+  }
+
   protected override render(): TemplateResult {
     return html`
       <div class="app">
-        <header>
-          <div class="bar">
+        <header class=${this.narrow ? "narrow" : ""}>
+          <div class="title">
+            ${this.narrow
+              ? html`<ha-menu-button
+                  .hass=${this.hass}
+                  .narrow=${this.narrow}
+                ></ha-menu-button>`
+              : nothing}
+            <img class="logo" src=${BRAND_ICON} alt="" />
             <h1>LEGO</h1>
-            ${this._renderAccounts()}
           </div>
-          <div class="tabs">
+          ${this._renderAccounts()}
+          <div class="tabs" role="tablist">
             <button
               class=${this._tab === "home" ? "tab on" : "tab"}
+              role="tab"
+              aria-selected=${this._tab === "home"}
               @click=${() => (this._tab = "home")}
             >
               Home
             </button>
             <button
               class=${this._tab === "collection" ? "tab on" : "tab"}
+              role="tab"
+              aria-selected=${this._tab === "collection"}
               @click=${() => {
                 this._tab = "collection";
                 void this._loadCollection();
@@ -325,18 +561,44 @@ export class LegoPanel extends LitElement {
             </button>
           </div>
         </header>
-        ${this._writeError
-          ? html`<p class="error" role="alert">
-              Brickset would not save that change: ${this._writeError}
+        ${this._switching
+          ? html`<p class="muted switching" role="status">
+              Loading ${this._switching}…
             </p>`
           : nothing}
-        ${this._error
-          ? html`<p class="error" role="alert">${this._error}</p>`
-          : this._tab === "home"
-            ? this._renderHome()
-            : this._renderCollection()}
+        <div
+          class=${this._switching ? "busy" : ""}
+          aria-busy=${!!this._switching}
+        >
+          ${this._error
+            ? this._renderError(this._error, () => void this._load())
+            : this._tab === "home"
+              ? this._renderHome()
+              : this._renderCollection()}
+        </div>
+        ${this._writeError
+          ? html`<div class="toast" role="alert">
+              <span
+                >Brickset would not save that change: ${this._writeError}</span
+              >
+              <button
+                class="dismiss"
+                aria-label="Dismiss"
+                @click=${() => (this._writeError = "")}
+              >
+                <ha-icon icon="mdi:close"></ha-icon>
+              </button>
+            </div>`
+          : nothing}
       </div>
     `;
+  }
+
+  private _renderError(message: string, retry: () => void): TemplateResult {
+    return html`<div class="error" role="alert">
+      <p>${message}</p>
+      <button class="link" @click=${retry}>Try again</button>
+    </div>`;
   }
 
   private _renderAccounts(): TemplateResult | typeof nothing {
@@ -364,13 +626,112 @@ export class LegoPanel extends LitElement {
     `;
   }
 
+  /** Rows this account can show: the release rows need the option turned on. */
+  private _availableRows(): string[] {
+    const releases = !!this._dash?.releases;
+    return (this._dash?.rows ?? []).filter(
+      (row) => releases || (row !== "recent" && row !== "upcoming"),
+    );
+  }
+
+  private _visibleRows(): string[] {
+    const hidden = this._dash?.hidden ?? [];
+    return this._availableRows().filter((row) => !hidden.includes(row));
+  }
+
+  private async _setHidden(row: string, hide: boolean): Promise<void> {
+    if (!this._dash) return;
+    const hidden = hide
+      ? [...this._dash.hidden.filter((item) => item !== row), row]
+      : this._dash.hidden.filter((item) => item !== row);
+    this._dash = { ...this._dash, hidden };
+    try {
+      await this.hass.callWS({ type: "lego/panel_config/set", hidden });
+    } catch {
+      // Applied locally already; it just will not survive a reload.
+    }
+  }
+
   private _renderHome(): TemplateResult {
     if (!this._dash) return html`<p class="muted">Loading your collection…</p>`;
+    const visible = this._visibleRows();
     return html`
       <div class="rows">
-        ${this._dash.rows.map((row) => this._renderRow(row))}
+        <div class="homebar">
+          <button
+            class="link"
+            aria-expanded=${this._customising}
+            @click=${() => (this._customising = !this._customising)}
+          >
+            ${this._customising ? "Done" : "Customise"}
+          </button>
+        </div>
+        ${this._customising ? this._renderCustomise() : nothing}
+        ${visible.length
+          ? visible.map((row) => this._renderRow(row))
+          : html`<p class="muted">
+              Every row is hidden. Choose Customise to bring some back.
+            </p>`}
       </div>
     `;
+  }
+
+  private _renderCustomise(): TemplateResult {
+    const hidden = this._dash?.hidden ?? [];
+    const rows = this._availableRows();
+    return html`
+      <section class="row customise" aria-label="Rows on this page">
+        <h2>Rows on this page</h2>
+        <p class="muted">
+          Choose which rows show, and move them with their handles or the arrow
+          keys. Saved for you on every device.
+        </p>
+        <ul>
+          ${rows.map(
+            (row) => html`
+              <li>
+                <label>
+                  <input
+                    type="checkbox"
+                    .checked=${!hidden.includes(row)}
+                    @change=${(ev: Event) =>
+                      void this._setHidden(
+                        row,
+                        !(ev.target as HTMLInputElement).checked,
+                      )}
+                  />
+                  ${ROW_TITLES[row]}
+                </label>
+              </li>
+            `,
+          )}
+        </ul>
+        ${this._dash?.releases
+          ? nothing
+          : html`<p class="muted">
+              For Out recently and Coming soon, turn on Follow releases across
+              all themes in the integration's options.
+            </p>`}
+      </section>
+    `;
+  }
+
+  /** A release row, which says so while its first daily fetch is still running. */
+  private _renderReleases(
+    key: "recent" | "upcoming",
+    empty: string,
+  ): TemplateResult {
+    const releases = this._dash?.releases;
+    if (releases?.status === "fetching") {
+      return html`<p class="muted">Fetching this year's releases…</p>`;
+    }
+    if (releases?.status === "failed") {
+      return html`<p class="muted">
+        Couldn't fetch this year's releases. They're tried again every few hours
+        until they arrive.
+      </p>`;
+    }
+    return this._carousel(releases?.[key] ?? [], empty, "release");
   }
 
   private _renderRow(row: string): TemplateResult {
@@ -379,25 +740,49 @@ export class LegoPanel extends LitElement {
         ? this._renderThemes()
         : row === "wishlist"
           ? this._renderWishlist()
-          : this._renderStats();
+          : row === "recent"
+            ? this._renderReleases(
+                "recent",
+                "Nothing out in the last four weeks.",
+              )
+            : row === "upcoming"
+              ? this._renderReleases(
+                  "upcoming",
+                  "Nothing due in the next four weeks.",
+                )
+              : row === "value"
+                ? this._renderValue()
+                : row === "pieces"
+                  ? this._renderPieces()
+                  : this._renderStats();
     return html`
       <section
-        class=${this._dragging === row ? "row dragging" : "row"}
+        class=${this._dragging === row
+          ? "row dragging"
+          : this._dragging && this._over === row
+            ? "row over"
+            : "row"}
         @dragover=${(ev: DragEvent) => ev.preventDefault()}
+        @dragenter=${() => (this._over = row)}
         @drop=${() => this._onDrop(row)}
       >
         <div class="rowhead">
+          <h2>${ROW_TITLES[row]}</h2>
           <button
             class="drag"
+            data-row=${row}
             draggable="true"
-            title="Drag to reorder"
-            aria-label=${`Reorder ${ROW_TITLES[row]}`}
+            title="Drag, or use the arrow keys, to reorder"
+            aria-label=${`Move ${ROW_TITLES[row]} up or down`}
             @dragstart=${() => (this._dragging = row)}
-            @dragend=${() => (this._dragging = "")}
+            @dragend=${() => {
+              this._dragging = "";
+              this._over = "";
+            }}
+            @keydown=${(ev: KeyboardEvent) => this._onHandleKey(ev, row)}
           >
             <ha-icon icon="mdi:drag"></ha-icon>
           </button>
-          <h2>${ROW_TITLES[row]}</h2>
         </div>
         ${body}
       </section>
@@ -426,7 +811,7 @@ export class LegoPanel extends LitElement {
           `,
         )}
       </div>
-      ${this._carousel(sets, "No new sets in this theme.")}
+      ${this._carousel(sets, "No new sets in this theme.", "release")}
     `;
   }
 
@@ -456,7 +841,7 @@ export class LegoPanel extends LitElement {
           ${this._refreshing ? "Updating…" : "Update now"}
         </button>
         <span
-          class="quota ${short ? "bad" : tight ? "warn" : ""}"
+          class="quota ${short || tight ? "warn" : ""}"
           title=${this._dash?.last_synced
             ? new Date(this._dash.last_synced).toLocaleString()
             : nothing}
@@ -464,11 +849,8 @@ export class LegoPanel extends LitElement {
           ${syncedAgo(this._dash?.last_synced ?? null, new Date())}.
           ${short
             ? html`Daily budget spent, ${quota.calls_today} of ${quota.budget}
-              used, so this is the last sync's data. Updates resume at
-              ${new Date(quota.resets_at).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}.`
+              used, so this is the last sync's data. Updates resume
+              ${this._resumes(quota.resets_at)}.`
             : html`Costs ${cost} of ${quota.remaining} calls left today.`}
         </span>
       </div>
@@ -476,6 +858,18 @@ export class LegoPanel extends LitElement {
         ? html`<p class="caveat bad">${this._refreshError}</p>`
         : nothing}
     `;
+  }
+
+  /** When the budget resets, in local time, saying "tomorrow" when it is. */
+  private _resumes(iso: string): string {
+    const at = new Date(iso);
+    const time = at.toLocaleTimeString(this.hass?.locale?.language, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return at.toDateString() === new Date().toDateString()
+      ? `at ${time}`
+      : `tomorrow at ${time}`;
   }
 
   private _renderStats(): TemplateResult {
@@ -486,7 +880,6 @@ export class LegoPanel extends LitElement {
       [this._num(stats.sets_distinct), "Distinct sets"],
       [this._num(stats.pieces_owned), "Pieces"],
       [this._num(stats.minifigs_owned), "Minifigures"],
-      [this._num(Math.round(stats.value)), "Value at RRP"],
     ];
     return html`
       <div class="stats">
@@ -499,12 +892,6 @@ export class LegoPanel extends LitElement {
         )}
       </div>
       ${this._renderRefresh()}
-      ${stats.sets_missing_price
-        ? html`<p class="caveat">
-            ${this._num(stats.sets_missing_price)} sets have no published price
-            and are not counted in the value.
-          </p>`
-        : nothing}
       <button
         class="link"
         @click=${() => {
@@ -517,58 +904,352 @@ export class LegoPanel extends LitElement {
     `;
   }
 
+  private _money(value: number): string {
+    return (
+      formatPrice(
+        value,
+        this._dash?.currency ?? null,
+        this.hass?.locale?.language,
+        true,
+      ) || this._num(Math.round(value))
+    );
+  }
+
+  private _renderValue(): TemplateResult {
+    const stats = this._dash?.stats;
+    if (!stats) return html``;
+    return html`
+      <p class="headline">
+        <span class="n">${this._money(stats.value)}</span>
+        <span class="l">at LEGO.com RRP, today</span>
+      </p>
+      ${this._renderHistory("value", (v) => this._money(v))}
+      <h3>By theme</h3>
+      ${this._renderBars(topThemes(this._dash?.by_theme ?? [], "value"), (v) =>
+        this._money(v),
+      )}
+      ${stats.sets_missing_price
+        ? html`<p class="caveat">
+            ${stats.sets_missing_price === 1
+              ? "1 set has no published price and is not counted in the value."
+              : `${this._num(stats.sets_missing_price)} sets have no published
+                price and are not counted in the value.`}
+          </p>`
+        : nothing}
+    `;
+  }
+
+  private _renderPieces(): TemplateResult {
+    const stats = this._dash?.stats;
+    if (!stats) return html``;
+    return html`
+      <p class="headline">
+        <span class="n">${this._num(stats.pieces_owned)}</span>
+        <span class="l">pieces owned, today</span>
+      </p>
+      ${this._renderHistory("pieces", (v) => this._num(Math.round(v)))}
+      <h3>By theme</h3>
+      ${this._renderBars(topThemes(this._dash?.by_theme ?? [], "pieces"), (v) =>
+        this._num(v),
+      )}
+    `;
+  }
+
+  private async _loadHistory(key: "value" | "pieces"): Promise<void> {
+    const id = this._dash?.history?.[key];
+    const entry = this._dash?.entry_id;
+    if (!id || this._history[key]) return;
+    this._history = { ...this._history, [key]: "loading" };
+    // An account switch mid-fetch must not draw this account's line on the next.
+    const current = () => this._dash?.entry_id === entry;
+    try {
+      const res = await this.hass.callWS<
+        Record<string, { start: number; state?: number; mean?: number }[]>
+      >({
+        type: "recorder/statistics_during_period",
+        start_time: new Date(
+          Date.now() - HISTORY_DAYS * 86_400_000,
+        ).toISOString(),
+        statistic_ids: [id],
+        period: "week",
+        types: key === "value" ? ["state"] : ["mean"],
+      });
+      if (!current()) return;
+      const points = statisticPoints(res[id] ?? []);
+      this._history = {
+        ...this._history,
+        [key]: points.length >= 2 ? points : "none",
+      };
+    } catch {
+      if (current()) this._history = { ...this._history, [key]: "none" };
+    }
+  }
+
+  /**
+   * A single-series line over the last year, from the sensor's recorded weekly
+   * statistics. The SVG stretches to the row's width, so labels, the end marker
+   * and the hover readout are HTML laid over it rather than text inside it.
+   */
+  private _renderHistory(
+    key: "value" | "pieces",
+    format: (v: number) => string,
+  ): TemplateResult {
+    const state = this._history[key];
+    if (state === undefined || state === "loading") {
+      return html`<p class="muted">Loading history…</p>`;
+    }
+    if (state === "none") {
+      return html`<p class="muted">
+        No history yet. Home Assistant records it weekly from the sensor, so a
+        line appears after a couple of weeks.
+      </p>`;
+    }
+    const points = state;
+    const lo = Math.min(...points.map((p) => p.v));
+    const hi = Math.max(...points.map((p) => p.v));
+    const span = hi - lo || 1;
+    const t0 = points[0].t;
+    const tSpan = points[points.length - 1].t - t0 || 1;
+    const x = (p: Point) => ((p.t - t0) / tSpan) * 100;
+    // Headroom top and bottom, so the line never sits on the chart's edge.
+    const y = (p: Point) => 90 - ((p.v - lo) / span) * 80;
+    const line = points.map((p) => `${x(p)},${y(p)}`).join(" ");
+    const area = `0,100 ${line} 100,100`;
+    const last = points[points.length - 1];
+    const hover =
+      this._hoverPoint?.key === key
+        ? points[this._hoverPoint.index]
+        : undefined;
+    const day = (t: number) =>
+      new Date(t).toLocaleDateString(this.hass?.locale?.language, {
+        day: "numeric",
+        month: "short",
+      });
+    return html`
+      <figure class="history">
+        <div
+          class="plot"
+          @pointermove=${(ev: PointerEvent) => {
+            const box = (
+              ev.currentTarget as HTMLElement
+            ).getBoundingClientRect();
+            const at = t0 + ((ev.clientX - box.left) / box.width) * tSpan;
+            let index = 0;
+            points.forEach((p, i) => {
+              if (Math.abs(p.t - at) < Math.abs(points[index].t - at))
+                index = i;
+            });
+            this._hoverPoint = { key, index };
+          }}
+          @pointerleave=${() => (this._hoverPoint = null)}
+        >
+          <svg
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <line class="base" x1="0" y1="100" x2="100" y2="100"></line>
+            <polygon class="wash" points=${area}></polygon>
+            <polyline class="trace" points=${line}></polyline>
+            ${hover
+              ? svg`<line class="cross" x1=${x(hover)} y1="0" x2=${x(hover)} y2="100"></line>`
+              : nothing}
+          </svg>
+          <span
+            class="dot"
+            style="left:${x(hover ?? last)}%;top:${y(hover ?? last)}%"
+          ></span>
+          <span
+            class=${hover ? "readout on" : "readout"}
+            style="left:${Math.min(Math.max(x(hover ?? last), 12), 88)}%"
+            >${format((hover ?? last).v)} · ${day((hover ?? last).t)}</span
+          >
+        </div>
+        <figcaption>
+          <span>${day(points[0].t)}</span>
+          <span>${format(points[0].v)} → ${format(last.v)}</span>
+          <span>${day(last.t)}</span>
+        </figcaption>
+        <details>
+          <summary>Show as a table</summary>
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Week of</th>
+                <th scope="col">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${points.map(
+                (p) =>
+                  html`<tr>
+                    <td>${day(p.t)}</td>
+                    <td>${format(p.v)}</td>
+                  </tr>`,
+              )}
+            </tbody>
+          </table>
+        </details>
+      </figure>
+    `;
+  }
+
+  /** Ranked bars, each labelled at its tip, so no reading depends on colour. */
+  private _renderBars(
+    rows: { theme: string; amount: number; sets: number }[],
+    format: (v: number) => string,
+  ): TemplateResult {
+    if (!rows.length) {
+      return html`<p class="muted">
+        Nothing owned with a published figure yet.
+      </p>`;
+    }
+    const top = rows[0].amount || 1;
+    return html`
+      <ul class="bars">
+        ${rows.map(
+          (row) => html`
+            <li title=${count(row.sets, "set", "sets")}>
+              <span class="label">${row.theme}</span>
+              <span class="track">
+                <span
+                  class="bar"
+                  style="width:${Math.max((row.amount / top) * 100, 1)}%"
+                ></span>
+                <span class="amount">${format(row.amount)}</span>
+              </span>
+            </li>
+          `,
+        )}
+      </ul>
+    `;
+  }
+
   private _renderCollection(): TemplateResult {
     const showing =
       this._query.trim().length >= 2 ? this._results : this._collection;
     return html`
       <div class="rows">
         <section class="row">
-          <input
-            class="search"
-            type="search"
-            .value=${this._query}
-            placeholder="Search your sets and the full catalogue…"
-            aria-label="Search sets"
-            @input=${(ev: Event) =>
-              void this._search((ev.target as HTMLInputElement).value)}
-          />
-          ${this._query.trim().length >= 2
-            ? html`<p class="muted">${showing.length} matching sets</p>`
-            : html`<p class="muted">${showing.length} sets owned</p>`}
-          <div class="grid">${showing.map((item) => this._card(item))}</div>
+          <div class="searchbox">
+            <input
+              class="search"
+              type="search"
+              .value=${this._query}
+              placeholder="Search your sets and the full catalogue…"
+              aria-label="Search sets"
+              @input=${(ev: Event) =>
+                void this._search((ev.target as HTMLInputElement).value)}
+            />
+            ${this._query
+              ? html`<button
+                  class="clear"
+                  aria-label="Clear search"
+                  @click=${() => void this._search("")}
+                >
+                  <ha-icon icon="mdi:close"></ha-icon>
+                </button>`
+              : nothing}
+          </div>
+          ${this._collectionError && this._query.trim().length < 2
+            ? this._renderError(this._collectionError, () => {
+                this._collectionError = "";
+                void this._loadCollection();
+              })
+            : html`<p class="muted count">
+                  ${this._query.trim().length >= 2
+                    ? count(showing.length, "matching set", "matching sets")
+                    : count(showing.length, "set owned", "sets owned")}
+                </p>
+                <div class="grid">
+                  ${showing.map((item) => this._card(item))}
+                </div>`}
         </section>
       </div>
     `;
   }
 
-  private _carousel(sets: LegoSet[], empty: string): TemplateResult {
+  private _carousel(
+    sets: LegoSet[],
+    empty: string,
+    focus: DateFocus = "retirement",
+  ): TemplateResult {
     if (!sets.length) return html`<p class="muted">${empty}</p>`;
     return html`<div class="carousel">
-      ${sets.map((item) => this._card(item))}
+      ${sets.map((item) => this._card(item, focus))}
     </div>`;
   }
 
-  private _card(item: LegoSet): TemplateResult {
+  /**
+   * Open the set's Brickset page in a new tab. The image and the name both link,
+   * and only the name takes a tab stop, so a keyboard reaches each set once.
+   */
+  private _linked(
+    item: LegoSet,
+    content: TemplateResult,
+    decorative = false,
+  ): TemplateResult {
+    if (!item.url) return content;
+    return html`<a
+      class="open"
+      href=${item.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      tabindex=${decorative ? "-1" : nothing}
+      aria-hidden=${decorative ? "true" : nothing}
+      >${content}</a
+    >`;
+  }
+
+  private _card(
+    item: LegoSet,
+    focus: DateFocus = "retirement",
+  ): TemplateResult {
     return html`
       <article class="card">
-        ${item.image
-          ? html`<img src=${item.image} alt="" loading="lazy" />`
-          : html`<img
-              class="noart"
-              src=${FALLBACK_ART}
-              alt=""
-              loading="lazy"
-            />`}
+        ${this._linked(
+          item,
+          item.image
+            ? html`<img src=${item.image} alt="" loading="lazy" />`
+            : html`<img
+                class="noart"
+                src=${BRAND_ICON}
+                alt=""
+                loading="lazy"
+              />`,
+          true,
+        )}
         <div class="meta">
-          <span
-            class=${isNamed(item) ? "name" : "name unnamed"}
-            title=${isNamed(item)
-              ? item.name
-              : "Brickset has not published a name yet"}
-            >${displayName(item)}</span
+          ${this._linked(
+            item,
+            html`<span
+              class=${isNamed(item) ? "name" : "name unnamed"}
+              title=${isNamed(item)
+                ? item.name
+                : "Brickset has not published a name yet"}
+              >${displayName(item)}</span
+            >`,
+          )}
+          <span class="num"
+            >${[
+              item.set_number,
+              formatPrice(
+                item.retail_price,
+                this._dash?.currency ?? null,
+                this.hass?.locale?.language,
+              ),
+            ]
+              .filter(Boolean)
+              .join(" · ")}</span
           >
-          <span class="num">${item.set_number}</span>
-          <span class="when">${this._when(item)}</span>
+          <span class="when ${whenTone(item, new Date(), focus)}"
+            >${whenLabel(
+              item,
+              new Date(),
+              (iso) => this._date(iso),
+              focus,
+            )}</span
+          >
           <div class="foot">
             <span
               class=${item.owned
@@ -583,10 +1264,15 @@ export class LegoPanel extends LitElement {
                   : "Owned"
                 : item.wanted
                   ? "Wanted"
-                  : item.year || ""}
+                  : ""}
             </span>
             <button
-              class=${item.owned ? "act on" : "act"}
+              class=${[
+                "act",
+                item.owned ? "on" : "",
+                this._pending.has(item.set_number) ? "pending" : "",
+              ].join(" ")}
+              ?disabled=${this._pending.has(item.set_number)}
               title=${item.owned
                 ? "Remove from your collection"
                 : "Add to your collection"}
@@ -601,13 +1287,6 @@ export class LegoPanel extends LitElement {
         </div>
       </article>
     `;
-  }
-
-  private _when(item: LegoSet): string {
-    if (item.available_until)
-      return `Retires ${this._date(item.available_until)}`;
-    if (item.available_from) return `Out ${this._date(item.available_from)}`;
-    return isNamed(item) ? "Date unknown" : "Details tbd";
   }
 
   private _date(iso: string): string {
@@ -638,7 +1317,7 @@ export class LegoPanel extends LitElement {
       --lego-outline: var(--divider-color);
       --lego-primary: var(--primary-color);
       --lego-on-primary: var(--text-primary-color, #fff);
-      --lego-focus: var(--ha-color-focus, #989898);
+      --lego-focus: var(--ha-color-focus, var(--primary-color));
       /* Status text sits on the card surface, so it takes the on-* tokens. */
       --lego-own: var(--ha-color-on-success-normal, #036730);
       --lego-want: var(--ha-color-on-warning-normal, #9d3800);
@@ -660,25 +1339,47 @@ export class LegoPanel extends LitElement {
       margin: 0 auto;
       padding: 0 0 var(--ha-space-8, 32px);
     }
+    /* One toolbar row at Home Assistant's own header height; on a phone the tabs
+       take a row of their own below it. */
     header {
+      align-items: center;
+      background: var(--lego-surface);
+      border-bottom: var(--lego-line) solid var(--lego-outline);
+      column-gap: var(--ha-space-4, 16px);
+      display: flex;
+      flex-wrap: wrap;
+      min-height: var(--header-height, 56px);
+      padding: 0 var(--ha-space-4, 16px);
       position: sticky;
       top: 0;
       z-index: 2;
-      background: var(--lego-surface);
-      border-bottom: var(--lego-line) solid var(--lego-outline);
-      padding: 0 var(--ha-space-4, 16px);
     }
-    .bar {
+    header .account {
+      margin-left: auto;
+      order: 3;
+    }
+    header.narrow .tabs {
+      flex-basis: 100%;
+      order: 4;
+    }
+    .title {
       align-items: center;
       display: flex;
-      gap: var(--ha-space-3, 12px);
-      justify-content: space-between;
-      min-height: var(--ha-space-16, 64px);
+      gap: var(--ha-space-1, 4px);
+      min-width: 0;
     }
+    /* The integration's own brick, the icon Home Assistant shows for it too. */
+    .logo {
+      block-size: 32px;
+      flex: none;
+      inline-size: 32px;
+    }
+    /* The page title reads like Home Assistant's own toolbar titles: regular
+       weight, so the bold section headings below it are the ones that stand out. */
     h1 {
       font-size: var(--ha-font-size-xl, 20px);
       line-height: var(--ha-line-height-condensed, 1.2);
-      font-weight: var(--ha-font-weight-bold, 700);
+      font-weight: var(--ha-font-weight-normal, 400);
       margin: 0;
     }
     .account {
@@ -693,8 +1394,10 @@ export class LegoPanel extends LitElement {
       padding: 0 var(--ha-space-3, 12px);
     }
     .tabs {
+      align-self: stretch;
       display: flex;
       gap: var(--ha-space-1, 4px);
+      order: 2;
     }
     .tab {
       appearance: none;
@@ -705,9 +1408,12 @@ export class LegoPanel extends LitElement {
       font: inherit;
       font-size: var(--ha-font-size-m, 14px);
       font-weight: var(--ha-font-weight-medium, 500);
-      min-height: 48px;
+      min-height: var(--header-height, 56px);
       padding: 0 var(--ha-space-4, 16px);
       cursor: pointer;
+    }
+    header.narrow .tab {
+      min-height: 48px;
     }
     .tab.on {
       color: var(--lego-primary);
@@ -727,6 +1433,10 @@ export class LegoPanel extends LitElement {
     }
     .row.dragging {
       opacity: 0.5;
+    }
+    /* Where a dragged row will land. */
+    .row.over {
+      box-shadow: inset 0 var(--ha-border-width-md, 2px) 0 var(--lego-primary);
     }
     .rowhead {
       display: flex;
@@ -751,7 +1461,10 @@ export class LegoPanel extends LitElement {
       place-items: center;
       min-width: 48px;
       min-height: 48px;
-      margin-left: calc(-1 * var(--ha-space-3, 12px));
+      /* Trailing, so the title lines up with the cards below it. */
+      margin: calc(-1 * var(--ha-space-3, 12px))
+        calc(-1 * var(--ha-space-3, 12px)) calc(-1 * var(--ha-space-3, 12px))
+        auto;
     }
     .chips {
       display: flex;
@@ -801,11 +1514,16 @@ export class LegoPanel extends LitElement {
       display: flex;
       flex-direction: column;
     }
+    /* Set photos come on white; inset and rounded they read as photos rather
+       than as gaps in a dark card. */
     .card img {
-      width: 100%;
-      height: 104px;
-      object-fit: contain;
       background: var(--lego-ground);
+      border-radius: var(--ha-border-radius-md, 8px);
+      box-sizing: border-box;
+      height: 104px;
+      margin: var(--ha-space-2, 8px) var(--ha-space-2, 8px) 0;
+      object-fit: contain;
+      width: calc(100% - 2 * var(--ha-space-2, 8px));
     }
     /* Stand-in art, so it must read as absent rather than as the set. */
     .card img.noart {
@@ -820,6 +1538,7 @@ export class LegoPanel extends LitElement {
       padding: var(--ha-space-3, 12px);
     }
     .name {
+      display: block;
       font-size: var(--ha-font-size-m, 14px);
       line-height: var(--ha-line-height-condensed, 1.2);
       font-weight: var(--ha-font-weight-bold, 700);
@@ -847,6 +1566,21 @@ export class LegoPanel extends LitElement {
       font-size: var(--ha-font-size-s, 12px);
       color: var(--lego-text-2);
     }
+    /* Not out yet: a dot in the primary colour, so the text keeps its contrast. */
+    .when.due::before {
+      background: var(--lego-primary);
+      border-radius: var(--ha-border-radius-circle, 50%);
+      content: "";
+      display: inline-block;
+      height: 8px;
+      margin-right: var(--ha-space-1, 4px);
+      vertical-align: middle;
+      width: 8px;
+    }
+    .when.retiring {
+      color: var(--lego-want);
+      font-weight: var(--ha-font-weight-medium, 500);
+    }
     .foot {
       align-items: center;
       display: flex;
@@ -865,39 +1599,59 @@ export class LegoPanel extends LitElement {
     .state.want {
       color: var(--lego-want);
     }
+    /* A 48px target drawing a 32px circle, so the card does not look crowded. */
     .act {
       appearance: none;
       background: none;
-      border: var(--lego-line) solid var(--lego-outline);
-      border-radius: var(--ha-border-radius-circle, 50%);
+      border: 0;
       color: var(--lego-text-2);
       cursor: pointer;
       display: grid;
       place-items: center;
-      /* 32px of ink, 48px of target: the padding does the work. */
-      width: 32px;
-      height: 32px;
-      padding: var(--ha-space-2, 8px);
-      box-sizing: content-box;
+      position: relative;
+      width: 48px;
+      height: 48px;
+      padding: 0;
       margin: calc(-1 * var(--ha-space-2, 8px));
       --mdc-icon-size: 18px;
     }
+    .act::before {
+      content: "";
+      position: absolute;
+      inset: var(--ha-space-2, 8px);
+      border: var(--lego-line) solid var(--lego-text-2);
+      border-radius: var(--ha-border-radius-circle, 50%);
+    }
+    .act ha-icon {
+      position: relative;
+    }
     .act.on {
-      background: var(--lego-own-fill);
-      border-color: var(--lego-own-fill);
       color: var(--lego-on-own-fill);
     }
+    .act.on::before {
+      background: var(--lego-own-fill);
+      border-color: var(--lego-own-fill);
+    }
+    .act.pending {
+      cursor: progress;
+      opacity: 0.5;
+    }
+    .act:focus-visible {
+      outline-offset: calc(-1 * var(--ha-space-1, 4px));
+    }
+    /* Lines drawn per cell, so an odd last cell leaves no grey gap. */
     .stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: var(--lego-line);
-      background: var(--lego-outline);
+      gap: 0;
+      background: var(--lego-surface);
       border: var(--lego-line) solid var(--lego-outline);
       border-radius: var(--lego-radius);
       overflow: hidden;
     }
     .stat {
       background: var(--lego-surface);
+      box-shadow: 0 0 0 var(--lego-line) var(--lego-outline);
       display: flex;
       flex-direction: column;
       gap: var(--ha-space-1, 4px);
@@ -977,6 +1731,205 @@ export class LegoPanel extends LitElement {
       min-height: 48px;
       padding: 0;
     }
+    .searchbox {
+      position: relative;
+    }
+    .search::-webkit-search-cancel-button {
+      appearance: none;
+    }
+    .clear {
+      appearance: none;
+      background: none;
+      border: 0;
+      color: var(--lego-text-2);
+      cursor: pointer;
+      display: grid;
+      height: 48px;
+      place-items: center;
+      position: absolute;
+      right: 0;
+      top: 0;
+      width: 48px;
+    }
+    .homebar {
+      display: flex;
+      justify-content: flex-end;
+      margin: calc(-1 * var(--ha-space-3, 12px)) 0;
+    }
+    .customise ul {
+      display: grid;
+      gap: 0;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      list-style: none;
+      margin: var(--ha-space-2, 8px) 0 0;
+      padding: 0;
+    }
+    .customise label {
+      align-items: center;
+      cursor: pointer;
+      display: flex;
+      gap: var(--ha-space-3, 12px);
+      font-size: var(--ha-font-size-m, 14px);
+      min-height: 48px;
+    }
+    .customise input {
+      accent-color: var(--lego-primary);
+      height: 20px;
+      margin: 0;
+      width: 20px;
+    }
+    h3 {
+      font-size: var(--ha-font-size-m, 14px);
+      font-weight: var(--ha-font-weight-bold, 700);
+      line-height: var(--ha-line-height-condensed, 1.2);
+      margin: var(--ha-space-5, 20px) 0 var(--ha-space-2, 8px);
+    }
+    .headline {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: var(--ha-space-2, 8px);
+      margin: 0 0 var(--ha-space-3, 12px);
+    }
+    .headline .n {
+      font-size: var(--ha-font-size-3xl, 28px);
+      font-weight: var(--ha-font-weight-bold, 700);
+      line-height: var(--ha-line-height-condensed, 1.2);
+    }
+    .headline .l {
+      color: var(--lego-text-2);
+      font-size: var(--ha-font-size-s, 12px);
+    }
+    .history {
+      margin: 0;
+    }
+    .plot {
+      height: 140px;
+      position: relative;
+      touch-action: pan-y;
+    }
+    .plot svg {
+      display: block;
+      height: 100%;
+      overflow: visible;
+      width: 100%;
+    }
+    .plot .base {
+      stroke: var(--lego-outline);
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+    .plot .wash {
+      fill: var(--lego-primary);
+      fill-opacity: 0.1;
+    }
+    .plot .trace {
+      fill: none;
+      stroke: var(--lego-primary);
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
+      vector-effect: non-scaling-stroke;
+    }
+    .plot .cross {
+      stroke: var(--lego-text-2);
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+    .plot .dot {
+      background: var(--lego-primary);
+      border-radius: var(--ha-border-radius-circle, 50%);
+      box-shadow: 0 0 0 2px var(--lego-surface);
+      height: 8px;
+      position: absolute;
+      transform: translate(-50%, -50%);
+      width: 8px;
+    }
+    .plot .readout {
+      background: var(--lego-surface);
+      border: var(--lego-line) solid var(--lego-outline);
+      border-radius: var(--ha-border-radius-sm, 4px);
+      font-size: var(--ha-font-size-s, 12px);
+      font-variant-numeric: tabular-nums;
+      padding: 2px var(--ha-space-2, 8px);
+      position: absolute;
+      top: calc(-1 * var(--ha-space-2, 8px));
+      transform: translate(-50%, -100%);
+      white-space: nowrap;
+    }
+    .history figcaption {
+      color: var(--lego-text-2);
+      display: flex;
+      font-size: var(--ha-font-size-s, 12px);
+      justify-content: space-between;
+      margin-top: var(--ha-space-1, 4px);
+    }
+    .history details {
+      font-size: var(--ha-font-size-s, 12px);
+      margin-top: var(--ha-space-2, 8px);
+    }
+    .history summary {
+      color: var(--lego-primary);
+      cursor: pointer;
+      min-height: 32px;
+    }
+    .history table {
+      border-collapse: collapse;
+      font-variant-numeric: tabular-nums;
+    }
+    .history td,
+    .history th {
+      border-bottom: var(--lego-line) solid var(--lego-outline);
+      padding: var(--ha-space-1, 4px) var(--ha-space-4, 16px)
+        var(--ha-space-1, 4px) 0;
+      text-align: left;
+    }
+    .bars {
+      display: grid;
+      gap: var(--ha-space-2, 8px);
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .bars li {
+      align-items: center;
+      display: grid;
+      gap: var(--ha-space-3, 12px);
+      grid-template-columns: minmax(80px, 30%) 1fr;
+    }
+    .bars .label {
+      font-size: var(--ha-font-size-s, 12px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .bars .track {
+      align-items: center;
+      display: flex;
+      gap: var(--ha-space-2, 8px);
+      min-width: 0;
+    }
+    .bars .bar {
+      background: var(--lego-primary);
+      border-radius: 0 var(--ha-border-radius-sm, 4px)
+        var(--ha-border-radius-sm, 4px) 0;
+      flex: none;
+      height: 16px;
+      max-width: calc(100% - 72px);
+    }
+    .bars .amount {
+      font-size: var(--ha-font-size-s, 12px);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .busy {
+      opacity: 0.5;
+      pointer-events: none;
+      transition: opacity 150ms;
+    }
+    .switching {
+      padding: 0 var(--ha-space-4, 16px);
+    }
     .search {
       background: var(--lego-ground);
       border: var(--lego-line) solid var(--lego-outline);
@@ -985,7 +1938,8 @@ export class LegoPanel extends LitElement {
       font: inherit;
       font-size: var(--ha-font-size-m, 14px);
       min-height: 48px;
-      padding: 0 var(--ha-space-3, 12px);
+      /* Room on the right for the clear button. */
+      padding: 0 48px 0 var(--ha-space-3, 12px);
       width: 100%;
       box-sizing: border-box;
     }
@@ -998,6 +1952,55 @@ export class LegoPanel extends LitElement {
       color: var(--lego-bad);
       padding: var(--ha-space-5, 20px) var(--ha-space-4, 16px);
     }
+    .error p {
+      margin: 0;
+    }
+    .count {
+      margin-bottom: var(--ha-space-3, 12px);
+    }
+    /* A failed write is shown where it cannot be scrolled out of view. */
+    .toast {
+      align-items: center;
+      background: var(--lego-surface);
+      border: var(--lego-line) solid var(--lego-bad);
+      border-radius: var(--ha-border-radius-md, 8px);
+      bottom: var(--ha-space-4, 16px);
+      box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+      color: var(--lego-bad);
+      display: flex;
+      gap: var(--ha-space-2, 8px);
+      left: 50%;
+      max-width: min(560px, calc(100% - 2 * var(--ha-space-4, 16px)));
+      padding: var(--ha-space-2, 8px) var(--ha-space-2, 8px)
+        var(--ha-space-2, 8px) var(--ha-space-4, 16px);
+      position: fixed;
+      transform: translateX(-50%);
+      width: max-content;
+      z-index: 3;
+    }
+    .dismiss {
+      appearance: none;
+      background: none;
+      border: 0;
+      color: inherit;
+      cursor: pointer;
+      display: grid;
+      flex: none;
+      min-height: 48px;
+      min-width: 48px;
+      place-items: center;
+    }
+    a.open {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      color: inherit;
+      text-decoration: none;
+    }
+    a.open:hover .name {
+      text-decoration: underline;
+    }
+    a:focus-visible,
     button:focus-visible,
     input:focus-visible,
     select:focus-visible {

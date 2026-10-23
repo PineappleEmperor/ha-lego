@@ -14,23 +14,85 @@ from .const import (
     BRICKSET_DAILY_CALL_LIMIT,
     COLLECTION_INTERVAL_STEPS_HOURS,
     FEEDS_INTERVAL_HOURS,
+    NEXT_YEAR_FROM_MONTH,
     POLL_SHARE_OF_BUDGET,
+    RELEASES_INTERVAL_HOURS,
+    RELEASES_PAGES_ESTIMATE,
+    RELEASES_WINDOW_DAYS,
 )
 from .exceptions import BricksetQuotaError
 
 
-def feeds_calls_per_day(watching_themes: bool) -> int:
-    """Return the billed calls the theme feeds spend a day."""
-    # Every watched theme rides in one comma-joined call, so the cost does not grow
-    # with the theme count.
-    return math.ceil(24 / FEEDS_INTERVAL_HOURS) if watching_themes else 0
+def window_years(today: date) -> list[int]:
+    """Return the years the release window either side of today touches."""
+    # Most of the year that is this year alone; it reaches back into last year
+    # through most of January and on into next year through most of December.
+    window = timedelta(days=RELEASES_WINDOW_DAYS)
+    return sorted({(today - window).year, today.year, (today + window).year})
 
 
-def collection_interval(
-    budget: int, poll_cost: int, watching_themes: bool
-) -> timedelta:
+def poll_window_years(today: date) -> list[int]:
+    """Return the years the window touches before the next daily poll comes round."""
+    # The panel cuts the window when it is viewed, up to a day after the poll, so
+    # 3 December's poll already reads the January wave 4 December's window holds.
+    ahead = today + timedelta(hours=RELEASES_INTERVAL_HOURS)
+    return sorted(set(window_years(today)) | set(window_years(ahead)))
+
+
+def feed_years(today: date, releases: bool, next_year: bool) -> list[int]:
+    """Return the years a feeds poll asks Brickset for."""
+    # next_year says whether next year is worth a call: whether it has sets filed
+    # under it that the feeds want. A year the window touches is fetched whole while
+    # following releases across all themes; otherwise only this year is.
+    years = set(poll_window_years(today)) if releases else {today.year}
+    years.discard(today.year + 1)
+    if next_year:
+        years.add(today.year + 1)
+    return sorted(years)
+
+
+def feeds_poll_estimate(today: date, watching_themes: bool, releases: bool) -> int:
+    """Estimate one feeds poll's billed calls before any poll has measured them."""
+    # Assumes next year is announced from the usual month, as getThemes may not
+    # have been asked yet.
+    if not (watching_themes or releases):
+        return 0
+    years = feed_years(today, releases, today.month >= NEXT_YEAR_FROM_MONTH)
+    if not releases:
+        # Every watched theme rides in one comma-joined call per year.
+        return len(years)
+    return sum(RELEASES_PAGES_ESTIMATE if year <= today.year else 1 for year in years)
+
+
+def feeds_interval(releases: bool) -> timedelta:
+    """Return how often the feeds poll."""
+    # A poll reading whole years costs a few calls, so it runs daily.
+    return timedelta(
+        hours=RELEASES_INTERVAL_HOURS if releases else FEEDS_INTERVAL_HOURS
+    )
+
+
+def feeds_calls_per_day(
+    watching_themes: bool,
+    releases: bool,
+    today: date,
+    measured: int | None = None,
+) -> int:
+    """Return the billed calls the feeds spend a day, measured once a poll has run."""
+    if not (watching_themes or releases):
+        return 0
+    cost = (
+        measured
+        if measured is not None
+        else feeds_poll_estimate(today, watching_themes, releases)
+    )
+    polls = math.ceil(timedelta(days=1) / feeds_interval(releases))
+    return polls * cost
+
+
+def collection_interval(budget: int, poll_cost: int, feeds_calls: int) -> timedelta:
     """Return the shortest collection interval whose polls fit the budget."""
-    available = budget * POLL_SHARE_OF_BUDGET - feeds_calls_per_day(watching_themes)
+    available = budget * POLL_SHARE_OF_BUDGET - feeds_calls
     for hours in COLLECTION_INTERVAL_STEPS_HOURS:
         if math.ceil(24 / hours) * poll_cost <= available:
             return timedelta(hours=hours)
@@ -51,11 +113,6 @@ class QuotaManager:
     def budget(self) -> int:
         """Return the configured daily budget."""
         return self._budget
-
-    @budget.setter
-    def budget(self, value: int) -> None:
-        """Update the budget, e.g. after an options change."""
-        self._budget = min(value, BRICKSET_DAILY_CALL_LIMIT)
 
     @property
     def calls_today(self) -> int:

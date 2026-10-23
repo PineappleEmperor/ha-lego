@@ -1,11 +1,12 @@
 """Fixtures for the integration's tests."""
 
+from collections.abc import Awaitable, Callable
 from copy import deepcopy
 import gzip
 import json
 from typing import Any
-from unittest.mock import patch
 
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -27,6 +28,17 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Let Home Assistant load integrations from custom_components/ in every test."""
+
+
+@pytest.fixture
+def spring(freezer: FrozenDateTimeFactory) -> None:
+    """Freeze the clock on a spring day, for a test whose answer depends on it.
+
+    Only tests that count calls or read a fixed date ask for this; the rest run
+    on the real clock. A spring day is neither end of the release window nor
+    past the month next year's sets are assumed announced.
+    """
+    freezer.move_to("2026-05-15 12:00:00+00:00")
 
 
 SETS_CSV_URL = "https://cdn.rebrickable.com/media/downloads/sets.csv.gz"
@@ -68,6 +80,8 @@ def make_set(
     launch_date: str | None = None,
     exit_date: str | None = None,
     priority: int = 1,
+    released: bool = True,
+    category: str = "Normal",
 ) -> dict[str, Any]:
     """Build a getSets record shaped like Brickset's own payloads."""
     uk: dict[str, Any] = {}
@@ -94,8 +108,8 @@ def make_set(
         "theme": theme,
         "themeGroup": "Model making",
         "subtheme": "",
-        "category": "Normal",
-        "released": True,
+        "category": category,
+        "released": released,
         "pieces": pieces,
         "minifigs": minifigs,
         "image": {
@@ -191,9 +205,19 @@ class BricksetServer:
         self.owned = deepcopy(OWNED_SETS)
         self.wanted = deepcopy(WANTED_SETS)
         self.theme_sets = deepcopy(THEME_SETS)
+        # Every set of a year, answered a page at a time to a year-only query.
+        self.year_sets: list[dict[str, Any]] = []
         self.usage_today = 0
+        self.usage_checks = 0
         self.get_sets_calls: list[dict[str, Any]] = []
         self.set_collection_calls: list[dict[str, Any]] = []
+        # Like Brickset, every call must carry a key it issued, and the calls
+        # reading or writing the user's collection the hash it handed out at login.
+        self.api_keys = {API_KEY, "second-key"}
+        self.user_hash = USER_HASH
+        # The hashes Brickset would accept: the fixture's account, and the second
+        # account the multi-account tests set up beside it.
+        self.user_hashes = {USER_HASH, "second-hash"}
         self.key_valid = True
         self.credentials_valid = True
         self.hash_valid = True
@@ -205,6 +229,12 @@ class BricksetServer:
         self.themes_error: str | None = None
         # Clear this to act like a Brickset that stopped accepting comma-joined themes.
         self.themes_batchable = True
+        # getThemes' (yearTo, setCount) for a theme, overriding what the sets imply:
+        # the live API has filed themes under next year with nothing yet to return.
+        self.theme_claims: dict[str, tuple[int, int]] = {}
+        # Set this to answer theme queries for the requested year only, as Brickset
+        # does; most tests leave it off so their fixture sets match any year.
+        self.filter_theme_year = False
 
         mocker.get(
             SETS_CSV_URL,
@@ -222,7 +252,23 @@ class BricksetServer:
             ("getKeyUsageStats", self._get_key_usage),
             ("setCollection", self._set_collection),
         ):
-            mocker.post(f"{API_BASE}/{method}", side_effect=handler)
+            mocker.post(f"{API_BASE}/{method}", side_effect=self._authorised(handler))
+
+    def _authorised(
+        self, handler: Callable[[str, Any, Any], Awaitable[Any]]
+    ) -> Callable[[str, Any, Any], Awaitable[Any]]:
+        """Refuse a call without a valid key, as Brickset refuses it."""
+
+        async def checked(method: str, url: Any, data: Any) -> Any:
+            if not self.key_valid or data.get("apiKey") not in self.api_keys:
+                return self._error("Invalid API key")
+            return await handler(method, url, data)
+
+        return checked
+
+    def _hash_ok(self, data: Any) -> bool:
+        """Whether a call carries the user hash login handed out, still valid."""
+        return self.hash_valid and data.get("userHash") in self.user_hashes
 
     @staticmethod
     def _ok(payload: dict[str, Any]) -> AiohttpClientMockResponse:
@@ -244,31 +290,44 @@ class BricksetServer:
         return self._ok({})
 
     async def _check_user_hash(self, method: str, url: str, data: Any) -> Any:
-        if not self.hash_valid:
+        if not self._hash_ok(data):
             return self._error("Invalid userHash")
         return self._ok({})
 
     async def _login(self, method: str, url: str, data: Any) -> Any:
-        if not self.key_valid:
-            return self._error("Invalid API key")
         if not self.credentials_valid:
             return self._error("Invalid userHash: login failed")
-        return self._ok({"hash": USER_HASH})
+        return self._ok({"hash": self.user_hash})
 
     async def _get_themes(self, method: str, url: str, data: Any) -> Any:
         if self.themes_error is not None:
             return self._error(self.themes_error)
+        # yearTo and setCount follow the sets the fake holds, as Brickset's follow
+        # its catalogue, unless a test makes a theme claim more than getSets returns.
+        latest: dict[str, int] = {"Technic": 2024, "Icons": 2024}
+        counts: dict[str, int] = {}
+        for item in [*self.theme_sets, *self.year_sets]:
+            latest[item["theme"]] = max(latest.get(item["theme"], 0), item["year"])
+            counts[item["theme"]] = counts.get(item["theme"], 0) + 1
+        spans = {theme: (year, counts.get(theme, 0)) for theme, year in latest.items()}
+        spans.update(self.theme_claims)
         return self._ok(
             {
-                "matches": 2,
+                "matches": len(spans),
                 "themes": [
-                    {"theme": "Technic", "setCount": 900},
-                    {"theme": "Icons", "setCount": 200},
+                    {
+                        "theme": theme,
+                        "setCount": count,
+                        "yearFrom": 1977,
+                        "yearTo": year,
+                    }
+                    for theme, (year, count) in spans.items()
                 ],
             }
         )
 
     async def _get_key_usage(self, method: str, url: str, data: Any) -> Any:
+        self.usage_checks += 1
         return self._ok(
             {
                 "matches": 1,
@@ -289,7 +348,7 @@ class BricksetServer:
         if self.get_sets_error is not None:
             return self._error(self.get_sets_error)
 
-        if not self.hash_valid and (params.get("owned") or params.get("wanted")):
+        if (params.get("owned") or params.get("wanted")) and not self._hash_ok(data):
             return self._error("Invalid userHash")
 
         if params.get("owned"):
@@ -302,6 +361,8 @@ class BricksetServer:
             if not self.themes_batchable:
                 wanted_themes = wanted_themes[:1] if len(wanted_themes) == 1 else []
             sets = [item for item in self.theme_sets if item["theme"] in wanted_themes]
+            if self.filter_theme_year:
+                sets = [item for item in sets if item["year"] == params.get("year")]
         elif "setNumber" in params:
             requested = str(params["setNumber"]).split(",")
             pool = [*self.owned, *self.wanted, *self.theme_sets]
@@ -314,13 +375,27 @@ class BricksetServer:
             needle = str(params["query"]).lower()
             pool = [*self.owned, *self.wanted, *self.theme_sets]
             sets = [item for item in pool if needle in item["name"].lower()]
+        elif "year" in params:
+            sets = [item for item in self.year_sets if item["year"] == params["year"]]
         else:
             sets = []
 
-        return self._ok({"matches": len(sets), "sets": sets})
+        # Sorted as asked, so a test sees the order the integration requested and
+        # cannot pass on the order it happened to list its sets in.
+        order = str(params.get("orderBy", ""))
+        if order.removesuffix("DESC") == "Number":
+            sets = sorted(
+                sets,
+                key=lambda item: (int(item["number"]), item["numberVariant"]),
+                reverse=order.endswith("DESC"),
+            )
+        # Every query pages as Brickset's does, 20 to a page unless asked for more.
+        size = int(params.get("pageSize", 20))
+        start = (int(params.get("pageNumber", 1)) - 1) * size
+        return self._ok({"matches": len(sets), "sets": sets[start : start + size]})
 
     async def _set_collection(self, method: str, url: str, data: Any) -> Any:
-        if not self.hash_valid:
+        if not self._hash_ok(data):
             return self._error("Invalid userHash")
         if self.set_collection_error is not None:
             return self._error(self.set_collection_error)
@@ -365,13 +440,6 @@ async def setup_integration(
     # Setup seeds the catalogue in a background task that hops to an executor.
     await hass.async_block_till_done(wait_background_tasks=True)
     return entry
-
-
-@pytest.fixture
-def no_platforms():
-    """Set the entry up without loading entity platforms."""
-    with patch("custom_components.lego.PLATFORMS", []):
-        yield
 
 
 def lego_device_id(hass: HomeAssistant, entry: MockConfigEntry) -> str:

@@ -13,7 +13,7 @@ from .entity import LegoCollectionEntity
 from .models import LegoSet
 
 if TYPE_CHECKING:
-    from . import LegoConfigEntry
+    from .coordinator import LegoConfigEntry
 
 PARALLEL_UPDATES = 0
 
@@ -124,6 +124,14 @@ class LegoReleaseCalendar(LegoCalendarBase):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_releases"
 
     @override
+    async def async_added_to_hass(self) -> None:
+        """Also redraw when a watched theme gains a set, not only the collection."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self._feeds.async_add_listener(self._handle_coordinator_update)
+        )
+
+    @override
     def _build_events(self, start: date, end: date) -> list[CalendarEvent]:
         """Build a release event per wanted or followed-theme set."""
         region = self.region
@@ -131,7 +139,9 @@ class LegoReleaseCalendar(LegoCalendarBase):
         if self.coordinator.data is not None:
             for lego_set in self.coordinator.data.wanted:
                 candidates[lego_set.number] = lego_set
-        for theme_sets in (self._feeds.data or {}).values():
+        for theme_sets in (
+            self._feeds.data.themes if self._feeds.data else {}
+        ).values():
             for lego_set in theme_sets:
                 candidates.setdefault(lego_set.number, lego_set)
 

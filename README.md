@@ -41,6 +41,17 @@ listing every LEGO set. We could use the Brickset API but this is capped at 100 
 a day. If a set isn't found in the local database then an API call is made, hopefully
 massively reducing the number of API calls.
 
+## What you can do with it
+
+- Keep a dashboard of your collection: totals, piece and minifigure counts, and what it
+  cost at RRP in your chosen market.
+- Hear about a new set the day Brickset lists it in a theme you follow.
+- Get a reminder before a set on your wishlist leaves sale, or when its price changes.
+- See releases, retirements and the birthdays of your own sets on Home Assistant's
+  calendar.
+- Mark a set owned or wanted from an automation, a script or the sidebar panel, without
+  opening Brickset.
+
 ## Installation
 
 [![Open the repository in HACS.][hacs-repo-badge]][hacs-repo-url]
@@ -80,9 +91,10 @@ Reachable via **Configure** on the integration entry.
 | Option | Default | Notes |
 |--------|---------|-------|
 | Pricing region | from HA's country | Which LEGO.com market supplies prices and availability dates (`UK`, `US`, `CA`, `DE`). |
-| Themes to watch | none | Which themes to follow for new releases. However many you pick, they ride in one call per refresh. |
+| Themes to watch | none | Which themes to follow for new releases. However many you pick, they ride in one call per refresh, until together they hold more than 500 sets in a year. |
 | Daily call budget | 80 | The most calls Home Assistant spends a day. The refresh intervals are set from it (see [Data updates](#data-updates)), and polling pauses until midnight UTC once it is spent. |
 | Show the LEGO panel in the sidebar | on | Whether to add the sidebar page for browsing your collection, your wishlist and new releases. |
+| Follow releases across all themes | on for new setups | Fills the panel's **Out recently** and **Coming soon** rows with every set out in the last four weeks or due in the next four, whatever its theme. It reads every set of the year once a day, about 3 calls, and your watched themes then come from the same read rather than costing calls of their own. Off for entries set up before it existed, so upgrading spends nothing new until you turn it on. |
 | Keep a local set index | on | Whether to keep a local copy of Rebrickable's set list, so looking a set up costs no Brickset calls. |
 | Include set names in the index | on | Whether that index stores names as well as numbers, which is what searching by name needs. Takes roughly 1.8 MB on disk instead of 450 KB. |
 | Set index refresh interval | 7 days | How often the local list is re-downloaded, from 1 to 90 days. Costs no Brickset calls, and a set missing from it still works at the price of one lookup. |
@@ -91,9 +103,19 @@ Reachable via **Configure** on the integration entry.
 
 A **LEGO** entry appears in the sidebar unless you turn it off in options. It has two views:
 
-- **Home** shows new releases in the themes you follow, your wishlist with release and
-  retirement dates, and your collection totals. Each row has a drag handle, and the order
+- **Home** shows new releases in the themes you follow (out in the last 90 days or still
+  to come, newest first), your wishlist with release and retirement dates, and your
+  collection totals. Each row has a drag handle, and the order
   is remembered per Home Assistant user.
+- **Out recently** and **Coming soon** list every set, in any theme, out in the last four
+  weeks (newest first) or due in the next four (soonest first). They need **Follow
+  releases across all themes** in options, and can be hidden from **Customise** like any
+  other row.
+- **Collection value** and **Pieces** show today's total, a line of the last year from
+  Home Assistant's recorded statistics (it fills in week by week after you install), and
+  a bar per theme. Pieces starts hidden.
+- **Customise**, at the top of Home, chooses which rows show; drag a row's handle, or
+  use its arrow keys, to reorder them. Both are remembered per Home Assistant user.
 - **Collection** is the full grid. Its search box covers both your own sets and the whole
   catalogue.
 
@@ -101,7 +123,8 @@ One sidebar entry serves every Brickset account you have set up. A picker appear
 header when there is more than one, and your choice is remembered per Home Assistant user,
 as the row order already is.
 
-Every card can mark a set owned or not owned. The panel reads only websocket commands, so
+Every card shows the set's LEGO.com RRP in your pricing region, opens its Brickset page
+in a new tab from its picture or name, and can mark the set owned or not owned. The panel reads only websocket commands, so
 browsing and searching cost no Brickset calls; only the ownership toggle writes.
 
 An **Update now** button on the Home view polls Brickset immediately, showing what the
@@ -119,7 +142,7 @@ exceeded rather than failing at the API.
 | Brickset calls today | Diagnostic; usage against the daily limit. |
 | Last synced | Diagnostic timestamp of the last time Brickset answered a poll. Stays available, so a dashboard can show how old the data is. |
 | Next wishlist retirement | Days until the soonest set on your wishlist leaves sale, with that set's full record in attributes. Sets already gone are excluded. |
-| Latest *theme* set | One per watched theme; newest set number, with details in attributes. |
+| Latest *theme* set | One per watched theme: the most recently released set, or the soonest due if none is out yet, with details and this year's count in attributes. |
 | Set retirements / releases / anniversaries | Three calendar entities. |
 
 ## Actions
@@ -138,6 +161,99 @@ Every action targets an account by its **Brickset device** (`device_id`), picked
 device list in the action editor. Automations written for 0.4.0 or 1.0.0rc1 passed
 `config_entry_id` instead and need that field swapped for the device.
 
+## Events
+
+| Event | Fired when | Data |
+|-------|-----------|------|
+| `lego_new_set` | A watched theme gains a set since the previous poll. The first poll after setup only records what is there, so a restart does not replay the catalogue. | `entry_id`, `device_id`, `theme`, `set_number`, `name`, `year`, `pieces`, `minifigs`, `image_url`, `brickset_url`, `released`, `release_date`, `retirement_date`, `retail_price`, `region` |
+| `lego_wanted_set_changed` | A set on your wishlist changes price, retirement date or availability. | `entry_id`, `device_id`, `set_number`, `name`, `brickset_url`, and whichever of `price`, `retirement_date` and `availability` changed |
+
+## Examples
+
+Replace `brickset_yourname` with your own entity prefix (it is `brickset_` plus your
+Brickset username) and `notify.mobile_app_your_phone` with your own notifier.
+
+New set in a theme you follow:
+
+```yaml
+automation:
+  - alias: "LEGO: new set in a watched theme"
+    triggers:
+      - trigger: event
+        event_type: lego_new_set
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          title: "New {{ trigger.event.data.theme }} set"
+          message: >-
+            {{ trigger.event.data.set_number }} {{ trigger.event.data.name }},
+            {{ trigger.event.data.pieces }} pieces
+```
+
+Put every new set from a theme you follow straight on your wishlist. The event carries the
+account's `device_id`, so it passes straight to the action:
+
+```yaml
+automation:
+  - alias: "LEGO: wishlist new Icons sets"
+    triggers:
+      - trigger: event
+        event_type: lego_new_set
+        event_data:
+          theme: Icons
+    actions:
+      - action: lego.set_collection
+        data:
+          device_id: "{{ trigger.event.data.device_id }}"
+          set_number: "{{ trigger.event.data.set_number }}"
+          wanted: true
+```
+
+A wishlist set retires within a month:
+
+```yaml
+automation:
+  - alias: "LEGO: wishlist set retiring soon"
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.brickset_yourname_next_wishlist_retirement
+        below: 30
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          message: >-
+            {{ state_attr('sensor.brickset_yourname_next_wishlist_retirement',
+            'set_name') }} leaves sale in {{ trigger.to_state.state }} days.
+```
+
+A price change on your wishlist:
+
+```yaml
+automation:
+  - alias: "LEGO: wishlist price changed"
+    triggers:
+      - trigger: event
+        event_type: lego_wanted_set_changed
+    conditions:
+      - condition: template
+        value_template: "{{ 'price' in trigger.event.data }}"
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          message: >-
+            {{ trigger.event.data.name }} is now {{ trigger.event.data.price }}.
+```
+
+Show how old the data is on a dashboard:
+
+```yaml
+type: entities
+entities:
+  - entity: sensor.brickset_yourname_sets_owned
+  - entity: sensor.brickset_yourname_last_synced
+    format: relative
+```
+
 ## Data updates
 
 Brickset allows **100 `getSets` calls per API key per day**; no other method counts. The
@@ -148,8 +264,28 @@ integration polls on two schedules, which it sets itself from the daily call bud
   hour through 2, 3, 4, 6, 8 and 12 hours to once a day. The default budget of 80 polls
   hourly; a budget of 20 polls every 4 hours. The rest of the budget is kept for actions
   such as a manual refresh.
-- **Themes** (every 12 h): one call for all of them, comma joined. A theme with
-  no releases this year is confirmed separately, which costs one more.
+- **New releases**, in one of two ways:
+  - **Watched themes only** (every 12 h): one call for all of them, comma joined. A
+    theme with no releases this year is confirmed separately, which costs one more. If
+    the watched themes together pass 500 sets in a year, each refresh pages on at a
+    call a page, and a Repair in **Settings → Repairs** says so; it clears once they
+    fit one call again.
+  - **Following releases across all themes** (once a day): `getSets` has no date
+    filter, so this reads each year the four weeks either side of today touch, whole:
+    this year alone for most of it, last year as well until 28 January, and next year
+    from 4 December. A year is about 1,000 entries once gear and books count, so 3
+    calls. The watched themes are cut from the same read, so they cost nothing more.
+  - **Next year** is asked for only once `getThemes`, which costs nothing, says a
+    theme reaches it. It can say so before `getSets` returns anything (it did for
+    Technic and Icons in October 2026), so an empty answer is remembered and next
+    year is skipped until that theme's year or set count changes. A restart forgets
+    it, at the cost of one call.
+  - Once a poll has counted its pages, the budget plans on that count, and what the
+    feeds spend comes out of the collection's share. A poll reserves all its pages
+    first, so it never spends calls it cannot finish. Following all themes fetches in
+    the background after setup, so each Home Assistant restart or options save spends
+    one more poll than the daily estimate shows; a failed first fetch is retried every
+    3 hours.
 - `getKeyUsageStats` does not count against the 100. It is polled at most every 30
   minutes to reconcile the local tally with Brickset's own count, which also catches
   calls made by other tools sharing the key.
@@ -167,6 +303,56 @@ how old that data is, `sensor.brickset_*_last_synced` holds the time of the last
 and the panel shows it beside **Update now** ("Updated 3 hours ago") along with when
 updates resume. `sensor.brickset_*_brickset_calls_today` shows usage, budget and
 remaining headroom.
+
+## Known limitations
+
+- **100 billed calls a day per API key.** Another tool using the same key spends the
+  same allowance; the calls-today sensor counts it once Brickset reports it.
+- **Changes made on Brickset arrive at the next poll**, up to the collection interval
+  later. **Update now** in the panel, or `lego.refresh_collection`, fetches them at once.
+- **Value is LEGO.com RRP, not market value**, and only for the four markets Brickset
+  publishes: UK, US, Canada and Germany.
+- **Next year's sets appear once Brickset files one under next year**, which is when
+  `getThemes` reports it. A set labelled next year but released this December appears
+  once next year's wave is filed.
+- **A set Brickset lists before its name is announced** shows as "Name tbd" until the
+  name is published.
+- **A Brickset password change invalidates the saved token**, so Home Assistant asks you
+  to reconnect.
+
+## Troubleshooting
+
+**"Reconnect the integration" or a reauthentication prompt.** Brickset no longer accepts
+the saved token, usually after a password change. Open the prompt and enter your API key
+and password again; the password is used once and not stored.
+
+**The numbers look out of date.** Check the **Last synced** sensor or the panel's
+"Updated … ago". If the daily call budget is spent, polling resumes at midnight UTC; raise
+the budget under **Configure** if that happens often. If Last synced is recent, the data
+is what Brickset holds.
+
+**A repair says Brickset rejected a collection change.** The change did not apply. The
+repair names Brickset's reason; it clears itself the next time a change succeeds.
+
+**Marking a set fails with "no set numbered …".** Use the full set number with its
+variant, such as `10497-1`.
+
+**A watched theme shows no sets.** The theme has nothing listed for this year yet, or its
+name differs from Brickset's. Pick themes from the list under **Configure** rather than
+typing them.
+
+**The sidebar entry is missing.** Check **Show the LEGO panel in the sidebar** under
+**Configure**, and that the entry is loaded.
+
+**Anything else.** Turn on debug logging, reproduce the problem, and attach the log and
+the integration's diagnostics download (**Settings → Devices & services → LEGO → ⋮ →
+Download diagnostics**) to an issue:
+
+```yaml
+logger:
+  logs:
+    custom_components.lego: debug
+```
 
 ## Removal
 
@@ -200,7 +386,7 @@ credentials stay out of reach of every other workflow.
 > [!NOTE]
 > **AI assistance:** I'm a programmer; this project is built with AI (Claude, via Claude
 > Code) for implementation, code review, and QA — under human direction, guided by my
-> [`ha-integration`](https://github.com/PineappleEmperor/pineapple-claude-hacs) skill.
+> [`ha-integration`](https://github.com/PineappleEmperor/ha-skills) skill.
 > Architecture and final review are mine; every change is human-reviewed before it
 > merges.
 

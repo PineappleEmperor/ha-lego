@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any
+from typing import Any, NamedTuple
 
 from homeassistant.util import dt as dt_util
 
@@ -71,6 +71,13 @@ class RegionPricing:
         )
 
 
+class ThemeSpan(NamedTuple):
+    """How far a theme reaches, as getThemes reports it without a billed call."""
+
+    year_to: int
+    set_count: int
+
+
 @dataclass(slots=True)
 class CollectionStatus:
     """The signed-in user's ownership status for a set."""
@@ -126,6 +133,18 @@ class LegoSet:
     pricing: dict[str, RegionPricing] = field(default_factory=dict)
     launch_date: date | None = None
     exit_date: date | None = None
+
+    @property
+    def number_key(self) -> tuple[bool, int, str, int]:
+        """Return a key that sorts set numbers as numbers, 10294 after 9999."""
+        base, _, variant = self.number.partition("-")
+        numeric = base.isdigit()
+        return (
+            numeric,
+            int(base) if numeric else 0,
+            base,
+            int(variant) if variant.isdigit() else 0,
+        )
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> LegoSet:

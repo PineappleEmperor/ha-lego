@@ -1,6 +1,6 @@
 """Tests for the LEGO config, reauth, reconfigure and options flows."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 import aiohttp
 from homeassistant import config_entries
@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 from custom_components.lego.config_flow import estimated_daily_calls
 from custom_components.lego.const import (
     CONF_DAILY_CALL_BUDGET,
+    CONF_RELEASES,
     CONF_THEMES,
     CONF_USER_HASH,
     DOMAIN,
@@ -57,6 +58,8 @@ async def test_user_flow(hass: HomeAssistant) -> None:
     }
     assert CONF_PASSWORD not in result["data"]
     assert result["options"][CONF_REGION] == "UK"
+    # New entries start with the all-themes release rows switched on.
+    assert result["options"][CONF_RELEASES] is True
 
 
 @pytest.mark.usefixtures("brickset")
@@ -213,19 +216,20 @@ async def test_duplicate_account_aborts(
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
+    # Brickset usernames ignore case, so another spelling is the same account.
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], USER_INPUT
+        result["flow_id"], {**USER_INPUT, CONF_USERNAME: USERNAME.upper()}
     )
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
 
 
-@pytest.mark.usefixtures("brickset")
 async def test_reauth_flow(
-    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Reauth mints a fresh token and reloads the entry."""
+    """Reauth mints a fresh token, takes a new key if given, and keeps no password."""
+    brickset.api_keys.add("renewed-key")
     mock_config_entry.add_to_hass(hass)
     hass.config_entries.async_update_entry(
         mock_config_entry,
@@ -236,13 +240,16 @@ async def test_reauth_flow(
     assert result["step_id"] == "reauth_confirm"
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_API_KEY: API_KEY, CONF_PASSWORD: "hunter2"}
+        result["flow_id"], {CONF_API_KEY: "renewed-key", CONF_PASSWORD: "hunter2"}
     )
     await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
     assert mock_config_entry.data[CONF_USER_HASH] == USER_HASH
+    assert mock_config_entry.data[CONF_API_KEY] == "renewed-key"
+    assert CONF_PASSWORD not in mock_config_entry.data
+    assert "hunter2" not in str(mock_config_entry.data)
 
 
 async def test_reauth_flow_rejects_bad_password(
@@ -261,11 +268,11 @@ async def test_reauth_flow_rejects_bad_password(
     assert result["errors"] == {"base": "invalid_auth"}
 
 
-@pytest.mark.usefixtures("brickset")
 async def test_reconfigure_flow(
-    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Reconfigure can swap the API key for the same account."""
+    """Reconfigure can swap the API key for the same account, and keeps no password."""
+    brickset.api_keys.add("new-key")
     mock_config_entry.add_to_hass(hass)
 
     result = await mock_config_entry.start_reconfigure_flow(hass)
@@ -279,6 +286,8 @@ async def test_reconfigure_flow(
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert mock_config_entry.data[CONF_API_KEY] == "new-key"
+    assert CONF_PASSWORD not in mock_config_entry.data
+    assert "hunter2" not in str(mock_config_entry.data)
 
 
 @pytest.mark.usefixtures("brickset")
@@ -334,7 +343,7 @@ async def test_options_flow(
     assert collection.update_interval == timedelta(hours=2)
 
 
-@pytest.mark.usefixtures("brickset")
+@pytest.mark.usefixtures("brickset", "spring")
 async def test_options_flow_estimates_an_unloaded_entry(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
@@ -365,20 +374,34 @@ async def test_options_flow_falls_back_to_saved_themes(
 
 
 def test_estimated_daily_calls() -> None:
-    """The estimate follows the schedule the budget yields."""
+    """The estimate follows the schedule the budget yields, on the day it is made."""
+    spring, autumn = date(2026, 5, 15), date(2026, 10, 1)
     themes = {CONF_THEMES: ["Technic"]}
     # 24 hourly polls of owned + wanted, plus 2 feed polls of one call each.
-    assert estimated_daily_calls(themes) == 50
+    assert estimated_daily_calls(themes, today=spring) == 50
     # Themes ride in one comma-joined call, so five cost the same as one.
-    assert (
-        estimated_daily_calls(
-            {CONF_THEMES: ["Technic", "Icons", "City", "Star Wars", "Botanicals"]}
-        )
-        == 50
-    )
+    five = {CONF_THEMES: ["Technic", "Icons", "City", "Star Wars", "Botanicals"]}
+    assert estimated_daily_calls(five, today=spring) == 50
     # No themes means no feed polls at all.
-    assert estimated_daily_calls({}) == 48
+    assert estimated_daily_calls({}, today=spring) == 48
     # A tighter budget polls less often: every 4 h is 6 polls of 2, plus the feeds.
-    assert estimated_daily_calls({**themes, CONF_DAILY_CALL_BUDGET: 20}) == 14
+    tight = {**themes, CONF_DAILY_CALL_BUDGET: 20}
+    assert estimated_daily_calls(tight, today=spring) == 14
     # A collection past a page costs more a poll, so it is polled every 2 h.
-    assert estimated_daily_calls(themes, poll_cost=4) == 50
+    assert estimated_daily_calls(themes, poll_cost=4, today=spring) == 50
+    # Until a poll has asked getThemes, next year is assumed from September.
+    assert estimated_daily_calls(themes, today=autumn) == 52
+
+    # Following every theme reads the year once a day, about 3 calls, and the
+    # watched themes come out of that read rather than costing their own.
+    releases = {**themes, CONF_RELEASES: True}
+    assert estimated_daily_calls(releases, today=spring) == 51
+    assert estimated_daily_calls(releases, today=autumn) == 52
+    # January reads last year whole as well.
+    assert estimated_daily_calls(releases, today=date(2026, 1, 10)) == 54
+    # On a tight budget its calls come out of the collection's share: 15 less 3
+    # leaves 12, so the collection polls every 4 h.
+    tight = {**releases, CONF_DAILY_CALL_BUDGET: 20}
+    assert estimated_daily_calls(tight, today=spring) == 15
+    # Once a poll has measured itself, that replaces the estimate.
+    assert estimated_daily_calls(releases, today=spring, feeds_cost=2) == 50

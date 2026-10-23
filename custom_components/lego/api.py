@@ -16,7 +16,7 @@ from .exceptions import (
     BricksetQuotaError,
     BricksetUserHashError,
 )
-from .models import LegoSet
+from .models import LegoSet, ThemeSpan
 from .quota import QuotaManager
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,6 +28,17 @@ REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
 _INVALID_KEY_FRAGMENTS = ("invalid api key", "api key not valid", "invalid key")
 _INVALID_HASH_FRAGMENTS = ("invalid userhash", "invalid user hash", "not logged in")
 _QUOTA_FRAGMENTS = ("exceeded", "too many", "limit reached")
+
+
+# Paging stops here even if a page comes back full, which bounds a bad day's cost.
+DEFAULT_MAX_PAGES = 10
+
+
+def pages_spent(count: int, max_pages: int = DEFAULT_MAX_PAGES) -> int:
+    """Return the billed pages get_all_sets spends to return count sets."""
+    # It stops at the first short page, so an empty result still costs a call
+    # and a full last page costs one more to find out it was the last.
+    return min(count // PAGE_SIZE + 1, max_pages)
 
 
 class BricksetClient:
@@ -132,6 +143,22 @@ class BricksetClient:
             if theme.get("theme")
         ]
 
+    async def get_theme_years(self) -> dict[str, ThemeSpan]:
+        """Return each theme's latest year and set count, unbilled."""
+        # getThemes is free where getSets is not, so it says whether a year may
+        # have anything before a billed call goes to look.
+        result = await self._request("getThemes", {})
+        years: dict[str, ThemeSpan] = {}
+        for theme in result.get("themes") or []:
+            name = theme.get("theme")
+            year_to = theme.get("yearTo")
+            set_count = theme.get("setCount")
+            if name and isinstance(year_to, int):
+                years[str(name)] = ThemeSpan(
+                    year_to, set_count if isinstance(set_count, int) else 0
+                )
+        return years
+
     async def get_sets(self, params: dict[str, Any]) -> list[LegoSet]:
         """Run a getSets query, the only method billed against the daily allowance."""
         if self._quota is not None:
@@ -145,7 +172,7 @@ class BricksetClient:
         return [LegoSet.from_api(item) for item in result.get("sets") or []]
 
     async def get_all_sets(
-        self, params: dict[str, Any], max_pages: int = 10
+        self, params: dict[str, Any], max_pages: int = DEFAULT_MAX_PAGES
     ) -> list[LegoSet]:
         """Page through getSets; each page is billed, so max_pages caps the cost."""
         collected: list[LegoSet] = []
