@@ -41,6 +41,17 @@ listing every LEGO set. We could use the Brickset API but this is capped at 100 
 a day. If a set isn't found in the local database then an API call is made, hopefully
 massively reducing the number of API calls.
 
+## What you can do with it
+
+- Keep a dashboard of your collection: totals, piece and minifigure counts, and what it
+  cost at RRP in your chosen market.
+- Hear about a new set the day Brickset lists it in a theme you follow.
+- Get a reminder before a set on your wishlist leaves sale, or when its price changes.
+- See releases, retirements and the birthdays of your own sets on Home Assistant's
+  calendar.
+- Mark a set owned or wanted from an automation, a script or the sidebar panel, without
+  opening Brickset.
+
 ## Installation
 
 [![Open the repository in HACS.][hacs-repo-badge]][hacs-repo-url]
@@ -138,6 +149,80 @@ Every action targets an account by its **Brickset device** (`device_id`), picked
 device list in the action editor. Automations written for 0.4.0 or 1.0.0rc1 passed
 `config_entry_id` instead and need that field swapped for the device.
 
+## Events
+
+| Event | Fired when | Data |
+|-------|-----------|------|
+| `lego_new_set` | A watched theme gains a set since the previous poll. The first poll after setup only records what is there, so a restart does not replay the catalogue. | `entry_id`, `theme`, `set_number`, `name`, `year`, `pieces`, `minifigs`, `image_url`, `brickset_url`, `released`, `release_date`, `retirement_date`, `retail_price`, `region` |
+| `lego_wanted_set_changed` | A set on your wishlist changes price, retirement date or availability. | `entry_id`, `set_number`, `name`, `brickset_url`, and whichever of `price`, `retirement_date` and `availability` changed |
+
+## Examples
+
+Replace `brickset_yourname` with your own entity prefix (it is `brickset_` plus your
+Brickset username) and `notify.mobile_app_your_phone` with your own notifier.
+
+New set in a theme you follow:
+
+```yaml
+automation:
+  - alias: "LEGO: new set in a watched theme"
+    triggers:
+      - trigger: event
+        event_type: lego_new_set
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          title: "New {{ trigger.event.data.theme }} set"
+          message: >-
+            {{ trigger.event.data.set_number }} {{ trigger.event.data.name }},
+            {{ trigger.event.data.pieces }} pieces
+```
+
+A wishlist set retires within a month:
+
+```yaml
+automation:
+  - alias: "LEGO: wishlist set retiring soon"
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.brickset_yourname_next_wishlist_retirement
+        below: 30
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          message: >-
+            {{ state_attr('sensor.brickset_yourname_next_wishlist_retirement',
+            'set_name') }} leaves sale in {{ trigger.to_state.state }} days.
+```
+
+A price change on your wishlist:
+
+```yaml
+automation:
+  - alias: "LEGO: wishlist price changed"
+    triggers:
+      - trigger: event
+        event_type: lego_wanted_set_changed
+    conditions:
+      - condition: template
+        value_template: "{{ 'price' in trigger.event.data }}"
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          message: >-
+            {{ trigger.event.data.name }} is now {{ trigger.event.data.price }}.
+```
+
+Show how old the data is on a dashboard:
+
+```yaml
+type: entities
+entities:
+  - entity: sensor.brickset_yourname_sets_owned
+  - entity: sensor.brickset_yourname_last_synced
+    format: relative
+```
+
 ## Data updates
 
 Brickset allows **100 `getSets` calls per API key per day**; no other method counts. The
@@ -167,6 +252,55 @@ how old that data is, `sensor.brickset_*_last_synced` holds the time of the last
 and the panel shows it beside **Update now** ("Updated 3 hours ago") along with when
 updates resume. `sensor.brickset_*_brickset_calls_today` shows usage, budget and
 remaining headroom.
+
+## Known limitations
+
+- **100 billed calls a day per API key.** Another tool using the same key spends the
+  same allowance; the calls-today sensor counts it once Brickset reports it.
+- **Changes made on Brickset arrive at the next poll**, up to the collection interval
+  later. **Update now** in the panel, or `lego.refresh_collection`, fetches them at once.
+- **Value is LEGO.com RRP, not market value**, and only for the four markets Brickset
+  publishes: UK, US, Canada and Germany.
+- **Theme feeds cover the current calendar year.** A set Brickset files under next year
+  appears when the year turns.
+- **A set Brickset lists before its name is announced** shows as "Name tbd" until the
+  name is published.
+- **A Brickset password change invalidates the saved token**, so Home Assistant asks you
+  to reconnect.
+
+## Troubleshooting
+
+**"Reconnect the integration" or a reauthentication prompt.** Brickset no longer accepts
+the saved token, usually after a password change. Open the prompt and enter your API key
+and password again; the password is used once and not stored.
+
+**The numbers look out of date.** Check the **Last synced** sensor or the panel's
+"Updated … ago". If the daily call budget is spent, polling resumes at midnight UTC; raise
+the budget under **Configure** if that happens often. If Last synced is recent, the data
+is what Brickset holds.
+
+**A repair says Brickset rejected a collection change.** The change did not apply. The
+repair names Brickset's reason; it clears itself the next time a change succeeds.
+
+**Marking a set fails with "no set numbered …".** Use the full set number with its
+variant, such as `10497-1`.
+
+**A watched theme shows no sets.** The theme has nothing listed for this year yet, or its
+name differs from Brickset's. Pick themes from the list under **Configure** rather than
+typing them.
+
+**The sidebar entry is missing.** Check **Show the LEGO panel in the sidebar** under
+**Configure**, and that the entry is loaded.
+
+**Anything else.** Turn on debug logging, reproduce the problem, and attach the log and
+the integration's diagnostics download (**Settings → Devices & services → LEGO → ⋮ →
+Download diagnostics**) to an issue:
+
+```yaml
+logger:
+  logs:
+    custom_components.lego: debug
+```
 
 ## Removal
 
@@ -200,7 +334,7 @@ credentials stay out of reach of every other workflow.
 > [!NOTE]
 > **AI assistance:** I'm a programmer; this project is built with AI (Claude, via Claude
 > Code) for implementation, code review, and QA — under human direction, guided by my
-> [`ha-integration`](https://github.com/PineappleEmperor/pineapple-claude-hacs) skill.
+> [`ha-integration`](https://github.com/PineappleEmperor/ha-skills) skill.
 > Architecture and final review are mine; every change is human-reviewed before it
 > merges.
 
