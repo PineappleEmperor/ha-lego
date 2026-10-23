@@ -19,7 +19,6 @@ wanted, the catalogue sample, the theme batch and next year's theme batch.
 """
 
 import csv
-from datetime import UTC, datetime
 import gzip
 import io
 import json
@@ -28,6 +27,7 @@ import random
 from typing import Any
 
 import aiohttp
+from homeassistant.util import dt as dt_util
 import pytest
 
 from custom_components.lego.api import API_BASE, BricksetClient
@@ -163,7 +163,7 @@ async def test_theme_still_accepts_a_comma_separated_list() -> None:
 
 async def test_next_years_theme_query_answers() -> None:
     """From September the feeds ask for next year; it must answer, empty or not."""
-    year = datetime.now(UTC).year + 1
+    year = dt_util.utcnow().year + 1
     async with aiohttp.ClientSession() as session:
         client = BricksetClient(session, os.environ["BRICKSET_API_KEY"])
         sets = await client.get_sets(
@@ -178,7 +178,7 @@ async def test_next_years_theme_query_answers() -> None:
 
 async def test_the_daily_count_rolls_over_at_midnight_utc() -> None:
     """The quota resets at midnight UTC, which is the day Brickset must count in."""
-    now = datetime.now(UTC)
+    now = dt_util.utcnow()
     minutes_to_midnight = 24 * 60 - (now.hour * 60 + now.minute)
     if now.hour == 0 or minutes_to_midnight <= 60:
         pytest.skip("too close to midnight UTC to tell the two days apart")
