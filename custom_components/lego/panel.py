@@ -278,11 +278,20 @@ def _by_theme(owned: list[LegoSet], region: str) -> list[dict[str, Any]]:
         qty = max(lego_set.collection.qty_owned, 1)
         row = themes.setdefault(
             lego_set.theme or "Other",
-            {"theme": lego_set.theme or "Other", "value": 0.0, "pieces": 0, "sets": 0},
+            {
+                "theme": lego_set.theme or "Other",
+                "value": 0.0,
+                "pieces": 0,
+                "sets": 0,
+                "set_numbers": [],
+            },
         )
         row["value"] += (lego_set.price(region) or 0.0) * qty
         row["pieces"] += (lego_set.pieces or 0) * qty
         row["sets"] += qty
+        row["set_numbers"].append(lego_set.number)
+    for row in themes.values():
+        row["set_numbers"].sort()
     return sorted(themes.values(), key=lambda row: (-row["value"], row["theme"]))
 
 

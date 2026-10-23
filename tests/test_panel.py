@@ -523,6 +523,12 @@ async def test_value_by_theme_runs_most_valuable_first(
         ("Icons", 100.0, 1),
         ("Star Wars", 80.0, 2),
     ]
+    # The chart's tooltip names the sets behind each theme's total.
+    assert [row["set_numbers"] for row in rows] == [
+        ["42001-1"],
+        ["10001-1"],
+        ["75001-1"],
+    ]
 
 
 async def test_wishlist_runs_soonest_retirement_first_retired_last(
