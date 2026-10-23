@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant, callback
 import probatio
 
 from .const import DOMAIN
-from .panel import PANEL_STORE, dashboard_payload, summarise
+from .panel import PANEL_STORE, dashboard_payload, summarise, summarise_entry
 
 if TYPE_CHECKING:
     from homeassistant.auth.models import User
@@ -55,17 +55,17 @@ def websocket_search(
         )
         return
 
+    # A set Home Assistant already holds a Brickset record for draws as fully as
+    # anywhere else in the panel; the rest carry what the local index knows.
+    region = entry.runtime_data.collection.region
+    known = _known_sets(entry)
     connection.send_result(
         msg["id"],
         {
             "sets": [
-                {
-                    "set_number": found.number,
-                    "name": found.name,
-                    "year": found.year,
-                    "theme": found.theme,
-                    "owned": _owned(entry, found.number),
-                }
+                summarise(known[found.number], region)
+                if found.number in known
+                else summarise_entry(found, _owned(entry, found.number))
                 for found in catalogue.search(msg["query"], msg["limit"])
             ]
         },
@@ -277,3 +277,13 @@ def _owned(entry: Any, number: str) -> bool:
         return False
     lego_set = data.all_sets.get(number)
     return bool(lego_set and lego_set.collection.owned)
+
+
+def _known_sets(entry: LegoConfigEntry) -> dict[str, Any]:
+    """Every set with a Brickset record: the collection and the theme feeds."""
+    known: dict[str, Any] = {}
+    for theme_sets in (entry.runtime_data.feeds.data or {}).values():
+        known.update({lego_set.number: lego_set for lego_set in theme_sets})
+    data = entry.runtime_data.collection.data
+    known.update(data.all_sets)
+    return known

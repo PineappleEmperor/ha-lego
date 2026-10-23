@@ -29,6 +29,7 @@ from .const import (
 )
 
 if TYPE_CHECKING:
+    from .catalogue import CatalogueEntry
     from .coordinator import LegoConfigEntry
     from .models import LegoSet
 
@@ -164,6 +165,29 @@ def summarise(lego_set: Any, region: str) -> dict[str, Any]:
             if pricing and pricing.date_last_available
             else None
         ),
+    }
+
+
+def summarise_entry(entry: CatalogueEntry, owned: bool) -> dict[str, Any]:
+    """Give a set known only to the local index the shape summarise() returns."""
+    # The index holds number, name, year and theme only, so a card shows those and
+    # links to the set's plain Brickset page for the rest.
+    return {
+        "set_number": entry.number,
+        "name": entry.name,
+        "year": entry.year,
+        "theme": entry.theme,
+        "pieces": None,
+        "minifigs": None,
+        "image": None,
+        "url": f"https://brickset.com/sets/{entry.number}",
+        "owned": owned,
+        "wanted": False,
+        "qty_owned": 1 if owned else 0,
+        "retail_price": None,
+        "released": False,
+        "available_from": None,
+        "available_until": None,
     }
 
 

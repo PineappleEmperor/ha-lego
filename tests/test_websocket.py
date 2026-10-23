@@ -32,15 +32,13 @@ async def test_search_returns_catalogue_hits(
     response = await client.receive_json()
 
     assert response["success"]
-    assert response["result"]["sets"] == [
-        {
-            "set_number": "10497-1",
-            "name": "Galaxy Explorer",
-            "year": 2022,
-            "theme": "Icons",
-            "owned": True,
-        }
-    ]
+    # An owned set has a Brickset record, so it draws like any other card.
+    [hit] = response["result"]["sets"]
+    assert hit["set_number"] == "10497-1"
+    assert hit["name"] == "Galaxy Explorer"
+    assert hit["owned"] is True
+    assert hit["retail_price"] == 90.0
+    assert hit["url"] == "https://brickset.com/sets/10497-1"
     assert len(brickset.get_sets_calls) == before
 
 
@@ -115,3 +113,24 @@ async def test_search_reports_a_missing_catalogue(
 
     assert not response["success"]
     assert response["error"]["code"] == "not_found"
+
+
+async def test_search_fills_in_a_set_known_only_to_the_index(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A set with no Brickset record still arrives with every field a card reads."""
+    brickset.theme_sets.clear()
+    await setup_integration(hass, mock_config_entry)
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "lego/search", "query": "42200"})
+    [hit] = (await client.receive_json())["result"]["sets"]
+
+    assert hit["name"] == "New Technic Thing"
+    assert hit["retail_price"] is None
+    assert hit["image"] is None
+    assert hit["url"] == "https://brickset.com/sets/42200-1"
+    assert hit["owned"] is False
