@@ -239,6 +239,7 @@ export class LegoPanel extends LitElement {
   @state() private _over = "";
   @state() private _pending = new Set<string>();
   @state() private _collectionError = "";
+  @state() private _switching = "";
   @state() private _accounts: Account[] = [];
   @state() private _account = "";
 
@@ -267,12 +268,19 @@ export class LegoPanel extends LitElement {
   private async _selectAccount(entryId: string): Promise<void> {
     if (entryId === this._account) return;
     this._account = entryId;
+    this._switching =
+      this._accounts.find((item) => item.entry_id === entryId)?.name ??
+      "account";
     this._collection = [];
     this._results = [];
     this._query = "";
     this._theme = "";
-    await this._load();
-    if (this._tab === "collection") await this._loadCollection();
+    try {
+      await this._load();
+      if (this._tab === "collection") await this._loadCollection();
+    } finally {
+      this._switching = "";
+    }
     try {
       await this.hass.callWS({
         type: "lego/account/set",
@@ -411,28 +419,30 @@ export class LegoPanel extends LitElement {
   protected override render(): TemplateResult {
     return html`
       <div class="app">
-        <header>
-          <div class="bar">
-            <div class="title">
-              ${this.narrow
-                ? html`<ha-menu-button
-                    .hass=${this.hass}
-                    .narrow=${this.narrow}
-                  ></ha-menu-button>`
-                : nothing}
-              <h1>LEGO</h1>
-            </div>
-            ${this._renderAccounts()}
+        <header class=${this.narrow ? "narrow" : ""}>
+          <div class="title">
+            ${this.narrow
+              ? html`<ha-menu-button
+                  .hass=${this.hass}
+                  .narrow=${this.narrow}
+                ></ha-menu-button>`
+              : nothing}
+            <h1>LEGO</h1>
           </div>
-          <div class="tabs">
+          ${this._renderAccounts()}
+          <div class="tabs" role="tablist">
             <button
               class=${this._tab === "home" ? "tab on" : "tab"}
+              role="tab"
+              aria-selected=${this._tab === "home"}
               @click=${() => (this._tab = "home")}
             >
               Home
             </button>
             <button
               class=${this._tab === "collection" ? "tab on" : "tab"}
+              role="tab"
+              aria-selected=${this._tab === "collection"}
               @click=${() => {
                 this._tab = "collection";
                 void this._loadCollection();
@@ -442,11 +452,21 @@ export class LegoPanel extends LitElement {
             </button>
           </div>
         </header>
-        ${this._error
-          ? this._renderError(this._error, () => void this._load())
-          : this._tab === "home"
-            ? this._renderHome()
-            : this._renderCollection()}
+        ${this._switching
+          ? html`<p class="muted switching" role="status">
+              Loading ${this._switching}…
+            </p>`
+          : nothing}
+        <div
+          class=${this._switching ? "busy" : ""}
+          aria-busy=${!!this._switching}
+        >
+          ${this._error
+            ? this._renderError(this._error, () => void this._load())
+            : this._tab === "home"
+              ? this._renderHome()
+              : this._renderCollection()}
+        </div>
         ${this._writeError
           ? html`<div class="toast" role="alert">
               <span
@@ -685,15 +705,26 @@ export class LegoPanel extends LitElement {
     return html`
       <div class="rows">
         <section class="row">
-          <input
-            class="search"
-            type="search"
-            .value=${this._query}
-            placeholder="Search your sets and the full catalogue…"
-            aria-label="Search sets"
-            @input=${(ev: Event) =>
-              void this._search((ev.target as HTMLInputElement).value)}
-          />
+          <div class="searchbox">
+            <input
+              class="search"
+              type="search"
+              .value=${this._query}
+              placeholder="Search your sets and the full catalogue…"
+              aria-label="Search sets"
+              @input=${(ev: Event) =>
+                void this._search((ev.target as HTMLInputElement).value)}
+            />
+            ${this._query
+              ? html`<button
+                  class="clear"
+                  aria-label="Clear search"
+                  @click=${() => void this._search("")}
+                >
+                  <ha-icon icon="mdi:close"></ha-icon>
+                </button>`
+              : nothing}
+          </div>
           ${this._collectionError && this._query.trim().length < 2
             ? this._renderError(this._collectionError, () => {
                 this._collectionError = "";
@@ -870,20 +901,28 @@ export class LegoPanel extends LitElement {
       margin: 0 auto;
       padding: 0 0 var(--ha-space-8, 32px);
     }
+    /* One toolbar row at Home Assistant's own header height; on a phone the tabs
+       take a row of their own below it. */
     header {
+      align-items: center;
+      background: var(--lego-surface);
+      border-bottom: var(--lego-line) solid var(--lego-outline);
+      column-gap: var(--ha-space-4, 16px);
+      display: flex;
+      flex-wrap: wrap;
+      min-height: var(--header-height, 56px);
+      padding: 0 var(--ha-space-4, 16px);
       position: sticky;
       top: 0;
       z-index: 2;
-      background: var(--lego-surface);
-      border-bottom: var(--lego-line) solid var(--lego-outline);
-      padding: 0 var(--ha-space-4, 16px);
     }
-    .bar {
-      align-items: center;
-      display: flex;
-      gap: var(--ha-space-3, 12px);
-      justify-content: space-between;
-      min-height: var(--ha-space-16, 64px);
+    header .account {
+      margin-left: auto;
+      order: 3;
+    }
+    header.narrow .tabs {
+      flex-basis: 100%;
+      order: 4;
     }
     .title {
       align-items: center;
@@ -891,10 +930,12 @@ export class LegoPanel extends LitElement {
       gap: var(--ha-space-1, 4px);
       min-width: 0;
     }
+    /* The page title reads like Home Assistant's own toolbar titles: regular
+       weight, so the bold section headings below it are the ones that stand out. */
     h1 {
       font-size: var(--ha-font-size-xl, 20px);
       line-height: var(--ha-line-height-condensed, 1.2);
-      font-weight: var(--ha-font-weight-bold, 700);
+      font-weight: var(--ha-font-weight-normal, 400);
       margin: 0;
     }
     .account {
@@ -909,8 +950,10 @@ export class LegoPanel extends LitElement {
       padding: 0 var(--ha-space-3, 12px);
     }
     .tabs {
+      align-self: stretch;
       display: flex;
       gap: var(--ha-space-1, 4px);
+      order: 2;
     }
     .tab {
       appearance: none;
@@ -921,9 +964,12 @@ export class LegoPanel extends LitElement {
       font: inherit;
       font-size: var(--ha-font-size-m, 14px);
       font-weight: var(--ha-font-weight-medium, 500);
-      min-height: 48px;
+      min-height: var(--header-height, 56px);
       padding: 0 var(--ha-space-4, 16px);
       cursor: pointer;
+    }
+    header.narrow .tab {
+      min-height: 48px;
     }
     .tab.on {
       color: var(--lego-primary);
@@ -1024,11 +1070,16 @@ export class LegoPanel extends LitElement {
       display: flex;
       flex-direction: column;
     }
+    /* Set photos come on white; inset and rounded they read as photos rather
+       than as gaps in a dark card. */
     .card img {
-      width: 100%;
-      height: 104px;
-      object-fit: contain;
       background: var(--lego-ground);
+      border-radius: var(--ha-border-radius-md, 8px);
+      box-sizing: border-box;
+      height: 104px;
+      margin: var(--ha-space-2, 8px) var(--ha-space-2, 8px) 0;
+      object-fit: contain;
+      width: calc(100% - 2 * var(--ha-space-2, 8px));
     }
     /* Stand-in art, so it must read as absent rather than as the set. */
     .card img.noart {
@@ -1236,6 +1287,34 @@ export class LegoPanel extends LitElement {
       min-height: 48px;
       padding: 0;
     }
+    .searchbox {
+      position: relative;
+    }
+    .search::-webkit-search-cancel-button {
+      appearance: none;
+    }
+    .clear {
+      appearance: none;
+      background: none;
+      border: 0;
+      color: var(--lego-text-2);
+      cursor: pointer;
+      display: grid;
+      height: 48px;
+      place-items: center;
+      position: absolute;
+      right: 0;
+      top: 0;
+      width: 48px;
+    }
+    .busy {
+      opacity: 0.5;
+      pointer-events: none;
+      transition: opacity 150ms;
+    }
+    .switching {
+      padding: 0 var(--ha-space-4, 16px);
+    }
     .search {
       background: var(--lego-ground);
       border: var(--lego-line) solid var(--lego-outline);
@@ -1244,7 +1323,8 @@ export class LegoPanel extends LitElement {
       font: inherit;
       font-size: var(--ha-font-size-m, 14px);
       min-height: 48px;
-      padding: 0 var(--ha-space-3, 12px);
+      /* Room on the right for the clear button. */
+      padding: 0 48px 0 var(--ha-space-3, 12px);
       width: 100%;
       box-sizing: border-box;
     }
