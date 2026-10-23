@@ -124,6 +124,14 @@ class LegoReleaseCalendar(LegoCalendarBase):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_releases"
 
     @override
+    async def async_added_to_hass(self) -> None:
+        """Also redraw when a watched theme gains a set, not only the collection."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self._feeds.async_add_listener(self._handle_coordinator_update)
+        )
+
+    @override
     def _build_events(self, start: date, end: date) -> list[CalendarEvent]:
         """Build a release event per wanted or followed-theme set."""
         region = self.region

@@ -66,6 +66,35 @@ async def test_release_events_cover_wanted_and_watched_themes(
     assert "42200-1 New Technic Thing released" in summaries
 
 
+async def test_release_calendar_follows_feed_updates(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A new set in a watched theme moves the next release without a collection change."""
+    freezer.move_to("2023-06-01 12:00:00+00:00")
+    await setup_integration(hass, mock_config_entry)
+    assert "Brand New Bricks" not in hass.states.get(RELEASES).attributes["message"]
+
+    brickset.theme_sets.append(
+        make_set(
+            7,
+            "42300-1",
+            "Brand New Bricks",
+            theme="Technic",
+            year=2023,
+            first_available="2023-06-10T00:00:00Z",
+        )
+    )
+    await mock_config_entry.runtime_data.feeds.async_refresh()
+    await hass.async_block_till_done()
+
+    state = hass.states.get(RELEASES)
+    assert state.attributes["message"] == "42300-1 Brand New Bricks released"
+    assert state.attributes["start_time"].startswith("2023-06-10")
+
+
 @pytest.mark.usefixtures("brickset")
 async def test_anniversary_events(
     hass: HomeAssistant,
