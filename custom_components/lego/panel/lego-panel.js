@@ -5,9 +5,9 @@ var qe=Object.defineProperty;var Le=Object.getOwnPropertyDescriptor;var u=(i,t,e
         <header class=${this.narrow?"narrow":""}>
           <div class="title">
             ${this.narrow?o`<ha-menu-button
-                  .hass=${this.hass}
-                  .narrow=${this.narrow}
-                ></ha-menu-button>`:c}
+                    .hass=${this.hass}
+                    .narrow=${this.narrow}
+                  ></ha-menu-button>`:c}
             <img class="logo" src=${Me} alt="" />
             <h1>LEGO</h1>
           </div>
@@ -32,8 +32,8 @@ var qe=Object.defineProperty;var Le=Object.getOwnPropertyDescriptor;var u=(i,t,e
           </div>
         </header>
         ${this._switching?o`<p class="muted switching" role="status">
-              Loading ${this._switching}…
-            </p>`:c}
+                Loading ${this._switching}…
+              </p>`:c}
         <div
           class=${this._switching?"busy":""}
           aria-busy=${!!this._switching}
@@ -41,17 +41,18 @@ var qe=Object.defineProperty;var Le=Object.getOwnPropertyDescriptor;var u=(i,t,e
           ${this._error?this._renderError(this._error,()=>{this._load()}):this._tab==="home"?this._renderHome():this._renderCollection()}
         </div>
         ${this._writeError?o`<div class="toast" role="alert">
-              <span
-                >Brickset would not save that change: ${this._writeError}</span
-              >
-              <button
-                class="dismiss"
-                aria-label="Dismiss"
-                @click=${()=>this._writeError=""}
-              >
-                <ha-icon icon="mdi:close"></ha-icon>
-              </button>
-            </div>`:c}
+                <span
+                  >Brickset would not save that change:
+                  ${this._writeError}</span
+                >
+                <button
+                  class="dismiss"
+                  aria-label="Dismiss"
+                  @click=${()=>this._writeError=""}
+                >
+                  <ha-icon icon="mdi:close"></ha-icon>
+                </button>
+              </div>`:c}
       </div>
     `}_renderError(e,s){return o`<div class="error" role="alert">
       <p>${e}</p>
@@ -84,8 +85,8 @@ var qe=Object.defineProperty;var Le=Object.getOwnPropertyDescriptor;var u=(i,t,e
         </div>
         ${this._customising?this._renderCustomise():c}
         ${e.length?e.map(s=>this._renderRow(s)):o`<p class="muted">
-              Every row is hidden. Choose Customise to bring some back.
-            </p>`}
+                Every row is hidden. Choose Customise to bring some back.
+              </p>`}
       </div>
     `}_renderCustomise(){let e=this._dash?.hidden??[],s=this._availableRows();return o`
       <section class="row customise" aria-label="Rows on this page">
@@ -109,9 +110,9 @@ var qe=Object.defineProperty;var Le=Object.getOwnPropertyDescriptor;var u=(i,t,e
             `)}
         </ul>
         ${this._dash?.releases?c:o`<p class="muted">
-              For Out recently and Coming soon, turn on Follow releases across
-              all themes in the integration's options.
-            </p>`}
+                For Out recently and Coming soon, turn on Follow releases across
+                all themes in the integration's options.
+              </p>`}
       </section>
     `}_renderReleases(e,s){let r=this._dash?.releases;return r?.status==="fetching"?o`<p class="muted">Fetching this year's releases…</p>`:r?.status==="failed"?o`<p class="muted">
         Couldn't fetch this year's releases. They're tried again every few hours
@@ -173,8 +174,8 @@ var qe=Object.defineProperty;var Le=Object.getOwnPropertyDescriptor;var u=(i,t,e
         >
           ${at(this._dash?.last_synced??null,new Date)}.
           ${r?o`Daily budget spent, ${e.calls_today} of ${e.budget}
-              used, so this is the last sync's data. Updates resume
-              ${this._resumes(e.resets_at)}.`:o`Costs ${s} of ${e.remaining} calls left today.`}
+                used, so this is the last sync's data. Updates resume
+                ${this._resumes(e.resets_at)}.`:o`Costs ${s} of ${e.remaining} calls left today.`}
         </span>
       </div>
       ${this._refreshError?o`<p class="caveat bad">${this._refreshError}</p>`:c}
@@ -202,9 +203,9 @@ var qe=Object.defineProperty;var Le=Object.getOwnPropertyDescriptor;var u=(i,t,e
       <h3>By theme</h3>
       ${this._renderBars(He(this._dash?.by_theme??[],"value"),s=>this._money(s))}
       ${e.sets_missing_price?o`<p class="caveat">
-            ${e.sets_missing_price===1?"1 set has no published price and is not counted in the value.":`${this._num(e.sets_missing_price)} sets have no published
+              ${e.sets_missing_price===1?"1 set has no published price and is not counted in the value.":`${this._num(e.sets_missing_price)} sets have no published
                 price and are not counted in the value.`}
-          </p>`:c}
+            </p>`:c}
     `:o``}_renderPieces(){let e=this._dash?.stats;return e?o`
       <p class="headline">
         <span class="n">${this._num(e.pieces_owned)}</span>
@@ -296,19 +297,19 @@ var qe=Object.defineProperty;var Le=Object.getOwnPropertyDescriptor;var u=(i,t,e
               @input=${s=>{this._search(s.target.value)}}
             />
             ${this._query?o`<button
-                  class="clear"
-                  aria-label="Clear search"
-                  @click=${()=>{this._search("")}}
-                >
-                  <ha-icon icon="mdi:close"></ha-icon>
-                </button>`:c}
+                    class="clear"
+                    aria-label="Clear search"
+                    @click=${()=>{this._search("")}}
+                  >
+                    <ha-icon icon="mdi:close"></ha-icon>
+                  </button>`:c}
           </div>
           ${this._collectionError&&this._query.trim().length<2?this._renderError(this._collectionError,()=>{this._collectionError="",this._loadCollection()}):o`<p class="muted count">
-                  ${this._query.trim().length>=2?G(e.length,"matching set","matching sets"):G(e.length,"set owned","sets owned")}
-                </p>
-                <div class="grid">
-                  ${e.map(s=>this._card(s))}
-                </div>`}
+                    ${this._query.trim().length>=2?G(e.length,"matching set","matching sets"):G(e.length,"set owned","sets owned")}
+                  </p>
+                  <div class="grid">
+                    ${e.map(s=>this._card(s))}
+                  </div>`}
         </section>
       </div>
     `}_carousel(e,s,r="retirement"){return e.length?o`<div class="carousel">

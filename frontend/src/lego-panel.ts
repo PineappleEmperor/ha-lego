@@ -529,12 +529,14 @@ export class LegoPanel extends LitElement {
       <div class="app">
         <header class=${this.narrow ? "narrow" : ""}>
           <div class="title">
-            ${this.narrow
-              ? html`<ha-menu-button
-                  .hass=${this.hass}
-                  .narrow=${this.narrow}
-                ></ha-menu-button>`
-              : nothing}
+            ${
+              this.narrow
+                ? html`<ha-menu-button
+                    .hass=${this.hass}
+                    .narrow=${this.narrow}
+                  ></ha-menu-button>`
+                : nothing
+            }
             <img class="logo" src=${BRAND_ICON} alt="" />
             <h1>LEGO</h1>
           </div>
@@ -561,35 +563,42 @@ export class LegoPanel extends LitElement {
             </button>
           </div>
         </header>
-        ${this._switching
-          ? html`<p class="muted switching" role="status">
-              Loading ${this._switching}…
-            </p>`
-          : nothing}
+        ${
+          this._switching
+            ? html`<p class="muted switching" role="status">
+                Loading ${this._switching}…
+              </p>`
+            : nothing
+        }
         <div
           class=${this._switching ? "busy" : ""}
           aria-busy=${!!this._switching}
         >
-          ${this._error
-            ? this._renderError(this._error, () => void this._load())
-            : this._tab === "home"
-              ? this._renderHome()
-              : this._renderCollection()}
+          ${
+            this._error
+              ? this._renderError(this._error, () => void this._load())
+              : this._tab === "home"
+                ? this._renderHome()
+                : this._renderCollection()
+          }
         </div>
-        ${this._writeError
-          ? html`<div class="toast" role="alert">
-              <span
-                >Brickset would not save that change: ${this._writeError}</span
-              >
-              <button
-                class="dismiss"
-                aria-label="Dismiss"
-                @click=${() => (this._writeError = "")}
-              >
-                <ha-icon icon="mdi:close"></ha-icon>
-              </button>
-            </div>`
-          : nothing}
+        ${
+          this._writeError
+            ? html`<div class="toast" role="alert">
+                <span
+                  >Brickset would not save that change:
+                  ${this._writeError}</span
+                >
+                <button
+                  class="dismiss"
+                  aria-label="Dismiss"
+                  @click=${() => (this._writeError = "")}
+                >
+                  <ha-icon icon="mdi:close"></ha-icon>
+                </button>
+              </div>`
+            : nothing
+        }
       </div>
     `;
   }
@@ -667,11 +676,13 @@ export class LegoPanel extends LitElement {
           </button>
         </div>
         ${this._customising ? this._renderCustomise() : nothing}
-        ${visible.length
-          ? visible.map((row) => this._renderRow(row))
-          : html`<p class="muted">
-              Every row is hidden. Choose Customise to bring some back.
-            </p>`}
+        ${
+          visible.length
+            ? visible.map((row) => this._renderRow(row))
+            : html`<p class="muted">
+                Every row is hidden. Choose Customise to bring some back.
+              </p>`
+        }
       </div>
     `;
   }
@@ -706,12 +717,14 @@ export class LegoPanel extends LitElement {
             `,
           )}
         </ul>
-        ${this._dash?.releases
-          ? nothing
-          : html`<p class="muted">
-              For Out recently and Coming soon, turn on Follow releases across
-              all themes in the integration's options.
-            </p>`}
+        ${
+          this._dash?.releases
+            ? nothing
+            : html`<p class="muted">
+                For Out recently and Coming soon, turn on Follow releases across
+                all themes in the integration's options.
+              </p>`
+        }
       </section>
     `;
   }
@@ -757,11 +770,13 @@ export class LegoPanel extends LitElement {
                   : this._renderStats();
     return html`
       <section
-        class=${this._dragging === row
-          ? "row dragging"
-          : this._dragging && this._over === row
-            ? "row over"
-            : "row"}
+        class=${
+          this._dragging === row
+            ? "row dragging"
+            : this._dragging && this._over === row
+              ? "row over"
+              : "row"
+        }
         @dragover=${(ev: DragEvent) => ev.preventDefault()}
         @dragenter=${() => (this._over = row)}
         @drop=${() => this._onDrop(row)}
@@ -842,21 +857,27 @@ export class LegoPanel extends LitElement {
         </button>
         <span
           class="quota ${short || tight ? "warn" : ""}"
-          title=${this._dash?.last_synced
-            ? new Date(this._dash.last_synced).toLocaleString()
-            : nothing}
+          title=${
+            this._dash?.last_synced
+              ? new Date(this._dash.last_synced).toLocaleString()
+              : nothing
+          }
         >
           ${syncedAgo(this._dash?.last_synced ?? null, new Date())}.
-          ${short
-            ? html`Daily budget spent, ${quota.calls_today} of ${quota.budget}
-              used, so this is the last sync's data. Updates resume
-              ${this._resumes(quota.resets_at)}.`
-            : html`Costs ${cost} of ${quota.remaining} calls left today.`}
+          ${
+            short
+              ? html`Daily budget spent, ${quota.calls_today} of ${quota.budget}
+                used, so this is the last sync's data. Updates resume
+                ${this._resumes(quota.resets_at)}.`
+              : html`Costs ${cost} of ${quota.remaining} calls left today.`
+          }
         </span>
       </div>
-      ${this._refreshError
-        ? html`<p class="caveat bad">${this._refreshError}</p>`
-        : nothing}
+      ${
+        this._refreshError
+          ? html`<p class="caveat bad">${this._refreshError}</p>`
+          : nothing
+      }
     `;
   }
 
@@ -928,14 +949,18 @@ export class LegoPanel extends LitElement {
       ${this._renderBars(topThemes(this._dash?.by_theme ?? [], "value"), (v) =>
         this._money(v),
       )}
-      ${stats.sets_missing_price
-        ? html`<p class="caveat">
-            ${stats.sets_missing_price === 1
-              ? "1 set has no published price and is not counted in the value."
-              : `${this._num(stats.sets_missing_price)} sets have no published
-                price and are not counted in the value.`}
-          </p>`
-        : nothing}
+      ${
+        stats.sets_missing_price
+          ? html`<p class="caveat">
+              ${
+                stats.sets_missing_price === 1
+                  ? "1 set has no published price and is not counted in the value."
+                  : `${this._num(stats.sets_missing_price)} sets have no published
+                price and are not counted in the value.`
+              }
+            </p>`
+          : nothing
+      }
     `;
   }
 
@@ -1051,9 +1076,11 @@ export class LegoPanel extends LitElement {
             <line class="base" x1="0" y1="100" x2="100" y2="100"></line>
             <polygon class="wash" points=${area}></polygon>
             <polyline class="trace" points=${line}></polyline>
-            ${hover
-              ? svg`<line class="cross" x1=${x(hover)} y1="0" x2=${x(hover)} y2="100"></line>`
-              : nothing}
+            ${
+              hover
+                ? svg`<line class="cross" x1=${x(hover)} y1="0" x2=${x(hover)} y2="100"></line>`
+                : nothing
+            }
           </svg>
           <span
             class="dot"
@@ -1141,29 +1168,35 @@ export class LegoPanel extends LitElement {
               @input=${(ev: Event) =>
                 void this._search((ev.target as HTMLInputElement).value)}
             />
-            ${this._query
-              ? html`<button
-                  class="clear"
-                  aria-label="Clear search"
-                  @click=${() => void this._search("")}
-                >
-                  <ha-icon icon="mdi:close"></ha-icon>
-                </button>`
-              : nothing}
+            ${
+              this._query
+                ? html`<button
+                    class="clear"
+                    aria-label="Clear search"
+                    @click=${() => void this._search("")}
+                  >
+                    <ha-icon icon="mdi:close"></ha-icon>
+                  </button>`
+                : nothing
+            }
           </div>
-          ${this._collectionError && this._query.trim().length < 2
-            ? this._renderError(this._collectionError, () => {
-                this._collectionError = "";
-                void this._loadCollection();
-              })
-            : html`<p class="muted count">
-                  ${this._query.trim().length >= 2
-                    ? count(showing.length, "matching set", "matching sets")
-                    : count(showing.length, "set owned", "sets owned")}
-                </p>
-                <div class="grid">
-                  ${showing.map((item) => this._card(item))}
-                </div>`}
+          ${
+            this._collectionError && this._query.trim().length < 2
+              ? this._renderError(this._collectionError, () => {
+                  this._collectionError = "";
+                  void this._loadCollection();
+                })
+              : html`<p class="muted count">
+                    ${
+                      this._query.trim().length >= 2
+                        ? count(showing.length, "matching set", "matching sets")
+                        : count(showing.length, "set owned", "sets owned")
+                    }
+                  </p>
+                  <div class="grid">
+                    ${showing.map((item) => this._card(item))}
+                  </div>`
+          }
         </section>
       </div>
     `;
@@ -1224,9 +1257,11 @@ export class LegoPanel extends LitElement {
             item,
             html`<span
               class=${isNamed(item) ? "name" : "name unnamed"}
-              title=${isNamed(item)
-                ? item.name
-                : "Brickset has not published a name yet"}
+              title=${
+                isNamed(item)
+                  ? item.name
+                  : "Brickset has not published a name yet"
+              }
               >${displayName(item)}</span
             >`,
           )}
@@ -1252,19 +1287,19 @@ export class LegoPanel extends LitElement {
           >
           <div class="foot">
             <span
-              class=${item.owned
-                ? "state own"
-                : item.wanted
-                  ? "state want"
-                  : "state"}
+              class=${
+                item.owned ? "state own" : item.wanted ? "state want" : "state"
+              }
             >
-              ${item.owned
-                ? item.qty_owned > 1
-                  ? `Owned ×${item.qty_owned}`
-                  : "Owned"
-                : item.wanted
-                  ? "Wanted"
-                  : ""}
+              ${
+                item.owned
+                  ? item.qty_owned > 1
+                    ? `Owned ×${item.qty_owned}`
+                    : "Owned"
+                  : item.wanted
+                    ? "Wanted"
+                    : ""
+              }
             </span>
             <button
               class=${[
@@ -1273,12 +1308,16 @@ export class LegoPanel extends LitElement {
                 this._pending.has(item.set_number) ? "pending" : "",
               ].join(" ")}
               ?disabled=${this._pending.has(item.set_number)}
-              title=${item.owned
-                ? "Remove from your collection"
-                : "Add to your collection"}
-              aria-label=${item.owned
-                ? "Remove from your collection"
-                : "Add to your collection"}
+              title=${
+                item.owned
+                  ? "Remove from your collection"
+                  : "Add to your collection"
+              }
+              aria-label=${
+                item.owned
+                  ? "Remove from your collection"
+                  : "Add to your collection"
+              }
               @click=${() => void this._toggleOwned(item)}
             >
               <ha-icon icon=${item.owned ? "mdi:check" : "mdi:plus"}></ha-icon>
