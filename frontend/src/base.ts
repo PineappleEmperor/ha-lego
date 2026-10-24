@@ -14,6 +14,7 @@ import {
   formatPrice,
   isNamed,
   ownershipCall,
+  webUrl,
   whenLabel,
   whenTone,
   type DateFocus,
@@ -240,10 +241,11 @@ export abstract class LegoRow extends LitElement {
     content: TemplateResult,
     decorative = false,
   ): TemplateResult {
-    if (!item.url) return content;
+    const href = webUrl(item.url);
+    if (!href) return content;
     return html`<a
       class="open"
-      href=${item.url}
+      href=${href}
       target="_blank"
       rel="noopener noreferrer"
       tabindex=${decorative ? "-1" : nothing}
@@ -258,6 +260,7 @@ export abstract class LegoRow extends LitElement {
     themeColour?: string,
   ): TemplateResult {
     const now = new Date();
+    const image = webUrl(item.image);
     const price = formatPrice(
       item.retail_price,
       this.dash?.currency ?? null,
@@ -267,8 +270,8 @@ export abstract class LegoRow extends LitElement {
       <article class="card">
         ${this.linked(
           item,
-          item.image
-            ? html`<img src=${item.image} alt="" loading="lazy" />`
+          image
+            ? html`<img src=${image} alt="" loading="lazy" />`
             : html`<img
                 class="noart"
                 src=${BRAND_ICON}

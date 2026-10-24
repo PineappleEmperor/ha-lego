@@ -8,6 +8,7 @@ import {
   stackOffsets,
   stackTimeline,
   toggleTheme,
+  webUrl,
 } from "../src/format";
 import { LOGO, RAINBOW } from "../src/generated/brand";
 import { slotColour, themeSlots } from "../src/palette";
@@ -230,5 +231,30 @@ describe("generated drawings", () => {
     ]);
     const lengths = RAINBOW.map((brick) => Number(brick.size.split("x")[1]));
     expect([...lengths].sort((a, b) => a - b)).toEqual(lengths);
+  });
+});
+
+describe("links and pictures from Brickset's data", () => {
+  it("keeps web addresses", () => {
+    expect(webUrl("https://brickset.com/sets/10497-1")).toBe(
+      "https://brickset.com/sets/10497-1",
+    );
+    expect(webUrl("http://images.brickset.com/sets/10497-1.jpg")).toBe(
+      "http://images.brickset.com/sets/10497-1.jpg",
+    );
+  });
+
+  it("drops anything that could run or embed instead", () => {
+    expect(webUrl("javascript:alert(1)")).toBeNull();
+    expect(webUrl(" JavaScript:alert(1)")).toBeNull();
+    expect(webUrl("data:text/html,<script>alert(1)</script>")).toBeNull();
+    expect(webUrl("vbscript:msgbox(1)")).toBeNull();
+  });
+
+  it("drops what is missing or not an address at all", () => {
+    expect(webUrl(null)).toBeNull();
+    expect(webUrl(undefined)).toBeNull();
+    expect(webUrl("")).toBeNull();
+    expect(webUrl("not a url")).toBeNull();
   });
 });

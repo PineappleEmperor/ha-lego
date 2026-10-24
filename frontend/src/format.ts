@@ -217,6 +217,23 @@ export function whenLabel(
   return isNamed(item) ? "Date unknown" : "Details tbd";
 }
 
+/**
+ * A link or picture address from Brickset's data, kept only when it is a web
+ * address. The data is copied from the API as-is, and Lit binds a `javascript:`
+ * URL into an href as readily as any other.
+ */
+export function webUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:"
+      ? parsed.href
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function isNamed(item: Pick<LegoSet, "name">): boolean {
   const name = (item.name ?? "").trim();
   return name !== "" && name !== UNNAMED;
