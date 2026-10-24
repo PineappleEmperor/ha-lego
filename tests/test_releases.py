@@ -24,7 +24,7 @@ from custom_components.lego.const import (
     EVENT_NEW_SET,
 )
 from custom_components.lego.diagnostics import async_get_config_entry_diagnostics
-from custom_components.lego.panel import dashboard_payload
+from custom_components.lego.panel import releases_payload
 
 from .conftest import BricksetServer, make_set, setup_integration
 
@@ -63,13 +63,13 @@ def _year_calls(brickset: BricksetServer) -> list[dict[str, Any]]:
 
 
 def _rows(entry: MockConfigEntry) -> dict[str, Any]:
-    """Return the panel's release rows, by name, with their status."""
-    rows = dashboard_payload(entry, [], [])["releases"]
-    assert rows is not None
+    """Return the panel's Out recently and Coming soon rows, by name, with status."""
+    recent = releases_payload(entry, "all", [], "past1")
+    upcoming = releases_payload(entry, "all", [], "next1")
     return {
-        "recent": [item["name"] for item in rows["recent"]],
-        "upcoming": [item["name"] for item in rows["upcoming"]],
-        "status": rows["status"],
+        "recent": [item["name"] for item in recent["sets"]],
+        "upcoming": [item["name"] for item in upcoming["sets"]],
+        "status": recent["status"],
     }
 
 
@@ -86,7 +86,7 @@ async def test_existing_entries_keep_the_rows_off(
     assert _year_calls(brickset) == []
     client = await hass_ws_client(hass)
     await client.send_json_auto_id({"type": "lego/dashboard"})
-    assert (await client.receive_json())["result"]["releases"] is None
+    assert (await client.receive_json())["result"]["release_status"]["all"] is None
 
 
 async def test_rows_keep_four_weeks_either_side(
@@ -131,8 +131,8 @@ async def test_rows_keep_four_weeks_either_side(
         "status": "ready",
     }
     # The card shows the date the row was sorted by, not "Date unknown".
-    rows = dashboard_payload(entry, [], [])["releases"]
-    assert rows["upcoming"][1]["available_from"] == ahead(3).isoformat()
+    upcoming = releases_payload(entry, "all", [], "next1")["sets"]
+    assert upcoming[1]["available_from"] == ahead(3).isoformat()
 
 
 @pytest.mark.parametrize(

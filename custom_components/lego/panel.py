@@ -1,4 +1,4 @@
-"""The optional sidebar panel: registration and its per-user row order."""
+"""The optional sidebar panel and dashboard cards: registration and per-user layout."""
 
 from datetime import date, timedelta
 from pathlib import Path
@@ -19,6 +19,7 @@ from .const import (
     DEFAULT_PANEL,
     DOMAIN,
     PANEL_COMPONENT,
+    PANEL_DEFAULT_COLLAPSED,
     PANEL_DEFAULT_HIDDEN,
     PANEL_ICON_URL,
     PANEL_MODULE_URL,
@@ -26,24 +27,25 @@ from .const import (
     PANEL_STORAGE_KEY,
     PANEL_URL_PATH,
     REGION_CURRENCY,
+    RELEASE_MODES,
+    RELEASE_ROWS,
     RELEASES_WINDOW_DAYS,
     STORAGE_VERSION,
 )
 
 if TYPE_CHECKING:
     from .catalogue import CatalogueEntry
-    from .coordinator import LegoConfigEntry
+    from .coordinator import FeedsData, LegoConfigEntry
     from .models import LegoSet
 
-# The feeds hold a whole year of sets; the panel's "New in my themes" row shows only
-# those out within this window, or still to come.
-NEW_FOR = timedelta(days=90)
+# "Past 3 months" and "Next 3 months": thirteen weeks.
+QUARTER_DAYS = 91
 
 REGISTERED: HassKey[bool] = HassKey(f"{DOMAIN}_panel_registered")
 
 
 class PanelStore:
-    """Remembers each user's row order and chosen account for the panel."""
+    """Remembers each user's panel layout, release filters and chosen account."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialise an empty store."""
@@ -52,19 +54,34 @@ class PanelStore:
         )
         self._rows: dict[str, list[str]] = {}
         self._hidden: dict[str, list[str]] = {}
+        self._collapsed: dict[str, list[str]] = {}
+        self._release_mode: dict[str, str] = {}
+        self._release_filters: dict[str, dict[str, dict[str, Any]]] = {}
         self._accounts: dict[str, str] = {}
 
     async def async_load(self) -> None:
-        """Read the stored orders and account choices."""
+        """Read everything stored, each user's settings under one key."""
         stored = await self._store.async_load() or {}
         self._rows = {k: list(v) for k, v in stored.get("rows", {}).items()}
         self._hidden = {k: list(v) for k, v in stored.get("hidden", {}).items()}
+        self._collapsed = {k: list(v) for k, v in stored.get("collapsed", {}).items()}
+        self._release_mode = dict(stored.get("release_mode", {}))
+        self._release_filters = {
+            k: dict(v) for k, v in stored.get("release_filters", {}).items()
+        }
         self._accounts = {k: str(v) for k, v in stored.get("accounts", {}).items()}
 
     async def _async_save(self) -> None:
-        """Write both maps, since they share one storage key."""
+        """Write every map, since they share one storage key."""
         await self._store.async_save(
-            {"rows": self._rows, "hidden": self._hidden, "accounts": self._accounts}
+            {
+                "rows": self._rows,
+                "hidden": self._hidden,
+                "collapsed": self._collapsed,
+                "release_mode": self._release_mode,
+                "release_filters": self._release_filters,
+                "accounts": self._accounts,
+            }
         )
 
     def rows(self, user_id: str | None) -> list[str]:
@@ -72,10 +89,18 @@ class PanelStore:
         saved = self._rows.get(user_id or "")
         if not saved:
             return list(PANEL_ROWS)
-        # A row added by a later version has no saved position, so it goes last
-        # rather than disappearing.
         kept = [row for row in saved if row in PANEL_ROWS]
-        return kept + [row for row in PANEL_ROWS if row not in kept]
+        missing = [row for row in PANEL_ROWS if row not in kept]
+        if "releases" in missing:
+            # The combined row replaces the release rows a user already placed, so
+            # it takes their position rather than sinking to the bottom.
+            missing.remove("releases")
+            at = next(
+                (i for i, row in enumerate(kept) if row in RELEASE_ROWS), len(kept)
+            )
+            kept.insert(at, "releases")
+        # Any other row added by a later version goes last rather than disappearing.
+        return kept + missing
 
     def hidden(self, user_id: str | None) -> list[str]:
         """Return the rows a user has taken off their panel."""
@@ -84,16 +109,58 @@ class PanelStore:
             return list(PANEL_DEFAULT_HIDDEN)
         return [row for row in saved if row in PANEL_ROWS]
 
-    async def async_set_rows(
-        self, user_id: str, rows: list[str] | None, hidden: list[str] | None = None
-    ) -> tuple[list[str], list[str]]:
-        """Save a user's row order and hidden rows, ignoring anything unrecognised."""
+    def collapsed(self, user_id: str | None) -> list[str]:
+        """Return the rows that open folded to their header for this user."""
+        saved = self._collapsed.get(user_id or "")
+        if saved is None:
+            return list(PANEL_DEFAULT_COLLAPSED)
+        return [row for row in saved if row in PANEL_ROWS]
+
+    def settings(self, user_id: str | None) -> dict[str, Any]:
+        """Return everything the panel lays itself out from, for one user."""
+        key = user_id or ""
+        return {
+            "rows": self.rows(user_id),
+            "hidden": self.hidden(user_id),
+            "collapsed": self.collapsed(user_id),
+            "release_mode": self._release_mode.get(key, RELEASE_MODES[0]),
+            "release_filters": {
+                row: dict(value)
+                for row, value in self._release_filters.get(key, {}).items()
+                if row in RELEASE_ROWS
+            },
+        }
+
+    async def async_update(
+        self,
+        user_id: str,
+        *,
+        rows: list[str] | None = None,
+        hidden: list[str] | None = None,
+        collapsed: list[str] | None = None,
+        release_mode: str | None = None,
+        release_filters: dict[str, dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Save whichever settings were sent, ignoring rows this version lacks."""
         if rows is not None:
             self._rows[user_id] = [row for row in rows if row in PANEL_ROWS]
         if hidden is not None:
             self._hidden[user_id] = [row for row in hidden if row in PANEL_ROWS]
+        if collapsed is not None:
+            self._collapsed[user_id] = [row for row in collapsed if row in PANEL_ROWS]
+        if release_mode is not None:
+            self._release_mode[user_id] = release_mode
+        if release_filters is not None:
+            merged = self._release_filters.setdefault(user_id, {})
+            merged.update(
+                {
+                    row: value
+                    for row, value in release_filters.items()
+                    if row in RELEASE_ROWS
+                }
+            )
         await self._async_save()
-        return self.rows(user_id), self.hidden(user_id)
+        return self.settings(user_id)
 
     def account(self, user_id: str | None) -> str | None:
         """Return the entry id this user last looked at, if any."""
@@ -108,8 +175,13 @@ class PanelStore:
 PANEL_STORE: HassKey[PanelStore] = HassKey(f"{DOMAIN}_panel_store")
 
 
+def _module_url(version: Any) -> str:
+    """Return the bundle's URL, versioned so a browser drops an old copy."""
+    return f"{PANEL_MODULE_URL}?v={version}"
+
+
 async def async_setup_panel_static(hass: HomeAssistant) -> None:
-    """Serve the built panel bundle and the brand icon it uses for missing art."""
+    """Serve the bundle and brand icon, and load the bundle's cards on every page."""
     here = Path(__file__).parent
     await hass.http.async_register_static_paths(
         [
@@ -119,6 +191,10 @@ async def async_setup_panel_static(hass: HomeAssistant) -> None:
             StaticPathConfig(PANEL_ICON_URL, str(here / "brand" / "icon.png"), True),
         ]
     )
+    integration = await async_get_integration(hass, DOMAIN)
+    # The panel loads this exact URL too, and a browser evaluates a module once per
+    # URL, so the panel page does not define the cards twice.
+    frontend.add_extra_js_url(hass, _module_url(integration.version))
 
 
 def panel_wanted(hass: HomeAssistant) -> bool:
@@ -145,7 +221,7 @@ async def async_refresh_panel(hass: HomeAssistant) -> None:
             hass,
             frontend_url_path=PANEL_URL_PATH,
             webcomponent_name=PANEL_COMPONENT,
-            module_url=f"{PANEL_MODULE_URL}?v={integration.version}",
+            module_url=_module_url(integration.version),
             sidebar_title="LEGO",
             sidebar_icon="mdi:toy-brick",
             require_admin=False,
@@ -219,46 +295,112 @@ def _wishlist_key(
     )
 
 
-def _new_in_theme(sets: list[LegoSet], region: str, today: date) -> list[LegoSet]:
-    """Keep what is still news: upcoming or out within NEW_FOR, newest first."""
+def span_window(span: str, today: date) -> tuple[date, date]:
+    """Return the first and last release day a span covers."""
+    month = timedelta(days=RELEASES_WINDOW_DAYS)
+    quarter = timedelta(days=QUARTER_DAYS)
+    tomorrow = today + timedelta(days=1)
+    windows = {
+        "year": (date(today.year, 1, 1), today),
+        "past3": (today - quarter, today),
+        "past1": (today - month, today),
+        "next1": (tomorrow, today + month),
+        "next3": (tomorrow, today + quarter),
+    }
+    return windows.get(span, (tomorrow, date.max))
 
-    def is_new(item: LegoSet) -> bool:
+
+def _is_set(item: LegoSet) -> bool:
+    """Whether an entry is a set, not a keyring, magnet or book filed beside it."""
+    return item.category in ("", "Normal")
+
+
+def release_sets(
+    sets: list[LegoSet], region: str, span: str, today: date
+) -> list[LegoSet]:
+    """Pick the sets out within a span: newest first behind today, soonest ahead."""
+    start, end = span_window(span, today)
+    dated: list[tuple[date, LegoSet]] = []
+    undated: list[LegoSet] = []
+    for item in filter(_is_set, sets):
         released = item.release_date(region)
         if released is None:
-            # Announced without a date yet is news; released without one is not.
-            return not item.released
-        return released >= today - NEW_FOR
+            # Announced without a date is still to come; out without one is not news.
+            if span == "coming" and not item.released:
+                undated.append(item)
+            continue
+        if start <= released <= end:
+            dated.append((released, item))
+    if start > today:
+        dated.sort(key=lambda pair: (pair[0], pair[1].number))
+    else:
+        dated.sort(key=lambda pair: (-pair[0].toordinal(), pair[1].number))
+    return [item for _, item in dated] + sorted(undated, key=lambda item: item.number)
 
-    def newest_first(item: LegoSet) -> tuple[bool, int, str]:
-        released = item.release_date(region)
-        return (released is None, -(released or date.min).toordinal(), item.number)
 
-    return sorted(filter(is_new, sets), key=newest_first)
-
-
-def _releases(
+def release_timeline(
     sets: list[LegoSet], region: str, today: date
-) -> dict[str, list[LegoSet]]:
-    """Split the year's sets into out recently, newest first, and due soon."""
-    window = timedelta(days=RELEASES_WINDOW_DAYS)
-    recent: list[tuple[date, LegoSet]] = []
-    upcoming: list[tuple[date, LegoSet]] = []
-    for item in sets:
-        # Keyrings, magnets and books share the year's list with the sets.
-        if item.category not in ("", "Normal"):
-            continue
-        released = item.release_date(region)
-        if released is None:
-            continue
-        if today - window <= released <= today:
-            recent.append((released, item))
-        elif today < released <= today + window:
-            upcoming.append((released, item))
-    recent.sort(key=lambda pair: (-pair[0].toordinal(), pair[1].number))
-    upcoming.sort(key=lambda pair: (pair[0], pair[1].number))
+) -> list[dict[str, str]]:
+    """Every dated set from 1 January to the end of next March, oldest first."""
+    start, end = date(today.year, 1, 1), date(today.year + 1, 3, 31)
+    points = [
+        (released, item.theme)
+        for item in filter(_is_set, sets)
+        if (released := item.release_date(region)) is not None
+        and start <= released <= end
+    ]
+    return [{"date": day.isoformat(), "theme": theme} for day, theme in sorted(points)]
+
+
+def _release_status(entry: LegoConfigEntry, scope: str) -> str | None:
+    """Say whether a scope's sets are in, still coming, failed, or not followed."""
+    feeds = entry.runtime_data.feeds
+    feed = feeds.data
+    if scope == "all" and not feeds.releases:
+        return None
+    if scope == "mine" and not feeds.themes:
+        return None
+    have = feed is not None and (scope == "mine" or feed.releases is not None)
+    # Fetched in the background after setup, so empty may only mean not yet.
+    if have:
+        return "ready"
+    return "fetching" if feeds.last_update_success else "failed"
+
+
+def _scope_sets(entry: LegoConfigEntry, scope: str, themes: list[str]) -> list[LegoSet]:
+    """Return every set a scope covers: all of LEGO, or the followed themes picked."""
+    # Typed as always present, but None until the first poll lands.
+    feed: FeedsData | None = entry.runtime_data.feeds.data
+    if feed is None:
+        return []
+    if scope == "all":
+        return list(feed.releases or [])
+    picked = {theme.casefold() for theme in themes}
+    found: dict[str, LegoSet] = {}
+    for theme, theme_sets in feed.themes.items():
+        if not picked or theme.casefold() in picked:
+            found.update({item.number: item for item in theme_sets})
+    return list(found.values())
+
+
+def releases_payload(
+    entry: LegoConfigEntry, scope: str, themes: list[str], span: str
+) -> dict[str, Any]:
+    """Build one release row: its sets for the span and the year's timeline."""
+    region = entry.runtime_data.collection.region
+    today = dt_util.now().date()
+    sets = _scope_sets(entry, scope, themes)
+    start, end = span_window(span, today)
     return {
-        "recent": [item for _, item in recent],
-        "upcoming": [item for _, item in upcoming],
+        "status": _release_status(entry, scope),
+        "span": {
+            "from": start.isoformat(),
+            "to": None if end == date.max else end.isoformat(),
+        },
+        "sets": [
+            summarise(item, region) for item in release_sets(sets, region, span, today)
+        ],
+        "timeline": release_timeline(sets, region, today),
     }
 
 
@@ -269,11 +411,20 @@ def _by_theme(owned: list[LegoSet], region: str) -> list[dict[str, Any]]:
         qty = max(lego_set.collection.qty_owned, 1)
         row = themes.setdefault(
             lego_set.theme or "Other",
-            {"theme": lego_set.theme or "Other", "value": 0.0, "pieces": 0, "sets": 0},
+            {
+                "theme": lego_set.theme or "Other",
+                "value": 0.0,
+                "pieces": 0,
+                "sets": 0,
+                "set_numbers": [],
+            },
         )
         row["value"] += (lego_set.price(region) or 0.0) * qty
         row["pieces"] += (lego_set.pieces or 0) * qty
         row["sets"] += qty
+        row["set_numbers"].append(lego_set.number)
+    for row in themes.values():
+        row["set_numbers"].sort()
     return sorted(themes.values(), key=lambda row: (-row["value"], row["theme"]))
 
 
@@ -294,7 +445,7 @@ def _statistic_ids(
 
 
 def dashboard_payload(
-    entry: LegoConfigEntry, rows: list[str], hidden: list[str]
+    entry: LegoConfigEntry, settings: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """Build everything the panel's home view needs in one reply."""
     collection = entry.runtime_data.collection
@@ -311,34 +462,21 @@ def dashboard_payload(
         data.wanted if data else [],
         key=lambda item: _wishlist_key(item, region, today),
     )
-    # None tells the panel the option is off, so it offers no release rows at all.
-    feeds = entry.runtime_data.feeds
-    feed = feeds.data
-    release_rows: dict[str, Any] | None = None
-    if feeds.releases:
-        release_rows = {
-            key: [summarise(item, region) for item in sets]
-            for key, sets in _releases(
-                (feed.releases if feed else None) or [], region, today
-            ).items()
-        }
-        # Fetched in the background after setup, so empty may only mean not yet.
-        release_rows["status"] = (
-            "ready"
-            if feed is not None and feed.releases is not None
-            else "fetching"
-            if feeds.last_update_success
-            else "failed"
-        )
+    settings = settings or {
+        "rows": list(PANEL_ROWS),
+        "hidden": list(PANEL_DEFAULT_HIDDEN),
+        "collapsed": list(PANEL_DEFAULT_COLLAPSED),
+        "release_mode": RELEASE_MODES[0],
+        "release_filters": {},
+    }
     return {
         "entry_id": entry.entry_id,
         "device_id": device.id if device else None,
-        "hidden": hidden,
+        **settings,
         # Current totals per theme, and the sensors whose recorded statistics
         # give the same totals over time.
         "by_theme": _by_theme(data.owned if data else [], region),
         "history": _statistic_ids(collection.hass, entry),
-        "rows": rows,
         "region": region,
         # Prices are LEGO.com RRP in the region's own currency.
         "currency": REGION_CURRENCY.get(region),
@@ -364,11 +502,11 @@ def dashboard_payload(
             "sets_missing_price": summary.sets_missing_price if summary else 0,
         },
         "wishlist": [summarise(item, region) for item in wanted],
-        "releases": release_rows,
-        "themes": {
-            theme: [
-                summarise(item, region) for item in _new_in_theme(sets, region, today)
-            ]
-            for theme, sets in (feed.themes if feed else {}).items()
+        # The release rows fetch their own sets through lego/releases; the home view
+        # says only which scopes exist and whether their data is in. None means off.
+        "release_status": {
+            "all": _release_status(entry, "all"),
+            "mine": _release_status(entry, "mine"),
         },
+        "followed": list(entry.runtime_data.feeds.themes),
     }

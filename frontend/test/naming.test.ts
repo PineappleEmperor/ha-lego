@@ -14,7 +14,7 @@ import {
   syncedAgo,
   whenLabel,
   whenTone,
-} from "../src/lego-panel";
+} from "../src/format";
 
 describe("set naming", () => {
   it("treats a normal name as named", () => {
@@ -264,15 +264,52 @@ describe("history and theme totals", () => {
 
   it("keeps the biggest themes and folds the rest into Other", () => {
     const totals = [
-      { theme: "Icons", value: 900, pieces: 5000, sets: 3 },
-      { theme: "Technic", value: 300, pieces: 9000, sets: 2 },
-      { theme: "City", value: 50, pieces: 400, sets: 1 },
-      { theme: "Gear", value: 0, pieces: 0, sets: 1 },
+      {
+        theme: "Icons",
+        value: 900,
+        pieces: 5000,
+        sets: 3,
+        set_numbers: ["10307-1"],
+      },
+      {
+        theme: "Technic",
+        value: 300,
+        pieces: 9000,
+        sets: 2,
+        set_numbers: ["42115-1"],
+      },
+      {
+        theme: "City",
+        value: 50,
+        pieces: 400,
+        sets: 1,
+        set_numbers: ["60414-1"],
+      },
+      { theme: "Gear", value: 0, pieces: 0, sets: 1, set_numbers: ["853-1"] },
     ];
     expect(topThemes(totals, "value", 2)).toEqual([
-      { theme: "Icons", amount: 900, sets: 3 },
-      { theme: "Technic", amount: 300, sets: 2 },
-      { theme: "Other (1 theme)", amount: 50, sets: 1 },
+      {
+        theme: "Icons",
+        amount: 900,
+        sets: 3,
+        setNumbers: ["10307-1"],
+        other: false,
+      },
+      {
+        theme: "Technic",
+        amount: 300,
+        sets: 2,
+        setNumbers: ["42115-1"],
+        other: false,
+      },
+      // The fold keeps the set numbers behind it, for the chart's tooltip.
+      {
+        theme: "Other (1 theme)",
+        amount: 50,
+        sets: 1,
+        setNumbers: ["60414-1"],
+        other: true,
+      },
     ]);
     expect(topThemes(totals, "pieces", 1)[0].theme).toBe("Technic");
   });
