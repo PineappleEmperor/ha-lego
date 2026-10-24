@@ -3,6 +3,7 @@ import { property, state } from "lit/decorators.js";
 
 import { invalidate } from "./api";
 import { ROW_META, define, type LegoRow } from "./base";
+import "./cards";
 import {
   ROW_SPANS,
   SPAN_LABELS,
