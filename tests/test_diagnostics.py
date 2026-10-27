@@ -86,6 +86,7 @@ async def test_diagnostics_include_quota_and_coordinator_state(
     assert feeds["calls_per_poll"] == 1
     assert feeds["release_sets"] is None
     assert diagnostics["summary"]["pieces_owned"] == 7122
+    assert "value" not in diagnostics["summary"]
 
 
 @pytest.mark.usefixtures("brickset")

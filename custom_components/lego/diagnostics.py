@@ -92,7 +92,8 @@ async def async_get_config_entry_diagnostics(
                 "pieces_owned": data.summary.pieces_owned,
                 "minifigs_owned": data.summary.minifigs_owned,
                 "sets_wanted": data.summary.sets_wanted,
-                "value": data.summary.value,
+                # The value is left out: it says what is in the house, and a bug in
+                # it shows as sets_missing_price.
                 "sets_missing_price": data.summary.sets_missing_price,
             }
             if data
