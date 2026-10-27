@@ -480,6 +480,50 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         return self.releases or bool(self.themes)
 
     @property
+    def follow_cost(self) -> int:
+        """Return the billed calls following one more theme spends at once."""
+        if self.releases:
+            # The theme is cut from the years already read.
+            return 0
+        if self.themes:
+            # Every theme rides in the same batched call, so it is one poll.
+            return self.poll_cost
+        return feeds_poll_estimate(dt_util.now().date(), True, False)
+
+    async def async_themes_changed(self) -> bool:
+        """Follow the themes the options now name, without reloading the entry.
+
+        Returns whether every followed theme's sets are in hand, rather than waiting
+        on the next poll.
+        """
+        self.update_interval = feeds_interval(self.releases) if self.active else None
+        previous = self._previous
+        today = dt_util.now().date()
+        if self.releases:
+            if previous is None or previous.releases is None:
+                # The first read of the year is still to come, and will cut them.
+                return False
+            themes = self._cut_themes(previous.releases)
+        elif previous is not None and set(self.themes) <= previous.themes.keys():
+            # Only unfollowed: what is left was fetched already.
+            themes = {theme: previous.themes[theme] for theme in self.themes}
+        else:
+            await self.async_refresh()
+            return self.last_update_success and set(self.themes) <= (
+                self.data.themes.keys() if self.data else set()
+            )
+        self.async_set_updated_data(
+            FeedsData(
+                themes={
+                    theme: newest_first(sets, self.region, today)
+                    for theme, sets in themes.items()
+                },
+                releases=previous.releases if previous else None,
+            )
+        )
+        return True
+
+    @property
     def measured_cost(self) -> int | None:
         """Return the billed calls the last poll spent, or None before one has."""
         return self._measured
@@ -590,6 +634,10 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
             sets.extend(fetched)
         # Reading every theme costs the same however many are followed.
         self._clear_paging_issue()
+        return FeedsData(themes=self._cut_themes(sets), releases=sets)
+
+    def _cut_themes(self, sets: list[LegoSet]) -> dict[str, list[LegoSet]]:
+        """Pick each followed theme's sets out of a read of whole years."""
         themes: dict[str, list[LegoSet]] = {theme: [] for theme in self.themes}
         # A theme typed by hand need not match Brickset's capitals, which its own
         # theme filter forgives.
@@ -597,7 +645,7 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         for lego_set in sets:
             if (theme := followed.get((lego_set.theme or "").casefold())) is not None:
                 themes[theme].append(lego_set)
-        return FeedsData(themes=themes, releases=sets)
+        return themes
 
     async def _fetch_themes(
         self, years: list[int], today: date
@@ -689,7 +737,10 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         region = self.region
         device_id = self.device_id
         for theme, sets in feeds.items():
-            seen = {lego_set.number for lego_set in previous.themes.get(theme, [])}
+            if (before := previous.themes.get(theme)) is None:
+                # A theme followed since the last poll is baselined like the first.
+                continue
+            seen = {lego_set.number for lego_set in before}
             for lego_set in sets:
                 if lego_set.number in seen:
                     continue

@@ -111,10 +111,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
         catalogue=catalogue,
     )
 
-    if feeds.active:
-        # A coordinator schedules polls only while something listens, and the
-        # panel and the new-set events need them even with every entity disabled.
-        entry.async_on_unload(feeds.async_add_listener(lambda: None))
+    # A coordinator schedules polls only while something listens, and the panel and
+    # the new-set events need them even with every entity disabled. Kept even while
+    # nothing is followed, so a theme followed from the panel starts polling.
+    entry.async_on_unload(feeds.async_add_listener(lambda: None))
     if feeds.releases:
         entry.async_create_background_task(
             hass, feeds.async_refresh(), "lego_feeds_refresh"

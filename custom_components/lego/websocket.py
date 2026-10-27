@@ -1,5 +1,6 @@
 """Websocket commands, so a dashboard can search without spending quota."""
 
+import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.components import websocket_api
@@ -7,8 +8,16 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 import probatio
 
-from .access import can_view, is_linked
-from .const import DOMAIN, RELEASE_MODES, RELEASE_ROWS, RELEASE_SCOPES, RELEASE_SPANS
+from .access import can_change, can_view, is_linked
+from .const import (
+    CONF_THEMES,
+    DOMAIN,
+    RELEASE_MODES,
+    RELEASE_ROWS,
+    RELEASE_SCOPES,
+    RELEASE_SPANS,
+)
+from .exceptions import BricksetError
 from .panel import (
     PANEL_STORE,
     dashboard_payload,
@@ -16,6 +25,8 @@ from .panel import (
     summarise,
     summarise_entry,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from homeassistant.auth.models import User
@@ -33,6 +44,8 @@ def async_setup_websocket(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_set_rows)
     websocket_api.async_register_command(hass, websocket_accounts)
     websocket_api.async_register_command(hass, websocket_set_account)
+    websocket_api.async_register_command(hass, websocket_themes)
+    websocket_api.async_register_command(hass, websocket_follow_theme)
 
 
 @callback
@@ -260,6 +273,86 @@ async def websocket_set_account(
 
     await hass.data[PANEL_STORE].async_set_account(user.id, entry_id)
     connection.send_result(msg["id"], {"selected": entry_id})
+
+
+@websocket_api.websocket_command(
+    {
+        probatio.Required("type"): "lego/themes",
+        probatio.Optional("config_entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_themes(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """List the themes an account could follow, and what following one costs."""
+    entry = _loaded_entry(hass, connection, msg)
+    if entry is None:
+        return
+    feeds = entry.runtime_data.feeds
+    try:
+        # getThemes is not one of the billed calls.
+        themes = sorted(await entry.runtime_data.client.get_themes())
+    except BricksetError as err:
+        _LOGGER.debug("Could not fetch Brickset themes: %s", err)
+        themes = sorted(feeds.themes)
+    connection.send_result(
+        msg["id"],
+        {
+            "themes": themes,
+            "followed": feeds.themes,
+            "follow_cost": feeds.follow_cost,
+            "can_change": can_change(entry, connection.user),
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        probatio.Required("type"): "lego/themes/follow",
+        probatio.Optional("config_entry_id"): str,
+        probatio.Required("theme"): probatio.All(
+            str, probatio.Strip, probatio.Length(min=1, max=100)
+        ),
+        probatio.Required("follow"): bool,
+    }
+)
+@websocket_api.async_response
+async def websocket_follow_theme(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Follow or stop following a theme on an account the user may change."""
+    entry = _loaded_entry(hass, connection, msg)
+    if entry is None:
+        return
+    if not can_change(entry, connection.user):
+        connection.send_error(
+            msg["id"], websocket_api.ERR_UNAUTHORIZED, "Not yours to change"
+        )
+        return
+
+    theme = msg["theme"]
+    kept = [
+        followed
+        for followed in entry.options.get(CONF_THEMES, [])
+        if followed.casefold() != theme.casefold()
+    ]
+    # Written without a reload, which would spend a collection poll to change a list.
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            **entry.options,
+            CONF_THEMES: [*kept, theme] if msg["follow"] else kept,
+        },
+    )
+    complete = await entry.runtime_data.feeds.async_themes_changed()
+    connection.send_result(
+        msg["id"], {"followed": entry.runtime_data.feeds.themes, "complete": complete}
+    )
 
 
 def _visible_entries(
