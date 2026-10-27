@@ -4,6 +4,7 @@ hassfest validates the shape of translations/en.json but never runs the integrat
 a typo'd translation_key passes CI and only shows up as a raw key in the UI.
 """
 
+import ast
 import json
 from pathlib import Path
 import re
@@ -21,17 +22,57 @@ def _source() -> str:
     return "\n".join(path.read_text() for path in PY_FILES)
 
 
-def test_exception_translation_keys_exist() -> None:
-    """Every translation_key raised as an error has a message."""
-    used = set(re.findall(r'translation_key="([a-z_]+)"', _source()))
-    entity_keys = {key for platform in STRINGS["entity"].values() for key in platform}
-    exception_keys = set(STRINGS["exceptions"])
-    issue_keys = set(STRINGS["issues"])
+def _passed_keys() -> dict[str, set[str]]:
+    """Group every literal translation_key by the kind of call that passes it."""
+    found: dict[str, set[str]] = {"exceptions": set(), "issues": set(), "entity": set()}
+    for path in PY_FILES:
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.Call):
+                continue
+            key = next(
+                (
+                    keyword.value.value
+                    for keyword in node.keywords
+                    if keyword.arg == "translation_key"
+                    and isinstance(keyword.value, ast.Constant)
+                ),
+                None,
+            )
+            if key is None:
+                continue
+            func = node.func
+            name = (
+                func.attr
+                if isinstance(func, ast.Attribute)
+                else getattr(func, "id", "")
+            )
+            if name == "async_create_issue":
+                found["issues"].add(key)
+            elif name.endswith("Description"):
+                found["entity"].add(key)
+            else:
+                found["exceptions"].add(key)
+    return found
 
-    unresolved = used - entity_keys - exception_keys - issue_keys
-    assert not unresolved, (
-        f"translation keys with no entry in translations/en.json: {unresolved}"
-    )
+
+def test_exception_translation_keys_exist() -> None:
+    """Every key an error is raised with has a message under exceptions."""
+    # Each section is checked alone: a key defined only for an issue or an entity
+    # would show the raw key where an error message belongs.
+    used = _passed_keys()["exceptions"]
+    assert used
+
+    unresolved = used - set(STRINGS["exceptions"])
+    assert not unresolved, f"errors with no message under exceptions: {unresolved}"
+
+
+def test_issue_translation_keys_exist() -> None:
+    """Every key a repair is raised with has its text under issues."""
+    used = _passed_keys()["issues"]
+    assert used
+
+    unresolved = used - set(STRINGS["issues"])
+    assert not unresolved, f"repairs with no text under issues: {unresolved}"
 
 
 def test_entity_translation_keys_exist() -> None:
