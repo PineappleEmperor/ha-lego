@@ -6,18 +6,20 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, override
 
 from homeassistant.components.sensor import (
+    DOMAIN as SENSOR_DOMAIN,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
 )
 from homeassistant.const import CONF_REGION, EntityCategory, UnitOfTime
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import DEFAULT_REGION, REGION_CURRENCY
+from .const import DEFAULT_REGION, DOMAIN, REGION_CURRENCY
 from .coordinator import FeedsData, LegoCollectionCoordinator, LegoFeedsCoordinator
 from .entity import LegoCollectionEntity, LegoEntity
 from .models import CollectionSummary, LegoSet
@@ -140,11 +142,37 @@ async def async_setup_entry(
     entities.append(LegoQuotaSensor(collection))
     entities.append(LegoLastSyncedSensor(collection))
     entities.append(LegoNextRetirementSensor(collection))
-    entities.extend(
-        LegoLatestThemeSetSensor(runtime.feeds, theme) for theme in runtime.feeds.themes
-    )
+    feeds = runtime.feeds
+    shown = set(feeds.themes)
+    entities.extend(LegoLatestThemeSetSensor(feeds, theme) for theme in feeds.themes)
 
     async_add_entities(entities)
+
+    @callback
+    def _follow_themes() -> None:
+        """Give a theme followed from the panel its sensor, and drop an unfollowed one."""
+        # The panel changes the themes without a reload, so setup alone would leave
+        # a new theme without a sensor and an old one with a stale sensor.
+        followed = feeds.themes
+        if added := [theme for theme in followed if theme not in shown]:
+            shown.update(added)
+            async_add_entities(
+                LegoLatestThemeSetSensor(feeds, theme) for theme in added
+            )
+        registry = er.async_get(hass)
+        for theme in shown - set(followed):
+            shown.discard(theme)
+            if entity_id := registry.async_get_entity_id(
+                SENSOR_DOMAIN, DOMAIN, theme_unique_id(entry.entry_id, theme)
+            ):
+                registry.async_remove(entity_id)
+
+    entry.async_on_unload(feeds.async_add_listener(_follow_themes))
+
+
+def theme_unique_id(entry_id: str, theme: str) -> str:
+    """Return the unique id of a followed theme's sensor."""
+    return f"{entry_id}_feed_{theme.lower().replace(' ', '_')}"
 
 
 class LegoSummarySensor(LegoCollectionEntity, SensorEntity):
@@ -372,8 +400,7 @@ class LegoLatestThemeSetSensor(LegoEntity[FeedsData], SensorEntity):
         """Initialise the sensor."""
         super().__init__(coordinator)
         self._theme = theme
-        slug = theme.lower().replace(" ", "_")
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_feed_{slug}"
+        self._attr_unique_id = theme_unique_id(coordinator.config_entry.entry_id, theme)
         self._attr_translation_placeholders = {"theme": theme}
 
     @property
