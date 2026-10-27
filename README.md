@@ -193,14 +193,46 @@ it a card shows the account you last picked in the panel.
 | `lego.set_collection` | Marks a set owned/wanted, or updates quantity, rating or notes. |
 | `lego.search_sets` | Searches Brickset and returns matches (response action). Costs one API call. |
 | `lego.refresh_catalogue` | Re-downloads the local set index now, whatever the interval says. Costs no API calls. |
-| `lego.refresh_collection` | Polls Brickset now instead of waiting for the interval. Costs 2 calls, and refuses if the budget would be exceeded. |
+| `lego.refresh_collection` | Polls Brickset now instead of waiting for the interval. Costs 2 calls, plus one for each extra page of 500 sets, and refuses if the budget would be exceeded. |
 
 `lego.set_collection` spends a call only for a set no poll has returned; the local index
 remembers the Brickset ID of everything already seen.
 
-Every action targets an account by its **Brickset device** (`device_id`), picked from a
-device list in the action editor. Automations written for 0.4.0 or 1.0.0rc1 passed
-`config_entry_id` instead and need that field swapped for the device.
+Every action targets an account by its **Brickset device** (`device_id`, required),
+picked from a device list in the action editor. Automations written for 0.4.0 or
+1.0.0rc1 passed `config_entry_id` instead and need that field swapped for the device.
+
+`lego.set_collection` takes the set and at least one change, and returns nothing:
+
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `set_number` | yes | Brickset's number with its variant, such as `10497-1`. |
+| `owned` | no | Marks the set owned, or not owned. |
+| `wanted` | no | Puts the set on your wishlist, or takes it off. |
+| `qty_owned` | no | How many you own, from 0 to 999. Any number above 0 also marks it owned. |
+| `rating` | no | Your rating, from 1 to 5. |
+| `notes` | no | Your notes on the set, up to 1,000 characters. |
+
+`lego.search_sets` needs at least one of `query`, `theme` and `year`:
+
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `query` | no | Words to match, as Brickset's own search box takes them. |
+| `theme` | no | One theme, by its Brickset name. |
+| `year` | no | The year sets were released, from 1949 to 2100. |
+| `limit` | no | How many matches to return, from 1 to 50. 10 if left out. |
+
+It returns `sets`, a list in which each set carries `set_number`, `name`, `year`,
+`theme`, `subtheme`, `pieces`, `minifigs`, `owned`, `qty_owned`, `wanted`, `image_url`
+and `brickset_url`.
+
+`lego.refresh_catalogue` and `lego.refresh_collection` take only the device, and return
+a response when an automation asks for one:
+
+- `lego.refresh_catalogue` returns `updated` (whether a new copy was downloaded),
+  `sets` (how many the index holds) and `fetched` (when it was last downloaded).
+- `lego.refresh_collection` returns `cost` (the calls the poll spent), `calls_today`,
+  `remaining` (calls left in today's budget) and `updated` (whether the poll worked).
 
 ## Events
 
