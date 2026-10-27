@@ -91,7 +91,7 @@ Reachable via **Configure** on the integration entry.
 | Option | Default | Notes |
 |--------|---------|-------|
 | Pricing region | from HA's country | Which LEGO.com market supplies prices and availability dates (`UK`, `US`, `CA`, `DE`). |
-| Themes to watch | none | Which themes to follow for new releases. However many you pick, they ride in one call per refresh, until together they hold more than 500 sets in a year. |
+| Themes to watch | none | Which themes to follow for new releases, also changeable from the panel. However many you pick, they ride in one call per refresh, until together they hold more than 500 sets in a year. |
 | Daily call budget | 80 | The most calls Home Assistant spends a day. The refresh intervals are set from it (see [Data updates](#data-updates)), and polling pauses until midnight UTC once it is spent. |
 | People who use this account | none | The Home Assistant users this Brickset account belongs to. See [Sharing accounts](#sharing-accounts). |
 | Shared with all users | off for new setups | Lets every Home Assistant user see and change this account. On for entries set up before it existed, so upgrading takes no one's account away. |
@@ -129,7 +129,10 @@ of rows, each with an icon, a title and a fold arrow:
 - **New releases** shows new sets as cards with their prices, above a timeline from
   January to next March with a dot per set. Pick **Everything**, **My themes** or any of
   the themes you follow, and a span from **This year** to **Upcoming**. Everything
-  needs **Follow releases across all themes** in options.
+  needs **Follow releases across all themes** in options. **Follow a theme** adds one
+  from a list of Brickset's themes and shows what it costs first: one call, or nothing
+  when every theme is read anyway. A theme's × stops following it. Hovering a stack of
+  dots on the timeline, or tabbing to it, spreads them out and names their sets.
 - **My wishlist** runs soonest to retire first.
 - **Collection value** and **Pieces** show a donut and a bar per theme. Hovering a theme
   lists the sets behind it, and **Trend over a year** unfolds a line from Home
