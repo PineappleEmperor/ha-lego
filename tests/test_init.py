@@ -20,7 +20,12 @@ from pytest_homeassistant_custom_component.common import (
 )
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
-from custom_components.lego.const import CONF_THEMES, CONF_USER_HASH, DOMAIN
+from custom_components.lego.const import (
+    CONF_SHARED,
+    CONF_THEMES,
+    CONF_USER_HASH,
+    DOMAIN,
+)
 
 from .conftest import API_KEY, USER_HASH, USERNAME, BricksetServer, setup_integration
 
@@ -60,6 +65,48 @@ async def test_migrate_watchlist_entry_to_the_wishlist(
     assert "watchlist" not in entry.options
 
     assert all(registry.async_get(item.entity_id) is None for item in legacy)
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_migrate_shares_an_account_made_before_users(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """An entry from before accounts had users stays open to every user."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=USERNAME,
+        unique_id=USERNAME,
+        version=2,
+        minor_version=1,
+        data=dict(mock_config_entry.data),
+        options=dict(mock_config_entry.options),
+    )
+
+    await setup_integration(hass, entry)
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.minor_version == 2
+    assert entry.options[CONF_SHARED] is True
+
+
+async def test_migrate_refuses_an_entry_from_a_newer_version(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """A downgrade leaves an entry it cannot read alone."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=USERNAME,
+        unique_id=USERNAME,
+        version=3,
+        data=dict(mock_config_entry.data),
+        options=dict(mock_config_entry.options),
+    )
+    entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(entry.entry_id)
+
+    assert entry.state is ConfigEntryState.MIGRATION_ERROR
+    assert entry.options == mock_config_entry.options
 
 
 @pytest.mark.usefixtures("brickset")

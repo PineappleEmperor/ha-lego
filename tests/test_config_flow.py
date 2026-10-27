@@ -8,15 +8,17 @@ from homeassistant.const import CONF_API_KEY, CONF_PASSWORD, CONF_REGION, CONF_U
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.lego.config_flow import estimated_daily_calls
 from custom_components.lego.const import (
     CONF_DAILY_CALL_BUDGET,
     CONF_RELEASES,
+    CONF_SHARED,
     CONF_THEMES,
     CONF_USER_HASH,
+    CONF_USERS,
     DOMAIN,
 )
 
@@ -353,6 +355,45 @@ async def test_options_flow_estimates_an_unloaded_entry(
     result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
 
     assert result["description_placeholders"]["estimated_calls"] == "50"
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_options_flow_links_users_to_the_account(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, hass_admin_user: MockUser
+) -> None:
+    """The user picker lists people, not system users, and saves who is linked."""
+    await setup_integration(hass, mock_config_entry)
+    member = MockUser(name="Robin").add_to_hass(hass)
+    MockUser(name="Supervisor", system_generated=True).add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    users = next(
+        value
+        for key, value in result["data_schema"].schema.items()
+        if key == CONF_USERS
+    )
+    assert {option["label"] for option in users.config["options"]} == {
+        hass_admin_user.name,
+        "Robin",
+    }
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_REGION: "UK",
+            CONF_DAILY_CALL_BUDGET: 80,
+            CONF_USERS: [member.id],
+            CONF_SHARED: False,
+            "catalogue": True,
+            "catalogue_rich": True,
+            "catalogue_interval": 7,
+        },
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert mock_config_entry.options[CONF_USERS] == [member.id]
+    assert mock_config_entry.options[CONF_SHARED] is False
 
 
 async def test_options_flow_falls_back_to_saved_themes(

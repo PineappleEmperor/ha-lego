@@ -21,6 +21,7 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
@@ -31,6 +32,7 @@ from homeassistant.helpers.selector import (
 from homeassistant.util import dt as dt_util
 import probatio
 
+from .access import is_shared, linked_users
 from .api import BricksetClient
 from .const import (
     CONF_CATALOGUE,
@@ -39,8 +41,10 @@ from .const import (
     CONF_DAILY_CALL_BUDGET,
     CONF_PANEL,
     CONF_RELEASES,
+    CONF_SHARED,
     CONF_THEMES,
     CONF_USER_HASH,
+    CONF_USERS,
     COUNTRY_TO_REGION,
     DEFAULT_CATALOGUE,
     DEFAULT_CATALOGUE_INTERVAL_DAYS,
@@ -138,6 +142,7 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for LEGO."""
 
     VERSION = 2
+    MINOR_VERSION = 2
 
     def __init__(self) -> None:
         """Initialise the flow."""
@@ -327,11 +332,14 @@ class LegoOptionsFlow(OptionsFlowWithReload):
                 CONF_CATALOGUE: user_input[CONF_CATALOGUE],
                 CONF_CATALOGUE_RICH: user_input[CONF_CATALOGUE_RICH],
                 CONF_CATALOGUE_INTERVAL: int(user_input[CONF_CATALOGUE_INTERVAL]),
+                CONF_USERS: user_input.get(CONF_USERS, []),
+                CONF_SHARED: user_input[CONF_SHARED],
             }
             return self.async_create_entry(data=new_options)
 
         options = entry.options
         themes = await self._async_theme_options()
+        users = await self._async_user_options()
 
         schema = probatio.Schema(
             {
@@ -352,6 +360,22 @@ class LegoOptionsFlow(OptionsFlowWithReload):
                         mode=SelectSelectorMode.DROPDOWN,
                     )
                 ),
+                probatio.Optional(
+                    CONF_USERS,
+                    default=[user for user in linked_users(entry) if user in users],
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value=user_id, label=name)
+                            for user_id, name in users.items()
+                        ],
+                        multiple=True,
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                probatio.Required(
+                    CONF_SHARED, default=is_shared(entry)
+                ): BooleanSelector(),
                 probatio.Required(
                     CONF_PANEL, default=options.get(CONF_PANEL, DEFAULT_PANEL)
                 ): BooleanSelector(),
@@ -429,6 +453,14 @@ class LegoOptionsFlow(OptionsFlowWithReload):
         if entry.state is not ConfigEntryState.LOADED:
             return None
         return cast("LegoConfigEntry", entry).runtime_data.feeds.measured_cost
+
+    async def _async_user_options(self) -> dict[str, str]:
+        """Return the people who sign in to Home Assistant, by id."""
+        return {
+            user.id: user.name or user.id
+            for user in await self.hass.auth.async_get_users()
+            if user.is_active and not user.system_generated
+        }
 
     async def _async_theme_options(self) -> list[str]:
         """Fetch the unbilled theme list, falling back to free text if it fails."""

@@ -15,6 +15,13 @@ CONF_PANEL: Final = "panel"
 CONF_CATALOGUE: Final = "catalogue"
 CONF_CATALOGUE_RICH: Final = "catalogue_rich"
 CONF_CATALOGUE_INTERVAL: Final = "catalogue_interval"
+# The Home Assistant users an account belongs to, and whether every user may use it
+# anyway. Admins can use every account whatever these say.
+CONF_USERS: Final = "users"
+CONF_SHARED: Final = "shared"
+# Entries made before accounts belonged to anyone migrate shared, so an upgrade
+# takes no one's account away; a new account is its users' alone.
+DEFAULT_SHARED: Final = False
 
 REGIONS: Final = ["UK", "US", "CA", "DE"]
 REGION_CURRENCY: Final = {"UK": "GBP", "US": "USD", "CA": "CAD", "DE": "EUR"}
@@ -86,16 +93,25 @@ PANEL_COMPONENT: Final = "lego-panel"
 PANEL_STORAGE_KEY: Final = "lego_panel"
 # Row ids the panel may order; unknown ids from a newer build are dropped.
 PANEL_ROWS: Final = (
+    "collection",
+    "releases",
     "recent",
     "upcoming",
     "themes",
     "wishlist",
-    "collection",
     "value",
     "pieces",
 )
 # Rows a user starts without; the panel's Customise list adds them.
 PANEL_DEFAULT_HIDDEN: Final = ("pieces",)
+# Rows that start folded to their header until a user opens them.
+PANEL_DEFAULT_COLLAPSED: Final = ("value", "pieces")
+# "releases" is one row filtered by scope and span; the other three are the same
+# sets split into fixed rows. Which a user sees is a setting, not two features.
+RELEASE_MODES: Final = ("combined", "separate")
+RELEASE_ROWS: Final = ("releases", "recent", "upcoming", "themes")
+RELEASE_SCOPES: Final = ("all", "mine")
+RELEASE_SPANS: Final = ("year", "past3", "past1", "next1", "next3", "coming")
 
 MIN_TIME_BETWEEN_QUOTA_CHECKS: Final = timedelta(minutes=30)
 

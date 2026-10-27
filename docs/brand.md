@@ -65,3 +65,20 @@ Two things that are easy to get wrong if this is ever rewritten:
   shear to the drawing squashes the round line caps into ellipses and leaves a
   visible seam where each node meets its branch; moving the node positions instead
   keeps the circles true.
+
+## The panel's logo and bricks
+
+The same script writes `frontend/src/generated/brand.ts`, which the panel imports:
+
+- **The logo as data**, each brick face a shade of the theme's `--primary-color`
+  (`color-mix` with black, at the brand's own lightness ratios), so the header logo
+  follows the user's theme. The sidebar and integration icons are the PNGs above and
+  cannot.
+- **The rainbow**, eight real bricks the panel uses to fill empty space, lengths
+  rising in pairs: 3005 1x1 Red, 3004 1x2 Orange, 3010 1x4 Yellow, 3001 2x4 Green,
+  3009 1x6 Dark Azure, 2456 2x6 Blue, 3008 1x8 Dark Purple, 3007 2x8 Medium Lavender.
+  Each part exists in its colour per Rebrickable's elements list, and the colours are
+  Rebrickable's published values. Same projection and studs as the logo, with each
+  stud top a touch lighter (`STUD_HIGHLIGHT`) so the detail reads on the dark colours.
+
+Run the script after changing either; the panel bundle then needs rebuilding.

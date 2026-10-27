@@ -7,12 +7,17 @@ import json
 from typing import Any
 
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.auth.const import GROUP_ID_USER
 from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    CLIENT_ID,
+    MockConfigEntry,
+    MockUser,
+)
 from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
     AiohttpClientMockResponse,
@@ -419,6 +424,7 @@ def mock_config_entry() -> MockConfigEntry:
         title=USERNAME,
         unique_id=USERNAME,
         version=2,
+        minor_version=2,
         data={
             CONF_API_KEY: API_KEY,
             CONF_USERNAME: USERNAME,
@@ -447,3 +453,18 @@ def lego_device_id(hass: HomeAssistant, entry: MockConfigEntry) -> str:
     return dr.async_get_device_id_by_identifier(
         hass, (DOMAIN, entry.entry_id), config_entry_id=entry.entry_id
     )
+
+
+@pytest.fixture
+async def member(hass: HomeAssistant) -> MockUser:
+    """Return a Home Assistant user who is not an admin."""
+    group = await hass.auth.async_get_group(GROUP_ID_USER)
+    assert group is not None
+    return MockUser(name="Robin", groups=[group]).add_to_hass(hass)
+
+
+@pytest.fixture
+async def member_token(hass: HomeAssistant, member: MockUser) -> str:
+    """Return an access token for the user who is not an admin."""
+    refresh = await hass.auth.async_create_refresh_token(member, CLIENT_ID)
+    return hass.auth.async_create_access_token(refresh)

@@ -1,5 +1,6 @@
 """Websocket commands, so a dashboard can search without spending quota."""
 
+import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.components import websocket_api
@@ -7,8 +8,25 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 import probatio
 
-from .const import DOMAIN
-from .panel import PANEL_STORE, dashboard_payload, summarise, summarise_entry
+from .access import can_change, can_view, is_linked
+from .const import (
+    CONF_THEMES,
+    DOMAIN,
+    RELEASE_MODES,
+    RELEASE_ROWS,
+    RELEASE_SCOPES,
+    RELEASE_SPANS,
+)
+from .exceptions import BricksetError
+from .panel import (
+    PANEL_STORE,
+    dashboard_payload,
+    releases_payload,
+    summarise,
+    summarise_entry,
+)
+
+_LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from homeassistant.auth.models import User
@@ -21,10 +39,13 @@ def async_setup_websocket(hass: HomeAssistant) -> None:
     """Register the websocket commands."""
     websocket_api.async_register_command(hass, websocket_search)
     websocket_api.async_register_command(hass, websocket_dashboard)
+    websocket_api.async_register_command(hass, websocket_releases)
     websocket_api.async_register_command(hass, websocket_collection)
     websocket_api.async_register_command(hass, websocket_set_rows)
     websocket_api.async_register_command(hass, websocket_accounts)
     websocket_api.async_register_command(hass, websocket_set_account)
+    websocket_api.async_register_command(hass, websocket_themes)
+    websocket_api.async_register_command(hass, websocket_follow_theme)
 
 
 @callback
@@ -91,9 +112,35 @@ def websocket_dashboard(
 
     store = hass.data[PANEL_STORE]
     user_id = connection.user.id if connection.user else None
+    payload = dashboard_payload(entry, store.settings(user_id))
+    # So the panel offers only the changes this user may make.
+    payload["can_change"] = can_change(entry, connection.user)
+    connection.send_result(msg["id"], payload)
+
+
+@callback
+@websocket_api.websocket_command(
+    {
+        probatio.Required("type"): "lego/releases",
+        probatio.Optional("config_entry_id"): str,
+        probatio.Optional("scope", default="mine"): probatio.In(RELEASE_SCOPES),
+        probatio.Optional("themes", default=list): [str],
+        probatio.Optional("span", default="past3"): probatio.In(RELEASE_SPANS),
+    }
+)
+def websocket_releases(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return one release row's sets for a span; read from the feeds, never billed."""
+    entry = _loaded_entry(hass, connection, msg)
+    if entry is None:
+        return
+
     connection.send_result(
         msg["id"],
-        dashboard_payload(entry, store.rows(user_id), store.hidden(user_id)),
+        releases_payload(entry, msg["scope"], msg["themes"], msg["span"]),
     )
 
 
@@ -132,11 +179,25 @@ def websocket_collection(
     )
 
 
+RELEASE_FILTER = probatio.Schema(
+    {
+        probatio.Optional("scope"): probatio.In(RELEASE_SCOPES),
+        probatio.Optional("themes"): [str],
+        probatio.Optional("span"): probatio.In(RELEASE_SPANS),
+    }
+)
+
+
 @websocket_api.websocket_command(
     {
         probatio.Required("type"): "lego/panel_config/set",
         probatio.Optional("rows"): [str],
         probatio.Optional("hidden"): [str],
+        probatio.Optional("collapsed"): [str],
+        probatio.Optional("release_mode"): probatio.In(RELEASE_MODES),
+        probatio.Optional("release_filters"): {
+            probatio.In(RELEASE_ROWS): RELEASE_FILTER
+        },
     }
 )
 @websocket_api.async_response
@@ -145,7 +206,7 @@ async def websocket_set_rows(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Save this user's row order or hidden rows and return what was stored."""
+    """Save whichever panel settings were sent and return them all."""
     # websocket_api.ActiveConnection types user as always set; keep the guard anyway, since a
     # write keyed on a missing user would land in another user's slot.
     if (user := cast("User | None", connection.user)) is None:
@@ -154,11 +215,15 @@ async def websocket_set_rows(
         )
         return
 
-    store = hass.data[PANEL_STORE]
-    rows, hidden = await store.async_set_rows(
-        user.id, msg.get("rows"), msg.get("hidden")
+    settings = await hass.data[PANEL_STORE].async_update(
+        user.id,
+        rows=msg.get("rows"),
+        hidden=msg.get("hidden"),
+        collapsed=msg.get("collapsed"),
+        release_mode=msg.get("release_mode"),
+        release_filters=msg.get("release_filters"),
     )
-    connection.send_result(msg["id"], {"rows": rows, "hidden": hidden})
+    connection.send_result(msg["id"], settings)
 
 
 @callback
@@ -168,15 +233,15 @@ def websocket_accounts(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """List the loaded Brickset accounts and which one this user is on."""
-    loaded = _loaded_entries(hass)
+    """List the accounts this user may see, and which one opens by default."""
+    visible = _visible_entries(hass, connection)
     connection.send_result(
         msg["id"],
         {
             "accounts": [
-                {"entry_id": entry.entry_id, "name": entry.title} for entry in loaded
+                {"entry_id": entry.entry_id, "name": entry.title} for entry in visible
             ],
-            "selected": _selected(hass, connection, loaded),
+            "selected": _selected(hass, connection, visible),
         },
     )
 
@@ -193,7 +258,7 @@ async def websocket_set_account(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Remember which account this user's panel is showing."""
+    """Make an account the one this user's panel opens on."""
     # websocket_api.ActiveConnection types user as always set; keep the guard anyway, since a
     # write keyed on a missing user would land in another user's slot.
     if (user := cast("User | None", connection.user)) is None:
@@ -203,7 +268,7 @@ async def websocket_set_account(
         return
 
     entry_id = msg["config_entry_id"]
-    if entry_id not in {entry.entry_id for entry in _loaded_entries(hass)}:
+    if entry_id not in {entry.entry_id for entry in _visible_entries(hass, connection)}:
         connection.send_error(
             msg["id"], websocket_api.ERR_NOT_FOUND, "Unknown LEGO entry"
         )
@@ -213,52 +278,142 @@ async def websocket_set_account(
     connection.send_result(msg["id"], {"selected": entry_id})
 
 
-def _loaded_entries(hass: HomeAssistant) -> list[LegoConfigEntry]:
-    """Return every LEGO entry currently loaded."""
+@websocket_api.websocket_command(
+    {
+        probatio.Required("type"): "lego/themes",
+        probatio.Optional("config_entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_themes(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """List the themes an account could follow, and what following one costs."""
+    entry = _loaded_entry(hass, connection, msg)
+    if entry is None:
+        return
+    feeds = entry.runtime_data.feeds
+    try:
+        # getThemes is not one of the billed calls.
+        themes = sorted(await entry.runtime_data.client.get_themes())
+    except BricksetError as err:
+        _LOGGER.debug("Could not fetch Brickset themes: %s", err)
+        themes = sorted(feeds.themes)
+    connection.send_result(
+        msg["id"],
+        {
+            "themes": themes,
+            "followed": feeds.themes,
+            "follow_cost": feeds.follow_cost,
+            "can_change": can_change(entry, connection.user),
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        probatio.Required("type"): "lego/themes/follow",
+        probatio.Optional("config_entry_id"): str,
+        probatio.Required("theme"): probatio.All(
+            str, probatio.Strip, probatio.Length(min=1, max=100)
+        ),
+        probatio.Required("follow"): bool,
+    }
+)
+@websocket_api.async_response
+async def websocket_follow_theme(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Follow or stop following a theme on an account the user may change."""
+    entry = _loaded_entry(hass, connection, msg)
+    if entry is None:
+        return
+    if not can_change(entry, connection.user):
+        connection.send_error(
+            msg["id"], websocket_api.ERR_UNAUTHORIZED, "Not yours to change"
+        )
+        return
+
+    theme = msg["theme"]
+    kept = [
+        followed
+        for followed in entry.options.get(CONF_THEMES, [])
+        if followed.casefold() != theme.casefold()
+    ]
+    # Written without a reload, which would spend a collection poll to change a list.
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            **entry.options,
+            CONF_THEMES: [*kept, theme] if msg["follow"] else kept,
+        },
+    )
+    complete = await entry.runtime_data.feeds.async_themes_changed()
+    connection.send_result(
+        msg["id"], {"followed": entry.runtime_data.feeds.themes, "complete": complete}
+    )
+
+
+def _visible_entries(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection
+) -> list[LegoConfigEntry]:
+    """Return every loaded LEGO entry this user may see."""
     return [
         cast("LegoConfigEntry", item)
         for item in hass.config_entries.async_entries(DOMAIN)
-        if item.state is ConfigEntryState.LOADED
+        if item.state is ConfigEntryState.LOADED and can_view(item, connection.user)
     ]
 
 
 def _selected(
     hass: HomeAssistant,
     connection: websocket_api.ActiveConnection,
-    loaded: list[LegoConfigEntry],
+    visible: list[LegoConfigEntry],
 ) -> str | None:
-    """Return the account to show: this user's last choice, else the first."""
-    if not loaded:
+    """Return the account to show: this user's default, else one of their own."""
+    if not visible:
         return None
-    user_id = connection.user.id if connection.user else None
-    chosen = hass.data[PANEL_STORE].account(user_id)
-    if any(entry.entry_id == chosen for entry in loaded):
+    user = connection.user
+    chosen = hass.data[PANEL_STORE].account(user.id if user else None)
+    if any(entry.entry_id == chosen for entry in visible):
         return str(chosen)
-    return loaded[0].entry_id
+    # Before a user picks a default, their own account beats a shared one.
+    own = [entry for entry in visible if user and is_linked(entry, user)]
+    return (own or visible)[0].entry_id
 
 
 def _loaded_entry(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> LegoConfigEntry | None:
-    """Resolve a loaded LEGO entry, reporting why not when it fails."""
+    """Resolve a loaded LEGO entry this user may see, reporting why not when it fails."""
     requested = msg.get("config_entry_id")
     if requested is None:
         # The panel is registered globally, so it names no entry until it has asked
-        # which accounts exist. Falling back to this user's stored choice keeps a
-        # browser still running an older bundle working with several accounts.
-        loaded = _loaded_entries(hass)
-        if not loaded:
+        # which accounts exist. Falling back to this user's default keeps a browser
+        # still running an older bundle working with several accounts.
+        visible = _visible_entries(hass, connection)
+        if not visible:
             connection.send_error(
                 msg["id"], websocket_api.ERR_NOT_FOUND, "No LEGO account is loaded"
             )
             return None
-        selected = _selected(hass, connection, loaded)
-        return next(entry for entry in loaded if entry.entry_id == selected)
+        selected = _selected(hass, connection, visible)
+        return next(entry for entry in visible if entry.entry_id == selected)
 
     entry = hass.config_entries.async_get_entry(requested)
     if entry is None or entry.domain != DOMAIN:
         connection.send_error(
             msg["id"], websocket_api.ERR_NOT_FOUND, "Unknown LEGO entry"
+        )
+        return None
+    # Checked before the entry's state, so a refusal gives away neither it nor the title.
+    if not can_view(entry, connection.user):
+        connection.send_error(
+            msg["id"], websocket_api.ERR_UNAUTHORIZED, "Not your LEGO account"
         )
         return None
     if entry.state is not ConfigEntryState.LOADED:

@@ -311,7 +311,7 @@ async def test_collection_poll_cost_matches_the_calls_it_makes(
 
     assert len([c for c in spent if c.get("owned") or c.get("wanted")]) == calls
     # The panel's Update now quotes the same cost.
-    payload = dashboard_payload(mock_config_entry, [], [])
+    payload = dashboard_payload(mock_config_entry)
     assert payload["quota"]["refresh_cost"] == calls
 
 

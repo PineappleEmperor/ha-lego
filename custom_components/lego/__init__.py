@@ -1,6 +1,7 @@
 """The LEGO integration, backed by Brickset."""
 
 from datetime import datetime, timedelta
+import logging
 
 from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
@@ -21,6 +22,7 @@ from .const import (
     CONF_CATALOGUE_INTERVAL,
     CONF_CATALOGUE_RICH,
     CONF_DAILY_CALL_BUDGET,
+    CONF_SHARED,
     CONF_USER_HASH,
     DEFAULT_CATALOGUE,
     DEFAULT_CATALOGUE_INTERVAL_DAYS,
@@ -44,6 +46,8 @@ from .panel import (
 from .quota import QuotaManager
 from .services import async_setup_services
 from .websocket import async_setup_websocket
+
+_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.CALENDAR, Platform.SENSOR]
 
@@ -91,7 +95,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
         await catalogue.async_load(rich=rich)
 
     collection = LegoCollectionCoordinator(hass, entry, client, quota, catalogue)
-    feeds = LegoFeedsCoordinator(hass, entry, client, quota, catalogue)
+    feeds = LegoFeedsCoordinator(
+        hass, entry, client, quota, catalogue, collection=collection
+    )
 
     await collection.async_config_entry_first_refresh()
     # A theme feed is one call, worth having before the entities appear; a read of
@@ -107,10 +113,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
         catalogue=catalogue,
     )
 
-    if feeds.active:
-        # A coordinator schedules polls only while something listens, and the
-        # panel and the new-set events need them even with every entity disabled.
-        entry.async_on_unload(feeds.async_add_listener(lambda: None))
+    # A coordinator schedules polls only while something listens, and the panel and
+    # the new-set events need them even with every entity disabled. Kept even while
+    # nothing is followed, so a theme followed from the panel starts polling.
+    entry.async_on_unload(feeds.async_add_listener(lambda: None))
     if feeds.releases:
         entry.async_create_background_task(
             hass, feeds.async_refresh(), "lego_feeds_refresh"
@@ -144,10 +150,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool:
-    """Drop the watchlist option and the sensors it created."""
-    if entry.version > 1:
-        return True
+    """Drop the watchlist and its sensors, then share accounts made before users."""
+    if entry.version > 2:
+        _LOGGER.error(
+            "Cannot read a LEGO entry saved by a newer version (%s); upgrade first",
+            entry.version,
+        )
+        return False
+    if entry.version == 1:
+        _migrate_watchlist(hass, entry)
+    if entry.minor_version < 2:
+        # Before an account belonged to anyone every user could use it, so it stays
+        # that way until an admin says whose it is.
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, CONF_SHARED: True}, minor_version=2
+        )
+    return True
 
+
+def _migrate_watchlist(hass: HomeAssistant, entry: LegoConfigEntry) -> None:
+    """Drop the watchlist option and the sensors it created."""
     registry = er.async_get(hass)
     legacy_prefix = f"{entry.entry_id}{LEGACY_COUNTDOWN_PREFIX}"
     for registered in list(er.async_entries_for_config_entry(registry, entry.entry_id)):
@@ -163,7 +185,6 @@ async def async_migrate_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bo
         },
         version=2,
     )
-    return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool:
