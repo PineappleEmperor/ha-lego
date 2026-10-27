@@ -11,13 +11,19 @@ from homeassistant.core import (
     SupportsResponse,
     callback,
 )
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.exceptions import (
+    HomeAssistantError,
+    ServiceValidationError,
+    Unauthorized,
+    UnknownUser,
+)
 from homeassistant.helpers import config_validation as cv, issue_registry as ir
 from homeassistant.helpers.device_registry import (
     async_get_device_and_config_entry_for_domain,
 )
 import probatio
 
+from .access import can_change, can_view
 from .const import (
     ATTR_LIMIT,
     ATTR_NOTES,
@@ -84,8 +90,10 @@ SEARCH_SCHEMA = probatio.Schema(
 )
 
 
-def _get_entry(hass: HomeAssistant, call: ServiceCall) -> LegoConfigEntry:
-    """Resolve the targeted Brickset device to its loaded config entry."""
+async def _async_get_entry(
+    hass: HomeAssistant, call: ServiceCall, *, write: bool
+) -> LegoConfigEntry:
+    """Resolve the targeted device to its loaded entry, if this caller may use it."""
     device_id = call.data[ATTR_DEVICE_ID]
     _, entry = async_get_device_and_config_entry_for_domain(
         hass, device_id, domain=DOMAIN
@@ -96,6 +104,14 @@ def _get_entry(hass: HomeAssistant, call: ServiceCall) -> LegoConfigEntry:
             translation_key="device_not_found",
             translation_placeholders={"device_id": device_id},
         )
+    user = None
+    if call.context.user_id:
+        user = await hass.auth.async_get_user(call.context.user_id)
+        if user is None:
+            raise UnknownUser(context=call.context)
+    # Checked before the entry's state, so a refusal gives away neither it nor the title.
+    if not (can_change if write else can_view)(entry, user):
+        raise Unauthorized(context=call.context, config_entry_id=entry.entry_id)
     if entry.state is not ConfigEntryState.LOADED:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
@@ -154,7 +170,7 @@ async def _async_resolve_set(entry: LegoConfigEntry, number: str) -> LegoSet:
 
 async def async_refresh_catalogue(call: ServiceCall) -> ServiceResponse:
     """Re-download the local set index, ignoring how recently it was fetched."""
-    entry = _get_entry(call.hass, call)
+    entry = await _async_get_entry(call.hass, call, write=True)
     catalogue = entry.runtime_data.catalogue
     if catalogue is None:
         raise ServiceValidationError(
@@ -177,7 +193,7 @@ async def async_refresh_catalogue(call: ServiceCall) -> ServiceResponse:
 
 async def async_refresh_collection(call: ServiceCall) -> ServiceResponse:
     """Poll Brickset now rather than waiting for the interval."""
-    entry = _get_entry(call.hass, call)
+    entry = await _async_get_entry(call.hass, call, write=True)
     collection = entry.runtime_data.collection
     cost = collection.poll_cost
     try:
@@ -245,7 +261,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
 
     async def async_set_collection(call: ServiceCall) -> None:
         """Update a set's ownership record on Brickset."""
-        entry = _get_entry(hass, call)
+        entry = await _async_get_entry(hass, call, write=True)
         lego_set = await _async_resolve_set(entry, call.data[ATTR_SET_NUMBER])
 
         try:
@@ -278,7 +294,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
 
     async def async_search_sets(call: ServiceCall) -> ServiceResponse:
         """Search the Brickset catalogue and return the matches."""
-        entry = _get_entry(hass, call)
+        entry = await _async_get_entry(hass, call, write=False)
         params: dict[str, Any] = {"pageSize": call.data[ATTR_LIMIT]}
         if query := call.data.get(ATTR_QUERY):
             params["query"] = query

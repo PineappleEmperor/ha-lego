@@ -7,6 +7,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 import probatio
 
+from .access import can_view, is_linked
 from .const import DOMAIN, RELEASE_MODES, RELEASE_ROWS, RELEASE_SCOPES, RELEASE_SPANS
 from .panel import (
     PANEL_STORE,
@@ -216,15 +217,15 @@ def websocket_accounts(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """List the loaded Brickset accounts and which one this user is on."""
-    loaded = _loaded_entries(hass)
+    """List the accounts this user may see, and which one opens by default."""
+    visible = _visible_entries(hass, connection)
     connection.send_result(
         msg["id"],
         {
             "accounts": [
-                {"entry_id": entry.entry_id, "name": entry.title} for entry in loaded
+                {"entry_id": entry.entry_id, "name": entry.title} for entry in visible
             ],
-            "selected": _selected(hass, connection, loaded),
+            "selected": _selected(hass, connection, visible),
         },
     )
 
@@ -241,7 +242,7 @@ async def websocket_set_account(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Remember which account this user's panel is showing."""
+    """Make an account the one this user's panel opens on."""
     # websocket_api.ActiveConnection types user as always set; keep the guard anyway, since a
     # write keyed on a missing user would land in another user's slot.
     if (user := cast("User | None", connection.user)) is None:
@@ -251,7 +252,7 @@ async def websocket_set_account(
         return
 
     entry_id = msg["config_entry_id"]
-    if entry_id not in {entry.entry_id for entry in _loaded_entries(hass)}:
+    if entry_id not in {entry.entry_id for entry in _visible_entries(hass, connection)}:
         connection.send_error(
             msg["id"], websocket_api.ERR_NOT_FOUND, "Unknown LEGO entry"
         )
@@ -261,52 +262,62 @@ async def websocket_set_account(
     connection.send_result(msg["id"], {"selected": entry_id})
 
 
-def _loaded_entries(hass: HomeAssistant) -> list[LegoConfigEntry]:
-    """Return every LEGO entry currently loaded."""
+def _visible_entries(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection
+) -> list[LegoConfigEntry]:
+    """Return every loaded LEGO entry this user may see."""
     return [
         cast("LegoConfigEntry", item)
         for item in hass.config_entries.async_entries(DOMAIN)
-        if item.state is ConfigEntryState.LOADED
+        if item.state is ConfigEntryState.LOADED and can_view(item, connection.user)
     ]
 
 
 def _selected(
     hass: HomeAssistant,
     connection: websocket_api.ActiveConnection,
-    loaded: list[LegoConfigEntry],
+    visible: list[LegoConfigEntry],
 ) -> str | None:
-    """Return the account to show: this user's last choice, else the first."""
-    if not loaded:
+    """Return the account to show: this user's default, else one of their own."""
+    if not visible:
         return None
-    user_id = connection.user.id if connection.user else None
-    chosen = hass.data[PANEL_STORE].account(user_id)
-    if any(entry.entry_id == chosen for entry in loaded):
+    user = connection.user
+    chosen = hass.data[PANEL_STORE].account(user.id if user else None)
+    if any(entry.entry_id == chosen for entry in visible):
         return str(chosen)
-    return loaded[0].entry_id
+    # Before a user picks a default, their own account beats a shared one.
+    own = [entry for entry in visible if user and is_linked(entry, user)]
+    return (own or visible)[0].entry_id
 
 
 def _loaded_entry(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> LegoConfigEntry | None:
-    """Resolve a loaded LEGO entry, reporting why not when it fails."""
+    """Resolve a loaded LEGO entry this user may see, reporting why not when it fails."""
     requested = msg.get("config_entry_id")
     if requested is None:
         # The panel is registered globally, so it names no entry until it has asked
-        # which accounts exist. Falling back to this user's stored choice keeps a
-        # browser still running an older bundle working with several accounts.
-        loaded = _loaded_entries(hass)
-        if not loaded:
+        # which accounts exist. Falling back to this user's default keeps a browser
+        # still running an older bundle working with several accounts.
+        visible = _visible_entries(hass, connection)
+        if not visible:
             connection.send_error(
                 msg["id"], websocket_api.ERR_NOT_FOUND, "No LEGO account is loaded"
             )
             return None
-        selected = _selected(hass, connection, loaded)
-        return next(entry for entry in loaded if entry.entry_id == selected)
+        selected = _selected(hass, connection, visible)
+        return next(entry for entry in visible if entry.entry_id == selected)
 
     entry = hass.config_entries.async_get_entry(requested)
     if entry is None or entry.domain != DOMAIN:
         connection.send_error(
             msg["id"], websocket_api.ERR_NOT_FOUND, "Unknown LEGO entry"
+        )
+        return None
+    # Checked before the entry's state, so a refusal gives away neither it nor the title.
+    if not can_view(entry, connection.user):
+        connection.send_error(
+            msg["id"], websocket_api.ERR_UNAUTHORIZED, "Not your LEGO account"
         )
         return None
     if entry.state is not ConfigEntryState.LOADED:
