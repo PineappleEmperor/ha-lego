@@ -218,9 +218,9 @@ async def async_refresh_collection(call: ServiceCall) -> ServiceResponse:
     }
 
 
-def _write_issue_id(entry: ConfigEntry) -> str:
+def write_issue_id(entry_id: str) -> str:
     """Identify the repair issue for a rejected collection write."""
-    return f"collection_write_failed_{entry.entry_id}"
+    return f"collection_write_failed_{entry_id}"
 
 
 @callback
@@ -231,7 +231,7 @@ def _async_report_write_failure(
     ir.async_create_issue(
         hass,
         DOMAIN,
-        _write_issue_id(entry),
+        write_issue_id(entry.entry_id),
         is_fixable=False,
         severity=ir.IssueSeverity.WARNING,
         translation_key="collection_write_failed",
@@ -244,7 +244,7 @@ def _async_write_succeeded(
     hass: HomeAssistant, entry: LegoConfigEntry, lego_set: LegoSet, call: ServiceCall
 ) -> None:
     """Clear any past rejection and fold the change into the cached collection."""
-    ir.async_delete_issue(hass, DOMAIN, _write_issue_id(entry))
+    ir.async_delete_issue(hass, DOMAIN, write_issue_id(entry.entry_id))
     entry.runtime_data.collection.apply_collection_change(
         lego_set,
         own=call.data.get(ATTR_OWNED),

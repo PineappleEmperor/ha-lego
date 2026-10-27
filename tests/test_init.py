@@ -11,7 +11,11 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+    issue_registry as ir,
+)
 from homeassistant.setup import async_setup_component
 import pytest
 from pytest_homeassistant_custom_component.common import (
@@ -198,6 +202,35 @@ async def test_setup_starts_reauth_on_bad_hash(
     assert mock_config_entry.state is ConfigEntryState.SETUP_ERROR
     flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
     assert [flow["context"]["source"] for flow in flows] == ["reauth"]
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_removing_an_account_clears_its_repairs(
+    hass: HomeAssistant,
+    issue_registry: ir.IssueRegistry,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Neither the paging nor the rejected-write repair outlives its account."""
+    entry = await setup_integration(hass, mock_config_entry)
+    issues = (
+        f"theme_feed_paging_{entry.entry_id}",
+        f"collection_write_failed_{entry.entry_id}",
+    )
+    for issue_id in issues:
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="collection_write_failed",
+        )
+
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+
+    for issue_id in issues:
+        assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
 
 
 @pytest.mark.usefixtures("brickset")

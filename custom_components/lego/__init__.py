@@ -44,7 +44,7 @@ from .panel import (
     async_setup_panel_static,
 )
 from .quota import QuotaManager
-from .services import async_setup_services
+from .services import async_setup_services, write_issue_id
 from .websocket import async_setup_websocket
 
 _LOGGER = logging.getLogger(__name__)
@@ -200,6 +200,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> boo
 async def async_remove_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> None:
     """Drop the sidebar panel once the last entry is gone, and its repairs."""
     ir.async_delete_issue(hass, DOMAIN, paging_issue_id(entry.entry_id))
+    ir.async_delete_issue(hass, DOMAIN, write_issue_id(entry.entry_id))
     await async_refresh_panel(hass)
 
 
