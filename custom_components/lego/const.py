@@ -15,6 +15,13 @@ CONF_PANEL: Final = "panel"
 CONF_CATALOGUE: Final = "catalogue"
 CONF_CATALOGUE_RICH: Final = "catalogue_rich"
 CONF_CATALOGUE_INTERVAL: Final = "catalogue_interval"
+# The Home Assistant users an account belongs to, and whether every user may use it
+# anyway. Admins can use every account whatever these say.
+CONF_USERS: Final = "users"
+CONF_SHARED: Final = "shared"
+# Entries made before accounts belonged to anyone migrate shared, so an upgrade
+# takes no one's account away; a new account is its users' alone.
+DEFAULT_SHARED: Final = False
 
 REGIONS: Final = ["UK", "US", "CA", "DE"]
 REGION_CURRENCY: Final = {"UK": "GBP", "US": "USD", "CA": "CAD", "DE": "EUR"}

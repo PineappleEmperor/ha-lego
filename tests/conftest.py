@@ -419,6 +419,7 @@ def mock_config_entry() -> MockConfigEntry:
         title=USERNAME,
         unique_id=USERNAME,
         version=2,
+        minor_version=2,
         data={
             CONF_API_KEY: API_KEY,
             CONF_USERNAME: USERNAME,
