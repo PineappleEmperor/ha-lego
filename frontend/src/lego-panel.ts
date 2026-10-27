@@ -8,6 +8,7 @@ import {
   ROW_SPANS,
   SPAN_LABELS,
   accountCall,
+  budgetTitle,
   errorText,
   moveRow,
   releaseFilter,
@@ -242,7 +243,14 @@ export class LegoPanel extends LitElement {
         quota
           ? html`<div
               class=${tight ? "meter tight" : "meter"}
-              title=${`Your budget is ${quota.budget} Brickset calls a day, of the 100 Brickset allows. It resets at ${new Date(quota.resets_at).toLocaleTimeString(this.hass?.locale?.language, { hour: "2-digit", minute: "2-digit" })}.`}
+              title=${budgetTitle(
+                quota.calls_today,
+                quota.budget,
+                new Date(quota.resets_at).toLocaleTimeString(
+                  this.hass?.locale?.language,
+                  { hour: "2-digit", minute: "2-digit" },
+                ),
+              )}
             >
               <span class="meter-label">Brickset calls</span>
               <span

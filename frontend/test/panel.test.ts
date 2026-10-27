@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   brickGap,
+  budgetTitle,
   monthsFrom,
   moveRow,
   releaseFilter,
@@ -159,6 +160,18 @@ describe("timeline", () => {
     expect(stackOffsets(3)).toEqual([-5, 0, 5]);
     const four = stackOffsets(4);
     expect(four[0]).toBe(-four[3]);
+  });
+});
+
+describe("budget meter", () => {
+  it("says where the calls between the budget and Brickset's 100 go", () => {
+    expect(budgetTitle(50, 80, "01:00")).toBe(
+      "50 of today's 80 calls used. The other 20 of the 100 Brickset allows each API key a day are left unused, for anything else on your key. The count starts again at 01:00.",
+    );
+  });
+
+  it("leaves the gap out when the budget is the whole allowance", () => {
+    expect(budgetTitle(12, 100, "01:00")).not.toContain("left unused");
   });
 });
 

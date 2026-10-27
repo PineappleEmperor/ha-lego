@@ -176,6 +176,28 @@ export function count(n: number, one: string, many: string): string {
   return `${n.toLocaleString()} ${n === 1 ? one : many}`;
 }
 
+/** Brickset's own ceiling per API key per day, which no budget can pass. */
+const BRICKSET_DAILY_LIMIT = 100;
+
+/**
+ * The budget meter's tooltip: what is used, and where the calls between the budget
+ * and Brickset's ceiling go, since nothing here spends them.
+ */
+export function budgetTitle(
+  used: number,
+  budget: number,
+  resets: string,
+): string {
+  const spare = BRICKSET_DAILY_LIMIT - budget;
+  return [
+    `${used} of today's ${budget} calls used.`,
+    spare > 0
+      ? `The other ${spare} of the ${BRICKSET_DAILY_LIMIT} Brickset allows each API key a day are left unused, for anything else on your key.`
+      : `Your budget is all ${BRICKSET_DAILY_LIMIT} calls Brickset allows each API key a day.`,
+    `The count starts again at ${resets}.`,
+  ].join(" ");
+}
+
 /** Within this many days of leaving sale, a set's exit date is flagged. */
 const RETIRING_SOON_DAYS = 60;
 
