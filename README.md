@@ -93,11 +93,29 @@ Reachable via **Configure** on the integration entry.
 | Pricing region | from HA's country | Which LEGO.com market supplies prices and availability dates (`UK`, `US`, `CA`, `DE`). |
 | Themes to watch | none | Which themes to follow for new releases. However many you pick, they ride in one call per refresh, until together they hold more than 500 sets in a year. |
 | Daily call budget | 80 | The most calls Home Assistant spends a day. The refresh intervals are set from it (see [Data updates](#data-updates)), and polling pauses until midnight UTC once it is spent. |
+| People who use this account | none | The Home Assistant users this Brickset account belongs to. See [Sharing accounts](#sharing-accounts). |
+| Shared with all users | off for new setups | Lets every Home Assistant user see and change this account. On for entries set up before it existed, so upgrading takes no one's account away. |
 | Show the LEGO panel in the sidebar | on | Whether to add the sidebar page for browsing your collection, your wishlist and new releases. |
 | Follow releases across all themes | on for new setups | Lets the panel's **New releases** row show **Everything**, every set whatever its theme, and fills the **Out recently** and **Coming soon** rows. It reads every set of the year once a day, about 3 calls, and your watched themes then come from the same read rather than costing calls of their own. Off for entries set up before it existed, so upgrading spends nothing new until you turn it on. |
 | Keep a local set index | on | Whether to keep a local copy of Rebrickable's set list, so looking a set up costs no Brickset calls. |
 | Include set names in the index | on | Whether that index stores names as well as numbers, which is what searching by name needs. Takes roughly 1.8 MB on disk instead of 450 KB. |
 | Set index refresh interval | 7 days | How often the local list is re-downloaded, from 1 to 90 days. Costs no Brickset calls, and a set missing from it still works at the price of one lookup. |
+
+### Sharing accounts
+
+Each Brickset account has its own API key and its own 100 calls a day, so each person
+in a household can add their own. An admin chooses who uses each account under
+**People who use this account**, or turns on **Shared with all users** for a family
+account.
+
+A Home Assistant user then sees only the accounts that are theirs or shared, in the
+panel, in its dashboard cards and in what the actions will accept. Admins see every
+account. A read-only user can look at an account but not change it. Automations and
+scripts can act on any account, since an admin set them up.
+
+This decides who uses which account. It does not hide one: Home Assistant shows every
+entity to every user, so the sensors and calendars of each account, wishlist included,
+can be read by anyone signed in.
 
 ## The panel
 
@@ -125,8 +143,9 @@ follows you to every device.
 
 The header shows how many Brickset calls today has used against your budget, and the
 logo takes your theme's primary colour. One sidebar entry serves every Brickset account
-you have set up: a picker appears in the header when there is more than one, and your
-choice is remembered per Home Assistant user.
+you may use: a menu appears in the header when there is more than one. Picking an
+account shows it; pressing its brick makes it the one your panel opens on. Until you
+choose, your own account opens ahead of a shared one.
 
 Every card shows the set's LEGO.com RRP in your pricing region, opens its Brickset page
 in a new tab from its picture or name, and can mark the set owned or not owned. The panel
@@ -294,6 +313,10 @@ integration polls on two schedules, which it sets itself from the daily call bud
     this year alone for most of it, last year as well until 28 January, and next year
     from 4 December. A year is about 1,000 entries once gear and books count, so 3
     calls. The watched themes are cut from the same read, so they cost nothing more.
+  - **Two or more accounts** read the same years, so a year one account has read in
+    the last day serves the others for nothing, watched themes included. Whichever
+    polls first pays. Each account still budgets as though it paid, so its plan holds
+    if the other account is removed.
   - **Next year** is asked for only once `getThemes`, which costs nothing, says a
     theme reaches it. It can say so before `getSets` returns anything (it did for
     Technic and Icons in October 2026), so an empty answer is remembered and next
@@ -338,6 +361,9 @@ remaining headroom.
   name is published.
 - **A Brickset password change invalidates the saved token**, so Home Assistant asks you
   to reconnect.
+- **Account sharing does not make an account private.** It decides which accounts each
+  user sees in the panel and may change; the entities stay visible to every user, as
+  all Home Assistant entities are.
 
 ## Troubleshooting
 
