@@ -249,7 +249,7 @@ export const SPAN_LABELS: Record<Span, string> = {
   past1: "Past month",
   next1: "Next month",
   next3: "Next 3 months",
-  coming: "All coming",
+  coming: "Upcoming",
 };
 
 /** The spans each release row offers, in the order its pills show them. */

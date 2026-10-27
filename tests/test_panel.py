@@ -193,7 +193,7 @@ async def test_release_spans_pick_and_order_the_followed_themes(
     brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
-    """Behind today runs newest first, ahead soonest first, undated only in All coming."""
+    """Behind today runs newest first, ahead soonest first, undated only in Upcoming."""
     today = dt_util.now().date()
 
     def dated(set_id: int, name: str, days: int, **kwargs: Any) -> dict[str, Any]:

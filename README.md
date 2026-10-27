@@ -110,7 +110,7 @@ of rows, each with an icon, a title and a fold arrow:
   search box covers both your own sets and the whole catalogue.
 - **New releases** shows new sets as cards with their prices, above a timeline from
   January to next March with a dot per set. Pick **Everything**, **My themes** or any of
-  the themes you follow, and a span from **This year** to **All coming**. Everything
+  the themes you follow, and a span from **This year** to **Upcoming**. Everything
   needs **Follow releases across all themes** in options.
 - **My wishlist** runs soonest to retire first.
 - **Collection value** and **Pieces** show a donut and a bar per theme. Hovering a theme
