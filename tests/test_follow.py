@@ -7,7 +7,7 @@ from homeassistant.const import CONF_REGION
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
 from custom_components.lego.const import (
@@ -82,10 +82,9 @@ async def test_following_a_theme_fetches_it_without_a_reload(
     assert entry.state is ConfigEntryState.LOADED
 
 
-@pytest.mark.usefixtures("spring")
+@pytest.mark.usefixtures("brickset", "spring")
 async def test_following_starts_polling_on_an_idle_feed(
     hass: HomeAssistant,
-    brickset: BricksetServer,
     hass_ws_client: WebSocketGenerator,
     mock_config_entry: MockConfigEntry,
 ) -> None:
@@ -185,11 +184,10 @@ async def test_a_read_only_user_cannot_follow(
     assert entry.options[CONF_THEMES] == []
 
 
-@pytest.mark.usefixtures("brickset")
+@pytest.mark.usefixtures("brickset", "member")
 async def test_a_user_cannot_follow_on_someone_elses_account(
     hass: HomeAssistant,
     hass_ws_client: WebSocketGenerator,
-    member: MockUser,
     member_token: str,
     mock_config_entry: MockConfigEntry,
 ) -> None:
