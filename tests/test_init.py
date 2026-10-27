@@ -272,11 +272,14 @@ async def test_removing_the_last_account_deletes_the_stored_files(
 
 
 @pytest.mark.usefixtures("brickset")
-async def test_options_update_reloads(
+async def test_an_options_write_outside_the_flow_needs_no_reload(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Changing options reloads the entry so coordinators pick them up."""
+    """Options are read live, so a write from the panel takes effect in place."""
+    # Only the options flow reloads the entry; following a theme writes the options
+    # directly, and a reload would spend a collection poll.
     await setup_integration(hass, mock_config_entry)
+    runtime = mock_config_entry.runtime_data
 
     hass.config_entries.async_update_entry(
         mock_config_entry,
@@ -285,7 +288,8 @@ async def test_options_update_reloads(
     await hass.async_block_till_done()
 
     assert mock_config_entry.state is ConfigEntryState.LOADED
-    assert mock_config_entry.runtime_data.collection.region == "US"
+    assert mock_config_entry.runtime_data is runtime
+    assert runtime.collection.region == "US"
 
 
 @pytest.mark.usefixtures("brickset")
