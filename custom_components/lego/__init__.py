@@ -95,7 +95,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
         await catalogue.async_load(rich=rich)
 
     collection = LegoCollectionCoordinator(hass, entry, client, quota, catalogue)
-    feeds = LegoFeedsCoordinator(hass, entry, client, quota, catalogue)
+    feeds = LegoFeedsCoordinator(
+        hass, entry, client, quota, catalogue, collection=collection
+    )
 
     await collection.async_config_entry_first_refresh()
     # A theme feed is one call, worth having before the entities appear; a read of

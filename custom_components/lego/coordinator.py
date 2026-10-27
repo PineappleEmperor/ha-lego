@@ -47,6 +47,7 @@ from .quota import (
     feeds_poll_estimate,
     poll_window_years,
 )
+from .shared import YEAR_READS, YearReads
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -429,8 +430,12 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         client: BricksetClient,
         quota: QuotaManager,
         catalogue: SetCatalogue | None = None,
+        collection: LegoCollectionCoordinator | None = None,
     ) -> None:
         """Initialise the feeds coordinator."""
+        # Whose sets are owned or wanted, for copies of another account's read.
+        self._collection = collection
+        self._year_reads = hass.data.setdefault(YEAR_READS, YearReads())
         options = config_entry.options
         releases = bool(options.get(CONF_RELEASES, DEFAULT_RELEASES))
         active = releases or bool(options.get(CONF_THEMES))
@@ -485,10 +490,11 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         if self.releases:
             # The theme is cut from the years already read.
             return 0
-        if self.themes:
-            # Every theme rides in the same batched call, so it is one poll.
-            return self.poll_cost
-        return feeds_poll_estimate(dt_util.now().date(), True, False)
+        # Every theme rides in the same batched call, so it costs one poll, less
+        # any year another account has just read whole.
+        today = dt_util.now().date()
+        years = feed_years(today, False, today.month >= NEXT_YEAR_FROM_MONTH)
+        return self._planned_cost(years, today)
 
     async def async_themes_changed(self) -> bool:
         """Follow the themes the options now name, without reloading the entry.
@@ -525,7 +531,11 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
 
     @property
     def measured_cost(self) -> int | None:
-        """Return the billed calls the last poll spent, or None before one has."""
+        """Return what the last poll's reads cost, or None before one has run.
+
+        Counted whether this account paid or another's read of the year served it,
+        so the budget still holds if the other account goes.
+        """
         return self._measured
 
     @property
@@ -588,7 +598,14 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
                 RELEASES_PAGES_ESTIMATE if self.releases and year <= today.year else 1,
             )
             for year in years
+            if self._year_reads.fresh(year, self.config_entry.entry_id) is None
         )
+
+    def _own_sets(self) -> dict[str, LegoSet]:
+        """Return this account's owned and wanted sets, by number."""
+        if self._collection is None or self._collection.data is None:
+            return {}
+        return self._collection.data.all_sets
 
     @override
     async def _fetch(self) -> FeedsData:
@@ -626,10 +643,19 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         """Read whole years, then pick the followed themes out of them."""
         sets: list[LegoSet] = []
         for year in years:
-            fetched = await self.client.get_all_sets(
-                year_query(year), max_pages=YEAR_MAX_PAGES
-            )
-            self._pages[year] = pages_spent(len(fetched), YEAR_MAX_PAGES)
+            if (
+                read := self._year_reads.fresh(year, self.config_entry.entry_id)
+            ) is not None:
+                fetched = read.copies(self._own_sets())
+                self._pages[year] = read.pages
+            else:
+                fetched = await self.client.get_all_sets(
+                    year_query(year), max_pages=YEAR_MAX_PAGES
+                )
+                self._pages[year] = pages_spent(len(fetched), YEAR_MAX_PAGES)
+                self._year_reads.remember(
+                    year, self.config_entry.entry_id, self._pages[year], fetched
+                )
             self._found[year] = len(fetched)
             sets.extend(fetched)
         # Reading every theme costs the same however many are followed.
@@ -654,7 +680,15 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         themes = self.themes
         feeds: dict[str, list[LegoSet]] = {theme: [] for theme in themes}
         for year in years:
-            found = await self._theme_year(themes, year, today)
+            if (
+                read := self._year_reads.fresh(year, self.config_entry.entry_id)
+            ) is not None:
+                # Another account read the whole year, so the themes come free.
+                found = self._cut_themes(read.copies(self._own_sets()))
+                self._pages.setdefault(year, 1)
+                self._found[year] = sum(len(sets) for sets in found.values())
+            else:
+                found = await self._theme_year(themes, year, today)
             for theme in themes:
                 feeds[theme] += found[theme]
         return feeds
