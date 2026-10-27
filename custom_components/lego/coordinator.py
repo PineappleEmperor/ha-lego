@@ -497,11 +497,9 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
         return self._planned_cost(years, today)
 
     async def async_themes_changed(self) -> bool:
-        """Follow the themes the options now name, without reloading the entry.
-
-        Returns whether every followed theme's sets are in hand, rather than waiting
-        on the next poll.
-        """
+        """Follow the themes the options now name, without reloading the entry."""
+        # True once every followed theme's sets are in hand, False while they wait
+        # on the next poll.
         self.update_interval = feeds_interval(self.releases) if self.active else None
         previous = self._previous
         today = dt_util.now().date()
@@ -531,11 +529,9 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
 
     @property
     def measured_cost(self) -> int | None:
-        """Return what the last poll's reads cost, or None before one has run.
-
-        Counted whether this account paid or another's read of the year served it,
-        so the budget still holds if the other account goes.
-        """
+        """Return what the last poll's reads cost, or None before one has run."""
+        # Counted whether this account paid or another's read of the year served it,
+        # so the budget still holds if the other account goes.
         return self._measured
 
     @property
