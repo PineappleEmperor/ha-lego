@@ -44,7 +44,10 @@ export class LegoPanel extends LitElement {
   @state() private error = "";
   @state() private accounts: Account[] = [];
   @state() private account = "";
+  /** The account this user's panel opens on, which only the brick changes. */
+  @state() private defaultAccount = "";
   @state() private switching = "";
+  @state() private picking = false;
   @state() private customising = false;
   @state() private folded: Record<string, boolean> = {};
   @state() private dragging = "";
@@ -54,7 +57,13 @@ export class LegoPanel extends LitElement {
 
   public override connectedCallback(): void {
     super.connectedCallback();
+    window.addEventListener("click", this.onOutside);
     void this.load();
+  }
+
+  public override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    window.removeEventListener("click", this.onOutside);
   }
 
   protected override willUpdate(): void {
@@ -69,6 +78,7 @@ export class LegoPanel extends LitElement {
         });
         this.accounts = list.accounts;
         this.account = list.selected ?? "";
+        this.defaultAccount = this.account;
       }
       const dash = await this.hass.callWS<Dashboard>(
         accountCall("lego/dashboard", this.account),
@@ -99,13 +109,18 @@ export class LegoPanel extends LitElement {
     } finally {
       this.switching = "";
     }
+  }
+
+  /** Open an account by default from now on; switching alone does not. */
+  private async makeDefault(entryId: string): Promise<void> {
     try {
       await this.hass.callWS({
         type: "lego/account/set",
         config_entry_id: entryId,
       });
-    } catch {
-      // The switch has already been applied; it just will not survive a reload.
+      this.defaultAccount = entryId;
+    } catch (err) {
+      this.error = errorText(err);
     }
   }
 
@@ -243,28 +258,98 @@ export class LegoPanel extends LitElement {
             </div>`
           : nothing
       }
-      ${
-        this.accounts.length > 1
-          ? html`<select
-              class="account"
-              aria-label="Brickset account"
-              @change=${(ev: Event) =>
-                void this.selectAccount((ev.target as HTMLSelectElement).value)}
-            >
-              ${this.accounts.map(
-                (item) =>
-                  html`<option
-                    value=${item.entry_id}
-                    ?selected=${item.entry_id === this.account}
-                  >
-                    ${item.name}
-                  </option>`,
-              )}
-            </select>`
-          : nothing
-      }
+      ${this.accounts.length > 1 ? this.accountPicker() : nothing}
     </header>`;
   }
+
+  /**
+   * The account picker: a menu, not a select, so each account carries the brick
+   * that makes it the one this user's panel opens on.
+   */
+  private accountPicker(): TemplateResult {
+    const current = this.accounts.find(
+      (item) => item.entry_id === this.account,
+    );
+    return html`<div class="accountpick" @keydown=${this.onPickerKey}>
+      <div class="accountbar">
+        <button
+          class="account"
+          aria-haspopup="true"
+          aria-expanded=${this.picking}
+          aria-label=${`Brickset account: ${current?.name ?? ""}`}
+          @click=${() => (this.picking = !this.picking)}
+        >
+          <span class="names" aria-hidden="true">
+            ${this.accounts.map(
+              (item) =>
+                html`<span
+                  class=${item.entry_id === current?.entry_id ? "name" : "name ghost"}
+                  >${item.name}</span
+                >`,
+            )}
+          </span>
+          <ha-icon icon="mdi:chevron-down"></ha-icon>
+        </button>
+        ${current ? this.brickButton(current) : nothing}
+      </div>
+      ${
+        this.picking
+          ? html`<ul class="menu">
+              ${this.accounts.map(
+                (item) =>
+                  html`<li>
+                    <button
+                      class="pick"
+                      aria-current=${item.entry_id === this.account}
+                      @click=${() => {
+                        this.picking = false;
+                        void this.selectAccount(item.entry_id);
+                      }}
+                    >
+                      ${item.name}
+                    </button>
+                    ${this.brickButton(item)}
+                  </li>`,
+              )}
+            </ul>`
+          : nothing
+      }
+    </div>`;
+  }
+
+  /** Filled on the default account; an outline anywhere else, pressed to make it so. */
+  private brickButton(item: Account): TemplateResult {
+    const isDefault = item.entry_id === this.defaultAccount;
+    const label = isDefault
+      ? `${item.name} opens by default`
+      : `Open ${item.name} by default`;
+    return html`<button
+      class="brick"
+      title=${label}
+      aria-label=${label}
+      aria-pressed=${isDefault}
+      @click=${() => void (isDefault ? undefined : this.makeDefault(item.entry_id))}
+    >
+      <ha-icon
+        icon=${isDefault ? "mdi:toy-brick" : "mdi:toy-brick-outline"}
+      ></ha-icon>
+    </button>`;
+  }
+
+  private onPickerKey = (ev: KeyboardEvent): void => {
+    if (ev.key === "Escape" && this.picking) {
+      this.picking = false;
+      this.renderRoot.querySelector<HTMLButtonElement>(".account")?.focus();
+    }
+  };
+
+  /** A click anywhere outside the open menu closes it. */
+  private onOutside = (ev: MouseEvent): void => {
+    const picker = this.renderRoot.querySelector(".accountpick");
+    if (this.picking && picker && !ev.composedPath().includes(picker)) {
+      this.picking = false;
+    }
+  };
 
   private renderHome(): TemplateResult {
     const dash = this.dash;
@@ -654,16 +739,109 @@ export class LegoPanel extends LitElement {
       header.narrow .meter-bar {
         width: 64px;
       }
-      .account {
+      .accountpick {
+        max-width: 50%;
+        position: relative;
+      }
+      /* The menu button and the brick read as one control, split by a hairline. */
+      .accountbar {
+        align-items: stretch;
         background: var(--lego-ground);
         border: var(--lego-line) solid var(--lego-outline);
         border-radius: var(--ha-border-radius-md, 8px);
+        display: flex;
+        max-width: 100%;
+      }
+      .accountbar .brick {
+        border-inline-start: var(--lego-line) solid var(--lego-outline);
+        border-radius: 0;
+        height: auto;
+      }
+      .account {
+        align-items: center;
+        appearance: none;
+        background: none;
+        border: 0;
+        border-radius: var(--ha-border-radius-md, 8px);
         color: inherit;
+        min-width: 0;
+        cursor: pointer;
+        display: inline-flex;
         font: inherit;
         font-size: var(--ha-font-size-m, 14px);
-        max-width: 50%;
+        gap: var(--ha-space-2, 8px);
+        max-width: 100%;
         min-height: 48px;
-        padding: 0 var(--ha-space-3, 12px);
+        padding: 0 var(--ha-space-2, 8px) 0 var(--ha-space-3, 12px);
+        --mdc-icon-size: 20px;
+      }
+      /* Every name shares one cell, so the picker is as wide as the longest and
+         keeps its width whichever account shows. */
+      .account .names {
+        display: inline-grid;
+        justify-items: start;
+        min-width: 0;
+      }
+      .account .name {
+        grid-area: 1 / 1;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .account .name.ghost {
+        visibility: hidden;
+      }
+      .menu {
+        background: var(--lego-surface);
+        border: var(--lego-line) solid var(--lego-outline);
+        border-radius: var(--ha-border-radius-md, 8px);
+        list-style: none;
+        margin: var(--ha-space-1, 4px) 0 0;
+        min-width: 240px;
+        padding: var(--ha-space-1, 4px) 0;
+        position: absolute;
+        right: 0;
+        top: 100%;
+        z-index: 4;
+      }
+      .menu li {
+        align-items: center;
+        display: flex;
+      }
+      .pick {
+        appearance: none;
+        background: none;
+        border: 0;
+        color: var(--lego-text);
+        cursor: pointer;
+        flex: 1;
+        font: inherit;
+        font-size: var(--ha-font-size-m, 14px);
+        min-height: 48px;
+        padding: 0 var(--ha-space-4, 16px);
+        text-align: start;
+      }
+      .pick[aria-current="true"] {
+        color: var(--lego-primary);
+        font-weight: var(--ha-font-weight-medium, 500);
+      }
+      .brick {
+        align-items: center;
+        appearance: none;
+        background: none;
+        border: 0;
+        border-radius: 50%;
+        color: var(--lego-text-2);
+        cursor: pointer;
+        display: inline-flex;
+        height: 48px;
+        justify-content: center;
+        width: 48px;
+      }
+      .brick[aria-pressed="true"] {
+        color: var(--lego-primary);
+        cursor: default;
       }
       .rows {
         display: flex;
