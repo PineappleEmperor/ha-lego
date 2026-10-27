@@ -405,9 +405,11 @@ logger:
 ## Removal
 
 **Settings → Devices & services → LEGO → ⋮ → Delete**. That removes the config
-entry, its device and all its entities. Nothing is written to Brickset, so sets you
-marked owned or wanted stay marked on your account. Uninstall from HACS afterwards
-if you want the files gone too.
+entry, its device, all its entities and any repairs it raised. Deleting the last
+account also deletes the local set index and everyone's panel layout from Home
+Assistant's storage. Nothing is written to Brickset, so sets you marked owned or wanted
+stay marked on your account. Uninstall from HACS afterwards if you want the
+integration's files gone too.
 
 ## Credits
 

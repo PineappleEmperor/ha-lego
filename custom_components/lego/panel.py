@@ -71,6 +71,11 @@ class PanelStore:
         }
         self._accounts = {k: str(v) for k, v in stored.get("accounts", {}).items()}
 
+    async def async_remove(self) -> None:
+        """Forget every user's settings and delete the file, once no account is left."""
+        await self._store.async_remove()
+        await self.async_load()
+
     async def _async_save(self) -> None:
         """Write every map, since they share one storage key."""
         await self._store.async_save(

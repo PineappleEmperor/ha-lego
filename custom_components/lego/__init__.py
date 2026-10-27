@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta
 import logging
+from typing import Any
 
 from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
@@ -13,6 +14,7 @@ from homeassistant.helpers import (
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import AnyDeviceEntry
 from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
 from .api import BricksetClient
@@ -29,6 +31,8 @@ from .const import (
     DEFAULT_CATALOGUE_RICH,
     DEFAULT_DAILY_CALL_BUDGET,
     DOMAIN,
+    STORAGE_KEY,
+    STORAGE_VERSION,
 )
 from .coordinator import (
     LegoCollectionCoordinator,
@@ -201,6 +205,11 @@ async def async_remove_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> Non
     """Drop the sidebar panel once the last entry is gone, and its repairs."""
     ir.async_delete_issue(hass, DOMAIN, paging_issue_id(entry.entry_id))
     ir.async_delete_issue(hass, DOMAIN, write_issue_id(entry.entry_id))
+    if not hass.config_entries.async_entries(DOMAIN):
+        # The set index and everyone's panel layout belong to no account once the
+        # last one goes, so removing the integration leaves nothing behind.
+        await Store[dict[str, Any]](hass, STORAGE_VERSION, STORAGE_KEY).async_remove()
+        await hass.data[PANEL_STORE].async_remove()
     await async_refresh_panel(hass)
 
 

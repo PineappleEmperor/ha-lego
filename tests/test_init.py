@@ -1,6 +1,7 @@
 """Tests for LEGO config entry setup and teardown."""
 
 from datetime import timedelta
+from typing import Any
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState
@@ -231,6 +232,43 @@ async def test_removing_an_account_clears_its_repairs(
 
     for issue_id in issues:
         assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_removing_the_last_account_deletes_the_stored_files(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    hass_ws_client: WebSocketGenerator,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """The set index and the panel layouts go with the last account, not before."""
+    entry = await setup_integration(hass, mock_config_entry)
+    second = MockConfigEntry(
+        domain=DOMAIN,
+        title="otherfan",
+        unique_id="otherfan",
+        version=2,
+        minor_version=2,
+        data={**mock_config_entry.data, CONF_USERNAME: "otherfan"},
+        options=dict(mock_config_entry.options),
+    )
+    await setup_integration(hass, second)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "lego/panel_config/set", "rows": ["wishlist", "collection"]}
+    )
+    assert (await client.receive_json())["success"]
+    await hass.async_block_till_done()
+    assert {"lego_catalogue", "lego_panel"} <= hass_storage.keys()
+
+    await hass.config_entries.async_remove(second.entry_id)
+    await hass.async_block_till_done()
+    assert {"lego_catalogue", "lego_panel"} <= hass_storage.keys()
+
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert "lego_catalogue" not in hass_storage
+    assert "lego_panel" not in hass_storage
 
 
 @pytest.mark.usefixtures("brickset")
