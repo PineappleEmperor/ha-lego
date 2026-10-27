@@ -175,7 +175,7 @@
           "releases": "Fills the panel's Out recently and Coming soon rows with every set out in the last four weeks or due in the next four, whatever its theme. Checks once a day, reading the whole year at about 3 calls, and your watched themes then come from the same read instead of costing calls of their own.",
           "shared": "Lets every Home Assistant user see and change this account, as well as the people chosen above. Read-only users can look but not change anything.",
           "themes": "However many themes you pick, they are fetched together in one API call per refresh.",
-          "users": "Home Assistant users who see this account in the LEGO panel and can change it. Admins can always use every account."
+          "users": "Home Assistant users who see this account in the LEGO panel and can change it. Admins can always use every account. This scopes the panel and the actions only: the integration's sensors and calendars stay visible to every user, as all entities are."
         },
         "description": "Brickset allows 100 catalogue calls per API key per day. Within your budget of {budget}, your collection refreshes every {collection_hours} h and new releases every 12 h, or once a day when following releases across all themes, about {estimated_calls} calls a day. A quarter of the budget is kept free for actions such as a manual refresh.",
         "title": "LEGO options"
