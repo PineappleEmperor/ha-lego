@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  brickGap,
   monthsFrom,
   moveRow,
   releaseFilter,
@@ -249,6 +250,15 @@ describe("generated drawings", () => {
     ]);
     const lengths = RAINBOW.map((brick) => Number(brick.size.split("x")[1]));
     expect([...lengths].sort((a, b) => a - b)).toEqual(lengths);
+  });
+
+  it("leave the bigger pieces wider gaps, an average gap weighing 1", () => {
+    const gaps = RAINBOW.slice(1).map((brick, i) =>
+      brickGap(RAINBOW[i].width, brick.width),
+    );
+    expect([...gaps].sort((a, b) => a - b)).toEqual(gaps);
+    expect(gaps[0]).toBeLessThan(1);
+    expect(gaps[gaps.length - 1]).toBeGreaterThan(1);
   });
 });
 

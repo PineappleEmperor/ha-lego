@@ -10,6 +10,18 @@ import type {
   ThemeTotal,
   TimelinePoint,
 } from "./types";
+import { RAINBOW } from "./generated/brand";
+
+const MEAN_BRICK =
+  RAINBOW.reduce((sum, brick) => sum + brick.width, 0) / RAINBOW.length;
+
+/**
+ * How much of the spare width the gap between two bricks takes, against an
+ * average gap of 1: the bigger the pieces either side, the wider the gap.
+ */
+export function brickGap(before: number, after: number): number {
+  return Math.round(((before + after) / 2 / MEAN_BRICK) * 100) / 100;
+}
 
 // Brickset publishes a set before its name is announced and fills the name with
 // this placeholder. It is real data, not a fault, but it means nothing on a card.
