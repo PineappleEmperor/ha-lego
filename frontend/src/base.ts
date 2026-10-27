@@ -9,6 +9,7 @@ import {
 import { property, state } from "lit/decorators.js";
 
 import {
+  brickGap,
   displayName,
   errorText,
   formatPrice,
@@ -40,6 +41,8 @@ export const CHANGED = "lego-changed";
 export const TOGGLE = "lego-toggle";
 /** Fired when a row's handle is moved with the keyboard. */
 export const MOVE = "lego-move";
+/** Fired when a release row saves the filter it was just set to. */
+export const FILTER = "lego-filter";
 
 export interface RowMeta {
   title: string;
@@ -357,10 +360,18 @@ export abstract class LegoRow extends LitElement {
     return html`<div class=${stacked ? "filler stacked" : "filler"}>
       <div class="bricks" aria-hidden="true">
         ${RAINBOW.map(
-          (brick) =>
-            html`<div style="width:${Math.round(brick.width * 0.6 * scale)}px">
-              ${drawSvg(brick.svg)}
-            </div>`,
+          (brick, i) =>
+            html`${
+                i
+                  ? html`<span
+                      class="gap"
+                      style="--w:${brickGap(RAINBOW[i - 1].width, brick.width)}"
+                    ></span>`
+                  : nothing
+              }
+              <div style="width:${Math.round(brick.width * 0.6 * scale)}px">
+                ${drawSvg(brick.svg)}
+              </div>`,
         )}
       </div>
       <span class="hint">${hint}</span>

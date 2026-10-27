@@ -8,6 +8,7 @@ import {
   ROW_SPANS,
   SPAN_LABELS,
   accountCall,
+  budgetTitle,
   errorText,
   moveRow,
   releaseFilter,
@@ -154,6 +155,17 @@ export class LegoPanel extends LitElement {
     this.folded = { ...this.folded, [row]: collapsed };
   };
 
+  private onFilter = (ev: Event): void => {
+    const { row, filter } = (
+      ev as CustomEvent<{ row: string; filter: ReleaseFilter }>
+    ).detail;
+    if (!this.dash) return;
+    this.dash = {
+      ...this.dash,
+      release_filters: { ...this.dash.release_filters, [row]: filter },
+    };
+  };
+
   private onMove = (ev: Event): void => {
     const { row, step } = (ev as CustomEvent<{ row: string; step: number }>)
       .detail;
@@ -242,7 +254,14 @@ export class LegoPanel extends LitElement {
         quota
           ? html`<div
               class=${tight ? "meter tight" : "meter"}
-              title=${`Your budget is ${quota.budget} Brickset calls a day, of the 100 Brickset allows. It resets at ${new Date(quota.resets_at).toLocaleTimeString(this.hass?.locale?.language, { hour: "2-digit", minute: "2-digit" })}.`}
+              title=${budgetTitle(
+                quota.calls_today,
+                quota.budget,
+                new Date(quota.resets_at).toLocaleTimeString(
+                  this.hass?.locale?.language,
+                  { hour: "2-digit", minute: "2-digit" },
+                ),
+              )}
             >
               <span class="meter-label">Brickset calls</span>
               <span
@@ -360,6 +379,7 @@ export class LegoPanel extends LitElement {
       class="rows"
       @lego-toggle=${this.onToggle}
       @lego-move=${this.onMove}
+      @lego-filter=${this.onFilter}
       @lego-changed=${this.onChanged}
     >
       <div class="homebar">

@@ -2,8 +2,9 @@
 
 from homeassistant.core import HomeAssistant
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 
+from custom_components.lego.const import CONF_SHARED, CONF_USERS, DOMAIN
 from custom_components.lego.diagnostics import async_get_config_entry_diagnostics
 
 from .conftest import API_KEY, USER_HASH, USERNAME, setup_integration
@@ -26,6 +27,36 @@ async def test_diagnostics_redact_secrets(
     assert API_KEY not in serialised
     assert USER_HASH not in serialised
     assert USERNAME not in serialised
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_diagnostics_redact_who_uses_the_account(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, member: MockUser
+) -> None:
+    """Linked Home Assistant users are counted, never named or identified."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=mock_config_entry.title,
+        unique_id=mock_config_entry.unique_id,
+        version=2,
+        minor_version=2,
+        data=dict(mock_config_entry.data),
+        options={
+            **mock_config_entry.options,
+            CONF_USERS: [member.id],
+            CONF_SHARED: True,
+        },
+    )
+    await setup_integration(hass, entry)
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert diagnostics["entry"]["options"][CONF_USERS] == "**REDACTED**"
+    assert diagnostics["entry"]["linked_users"] == 1
+    assert diagnostics["entry"]["options"][CONF_SHARED] is True
+    serialised = str(diagnostics)
+    assert member.id not in serialised
+    assert str(member.name) not in serialised
 
 
 @pytest.mark.usefixtures("brickset")
@@ -55,6 +86,7 @@ async def test_diagnostics_include_quota_and_coordinator_state(
     assert feeds["calls_per_poll"] == 1
     assert feeds["release_sets"] is None
     assert diagnostics["summary"]["pieces_owned"] == 7122
+    assert "value" not in diagnostics["summary"]
 
 
 @pytest.mark.usefixtures("brickset")

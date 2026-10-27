@@ -6,12 +6,16 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import CONF_API_KEY, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
-from .const import BRICKSET_DAILY_CALL_LIMIT, CONF_USER_HASH
+from .access import linked_users
+from .const import BRICKSET_DAILY_CALL_LIMIT, CONF_USER_HASH, CONF_USERS
 
 if TYPE_CHECKING:
     from .coordinator import LegoConfigEntry
 
 TO_REDACT = {CONF_API_KEY, CONF_USER_HASH, CONF_USERNAME}
+# Home Assistant user ids say who lives in the house; a bug report needs only how
+# many are linked.
+OPTIONS_TO_REDACT = {CONF_USERS}
 
 
 async def async_get_config_entry_diagnostics(
@@ -28,7 +32,8 @@ async def async_get_config_entry_diagnostics(
     return {
         "entry": {
             "data": async_redact_data(dict(entry.data), TO_REDACT),
-            "options": dict(entry.options),
+            "options": async_redact_data(dict(entry.options), OPTIONS_TO_REDACT),
+            "linked_users": len(linked_users(entry)),
         },
         "quota": {
             "calls_today": quota.calls_today,
@@ -87,7 +92,8 @@ async def async_get_config_entry_diagnostics(
                 "pieces_owned": data.summary.pieces_owned,
                 "minifigs_owned": data.summary.minifigs_owned,
                 "sets_wanted": data.summary.sets_wanted,
-                "value": data.summary.value,
+                # The value is left out: it says what is in the house, and a bug in
+                # it shows as sets_missing_price.
                 "sets_missing_price": data.summary.sets_missing_price,
             }
             if data

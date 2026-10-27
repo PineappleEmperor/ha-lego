@@ -292,6 +292,38 @@ async def test_reconfigure_flow(
     assert "hunter2" not in str(mock_config_entry.data)
 
 
+@pytest.mark.parametrize(
+    ("key_valid", "credentials_valid", "expected"),
+    [
+        (False, True, "invalid_api_key"),
+        (True, False, "invalid_auth"),
+    ],
+)
+async def test_reconfigure_rejected_credentials_show_the_form_again(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    key_valid: bool,
+    credentials_valid: bool,
+    expected: str,
+) -> None:
+    """A bad key or password re-shows the form and changes nothing saved."""
+    mock_config_entry.add_to_hass(hass)
+    saved = dict(mock_config_entry.data)
+    brickset.key_valid = key_valid
+    brickset.credentials_valid = credentials_valid
+
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+    assert result["errors"] == {"base": expected}
+    assert dict(mock_config_entry.data) == saved
+
+
 @pytest.mark.usefixtures("brickset")
 async def test_reconfigure_rejects_other_account(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry

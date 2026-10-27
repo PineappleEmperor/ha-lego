@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  brickGap,
+  budgetTitle,
   monthsFrom,
   moveRow,
   releaseFilter,
@@ -51,12 +53,20 @@ describe("theme colours", () => {
 });
 
 describe("release filters", () => {
-  it("opens the combined row on Everything when all themes are followed", () => {
+  it("opens the combined row on Everything, three months either side", () => {
     expect(releaseFilter("releases", dash({}))).toEqual({
       scope: "all",
       themes: [],
-      span: "past3",
+      span: "around",
     });
+  });
+
+  it("opens on the span picked last time", () => {
+    const filter = releaseFilter(
+      "releases",
+      dash({ release_filters: { releases: { span: "next3" } } }),
+    );
+    expect(filter.span).toBe("next3");
   });
 
   it("falls back to the followed themes when releases are not followed", () => {
@@ -82,7 +92,7 @@ describe("release filters", () => {
     expect(filter).toEqual({
       scope: "mine",
       themes: ["Technic"],
-      span: "past3",
+      span: "around",
     });
   });
 
@@ -158,6 +168,18 @@ describe("timeline", () => {
     expect(stackOffsets(3)).toEqual([-5, 0, 5]);
     const four = stackOffsets(4);
     expect(four[0]).toBe(-four[3]);
+  });
+});
+
+describe("budget meter", () => {
+  it("says where the calls between the budget and Brickset's 100 go", () => {
+    expect(budgetTitle(50, 80, "01:00")).toBe(
+      "50 of today's 80 calls used. The other 20 of the 100 Brickset allows each API key a day are left unused, for anything else on your key. The count starts again at 01:00.",
+    );
+  });
+
+  it("leaves the gap out when the budget is the whole allowance", () => {
+    expect(budgetTitle(12, 100, "01:00")).not.toContain("left unused");
   });
 });
 
@@ -249,6 +271,15 @@ describe("generated drawings", () => {
     ]);
     const lengths = RAINBOW.map((brick) => Number(brick.size.split("x")[1]));
     expect([...lengths].sort((a, b) => a - b)).toEqual(lengths);
+  });
+
+  it("leave the bigger pieces wider gaps, an average gap weighing 1", () => {
+    const gaps = RAINBOW.slice(1).map((brick, i) =>
+      brickGap(RAINBOW[i].width, brick.width),
+    );
+    expect([...gaps].sort((a, b) => a - b)).toEqual(gaps);
+    expect(gaps[0]).toBeLessThan(1);
+    expect(gaps[gaps.length - 1]).toBeGreaterThan(1);
   });
 });
 

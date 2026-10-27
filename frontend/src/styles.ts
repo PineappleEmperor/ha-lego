@@ -489,7 +489,17 @@ export const CARDS = css`
     align-items: flex-end;
     display: flex;
     flex: none;
-    gap: var(--ha-space-3, 12px);
+  }
+  /* Beside the hint the bricks take the spare width, so the gaps open up to fill
+     the row; a gap's weight, set from the bricks either side, gives the bigger
+     pieces more room. */
+  .filler:not(.stacked) .bricks {
+    flex: 1 1 auto;
+  }
+  .bricks .gap {
+    flex: var(--w, 1) 1 calc(var(--ha-space-3, 12px) * var(--w, 1));
+    max-width: calc(var(--ha-space-12, 48px) * var(--w, 1));
+    min-width: var(--ha-space-1, 4px);
   }
   .bricks div {
     flex: none;

@@ -83,7 +83,8 @@ export interface FollowResult {
   complete: boolean;
 }
 
-export type Span = "year" | "past3" | "past1" | "next1" | "next3" | "coming";
+export type Span =
+  "around" | "year" | "past3" | "past1" | "next1" | "next3" | "coming";
 export type Scope = "all" | "mine";
 export type ReleaseRow = "releases" | "recent" | "upcoming" | "themes";
 export type ReleaseStatus = "ready" | "fetching" | "failed" | null;

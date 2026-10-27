@@ -8,7 +8,7 @@ import {
 import { property, state } from "lit/decorators.js";
 
 import { loadReleases } from "../api";
-import { CHANGED, LegoRow, define } from "../base";
+import { CHANGED, FILTER, LegoRow, define } from "../base";
 import {
   ROW_SPANS,
   accountCall,
@@ -43,7 +43,7 @@ const TIP_SETS = 6;
 /**
  * A row of new sets. "releases" is the combined row, filtered by scope, themes and
  * span; "recent", "upcoming" and "themes" are the same sets split into fixed rows.
- * The filters open on the user's saved defaults and change only for this visit.
+ * The filters open on what the user picked last, which Customise can also set.
  */
 export class LegoReleasesRow extends LegoRow {
   @property() public kind: ReleaseRow = "releases";
@@ -275,8 +275,28 @@ export class LegoReleasesRow extends LegoRow {
     }
   }
 
+  /** Apply a pick at once, and keep it as this row's default for the next visit. */
   private pick(change: Partial<ResolvedFilter>): void {
-    if (this.filter) this.filter = { ...this.filter, ...change };
+    if (!this.filter) return;
+    this.filter = { ...this.filter, ...change };
+    const { scope, themes, span } = this.filter;
+    const saved = { scope, themes, span };
+    this.hass
+      .callWS({
+        type: "lego/panel_config/set",
+        release_filters: { [this.kind]: saved },
+      })
+      .catch(() => {
+        // The pick has already been applied; it just will not survive a reload.
+      });
+    // So the panel's own copy, which Customise saves from, does not undo it.
+    this.dispatchEvent(
+      new CustomEvent(FILTER, {
+        detail: { row: this.kind, filter: saved },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   private status() {

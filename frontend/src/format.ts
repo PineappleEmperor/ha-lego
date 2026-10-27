@@ -10,6 +10,18 @@ import type {
   ThemeTotal,
   TimelinePoint,
 } from "./types";
+import { RAINBOW } from "./generated/brand";
+
+const MEAN_BRICK =
+  RAINBOW.reduce((sum, brick) => sum + brick.width, 0) / RAINBOW.length;
+
+/**
+ * How much of the spare width the gap between two bricks takes, against an
+ * average gap of 1: the bigger the pieces either side, the wider the gap.
+ */
+export function brickGap(before: number, after: number): number {
+  return Math.round(((before + after) / 2 / MEAN_BRICK) * 100) / 100;
+}
 
 // Brickset publishes a set before its name is announced and fills the name with
 // this placeholder. It is real data, not a fault, but it means nothing on a card.
@@ -164,6 +176,28 @@ export function count(n: number, one: string, many: string): string {
   return `${n.toLocaleString()} ${n === 1 ? one : many}`;
 }
 
+/** Brickset's own ceiling per API key per day, which no budget can pass. */
+const BRICKSET_DAILY_LIMIT = 100;
+
+/**
+ * The budget meter's tooltip: what is used, and where the calls between the budget
+ * and Brickset's ceiling go, since nothing here spends them.
+ */
+export function budgetTitle(
+  used: number,
+  budget: number,
+  resets: string,
+): string {
+  const spare = BRICKSET_DAILY_LIMIT - budget;
+  return [
+    `${used} of today's ${budget} calls used.`,
+    spare > 0
+      ? `The other ${spare} of the ${BRICKSET_DAILY_LIMIT} Brickset allows each API key a day are left unused, for anything else on your key.`
+      : `Your budget is all ${BRICKSET_DAILY_LIMIT} calls Brickset allows each API key a day.`,
+    `The count starts again at ${resets}.`,
+  ].join(" ");
+}
+
 /** Within this many days of leaving sale, a set's exit date is flagged. */
 const RETIRING_SOON_DAYS = 60;
 
@@ -244,6 +278,7 @@ export function displayName(item: Pick<LegoSet, "name">): string {
 }
 
 export const SPAN_LABELS: Record<Span, string> = {
+  around: "3 months either side",
   year: "This year",
   past3: "Past 3 months",
   past1: "Past month",
@@ -254,8 +289,8 @@ export const SPAN_LABELS: Record<Span, string> = {
 
 /** The spans each release row offers, in the order its pills show them. */
 export const ROW_SPANS: Record<ReleaseRow, Span[]> = {
-  releases: ["year", "past3", "past1", "next3", "coming"],
-  themes: ["year", "past3", "past1", "next3", "coming"],
+  releases: ["around", "year", "past3", "past1", "next3", "coming"],
+  themes: ["around", "year", "past3", "past1", "next3", "coming"],
   recent: ["past1", "past3", "year"],
   upcoming: ["next1", "next3", "coming"],
 };
@@ -301,7 +336,7 @@ export function releaseFilter(
         ? "next1"
         : row === "recent"
           ? "past1"
-          : "past3";
+          : "around";
   return { scope, themes, span };
 }
 

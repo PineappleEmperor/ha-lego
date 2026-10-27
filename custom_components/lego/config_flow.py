@@ -276,7 +276,7 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Let the user swap API key or Brickset account."""
+        """Let the user change this account's API key or sign in again."""
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
 

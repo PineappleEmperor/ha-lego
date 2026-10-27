@@ -34,8 +34,8 @@
           "password": "Exchanged for a long-lived token; only the token is saved.",
           "username": "Must be the account this entry already tracks."
         },
-        "description": "Update the API key or switch to a different Brickset account.",
-        "title": "Change Brickset account"
+        "description": "Change this account's API key, or sign in again with its password. To track a different Brickset account, add it as a new entry.",
+        "title": "Update Brickset account"
       },
       "region": {
         "data": {

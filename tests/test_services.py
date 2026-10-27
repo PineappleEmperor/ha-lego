@@ -1,8 +1,12 @@
 """Tests for the LEGO actions."""
 
 import aiohttp
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.core import Context, HomeAssistant
+from homeassistant.exceptions import (
+    HomeAssistantError,
+    ServiceValidationError,
+    Unauthorized,
+)
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
 import pytest
@@ -211,6 +215,89 @@ async def test_set_collection_unknown_set_raises(
         )
 
     assert err.value.translation_key == "set_not_found"
+
+
+async def test_set_collection_with_nothing_to_change_raises(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """A call naming a set but no change is refused before reaching Brickset."""
+    await setup_integration(hass, mock_config_entry)
+
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_COLLECTION,
+            {
+                "device_id": lego_device_id(hass, mock_config_entry),
+                "set_number": "10497-1",
+            },
+            blocking=True,
+        )
+
+    assert err.value.translation_key == "no_changes"
+    assert brickset.set_collection_calls == []
+
+
+async def test_set_collection_lookup_failure_raises(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """Brickset failing the billed lookup of an unseen set is an API error."""
+    await setup_integration(hass, mock_config_entry)
+    brickset.get_sets_error = "Service temporarily unavailable"
+
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_COLLECTION,
+            {
+                "device_id": lego_device_id(hass, mock_config_entry),
+                "set_number": "77777-1",
+                "owned": True,
+            },
+            blocking=True,
+        )
+
+    assert err.value.translation_key == "api_error"
+
+
+async def test_search_failure_raises(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """Brickset failing a search is an API error, not an empty answer."""
+    await setup_integration(hass, mock_config_entry)
+    brickset.get_sets_error = "Service temporarily unavailable"
+
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SEARCH_SETS,
+            {"device_id": lego_device_id(hass, mock_config_entry), "query": "castle"},
+            blocking=True,
+            return_response=True,
+        )
+
+    assert err.value.translation_key == "api_error"
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_a_deleted_user_cannot_act(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """A call carrying a user Home Assistant no longer knows is refused."""
+    await setup_integration(hass, mock_config_entry)
+
+    with pytest.raises(Unauthorized):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_COLLECTION,
+            {
+                "device_id": lego_device_id(hass, mock_config_entry),
+                "set_number": "10497-1",
+                "owned": True,
+            },
+            blocking=True,
+            context=Context(user_id="deleted-user"),
+        )
 
 
 async def test_set_collection_expired_token_raises(

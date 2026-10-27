@@ -5,6 +5,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_REGION
 from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -14,8 +15,10 @@ from custom_components.lego.const import (
     CONF_RELEASES,
     CONF_SHARED,
     CONF_THEMES,
+    DOMAIN,
     EVENT_NEW_SET,
 )
+from custom_components.lego.sensor import theme_unique_id
 
 from .conftest import BricksetServer, make_set, setup_integration
 
@@ -126,6 +129,41 @@ async def test_following_while_reading_whole_years_costs_nothing(
     assert brickset.get_sets_calls[before:] == []
     feeds = entry.runtime_data.feeds
     assert [item.number for item in feeds.data.themes["technic"]] == ["42300-1"]
+
+
+@pytest.mark.usefixtures("spring")
+async def test_a_theme_followed_from_the_panel_gets_its_sensor(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    entity_registry: er.EntityRegistry,
+    hass_ws_client: WebSocketGenerator,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Following adds the theme's sensor and unfollowing removes it, with no reload."""
+    brickset.theme_sets.append(make_set(7, "10330-1", "An Icon", theme="Icons"))
+    entry = await setup_integration(hass, mock_config_entry)
+
+    def sensor(theme: str) -> str | None:
+        return entity_registry.async_get_entity_id(
+            "sensor", DOMAIN, theme_unique_id(entry.entry_id, theme)
+        )
+
+    assert sensor("Icons") is None
+
+    await _follow(hass, hass_ws_client, "Icons")
+    await hass.async_block_till_done()
+    entity_id = sensor("Icons")
+    assert entity_id is not None
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == "10330-1"
+
+    await _follow(hass, hass_ws_client, "Icons", follow=False)
+    await hass.async_block_till_done()
+    assert sensor("Icons") is None
+    assert hass.states.get(entity_id) is None
+    # The theme still followed keeps its sensor.
+    assert sensor("Technic") is not None
 
 
 async def test_unfollowing_drops_the_theme_without_a_call(

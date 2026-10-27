@@ -1,6 +1,7 @@
 """Tests for LEGO config entry setup and teardown."""
 
 from datetime import timedelta
+from typing import Any
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState
@@ -11,7 +12,11 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+    issue_registry as ir,
+)
 from homeassistant.setup import async_setup_component
 import pytest
 from pytest_homeassistant_custom_component.common import (
@@ -201,11 +206,88 @@ async def test_setup_starts_reauth_on_bad_hash(
 
 
 @pytest.mark.usefixtures("brickset")
-async def test_options_update_reloads(
+async def test_removing_an_account_clears_its_repairs(
+    hass: HomeAssistant,
+    issue_registry: ir.IssueRegistry,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Neither the paging nor the rejected-write repair outlives its account."""
+    entry = await setup_integration(hass, mock_config_entry)
+    raised = {
+        f"theme_feed_paging_{entry.entry_id}": (
+            "theme_feed_paging",
+            {"name": entry.title, "themes": "Technic", "pages": "2", "calls": "2"},
+        ),
+        f"collection_write_failed_{entry.entry_id}": (
+            "collection_write_failed",
+            {"name": entry.title, "error": "rejected"},
+        ),
+    }
+    for issue_id, (key, placeholders) in raised.items():
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=key,
+            translation_placeholders=placeholders,
+        )
+    issues = tuple(raised)
+
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+
+    for issue_id in issues:
+        assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_removing_the_last_account_deletes_the_stored_files(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    hass_ws_client: WebSocketGenerator,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """The set index and the panel layouts go with the last account, not before."""
+    entry = await setup_integration(hass, mock_config_entry)
+    second = MockConfigEntry(
+        domain=DOMAIN,
+        title="otherfan",
+        unique_id="otherfan",
+        version=2,
+        minor_version=2,
+        data={**mock_config_entry.data, CONF_USERNAME: "otherfan"},
+        options=dict(mock_config_entry.options),
+    )
+    await setup_integration(hass, second)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "lego/panel_config/set", "rows": ["wishlist", "collection"]}
+    )
+    assert (await client.receive_json())["success"]
+    await hass.async_block_till_done()
+    assert {"lego_catalogue", "lego_panel"} <= hass_storage.keys()
+
+    await hass.config_entries.async_remove(second.entry_id)
+    await hass.async_block_till_done()
+    assert {"lego_catalogue", "lego_panel"} <= hass_storage.keys()
+
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert "lego_catalogue" not in hass_storage
+    assert "lego_panel" not in hass_storage
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_an_options_write_outside_the_flow_needs_no_reload(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Changing options reloads the entry so coordinators pick them up."""
+    """Options are read live, so a write from the panel takes effect in place."""
+    # Only the options flow reloads the entry; following a theme writes the options
+    # directly, and a reload would spend a collection poll.
     await setup_integration(hass, mock_config_entry)
+    runtime = mock_config_entry.runtime_data
 
     hass.config_entries.async_update_entry(
         mock_config_entry,
@@ -214,7 +296,8 @@ async def test_options_update_reloads(
     await hass.async_block_till_done()
 
     assert mock_config_entry.state is ConfigEntryState.LOADED
-    assert mock_config_entry.runtime_data.collection.region == "US"
+    assert mock_config_entry.runtime_data is runtime
+    assert runtime.collection.region == "US"
 
 
 @pytest.mark.usefixtures("brickset")

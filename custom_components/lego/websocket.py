@@ -125,7 +125,7 @@ def websocket_dashboard(
         probatio.Optional("config_entry_id"): str,
         probatio.Optional("scope", default="mine"): probatio.In(RELEASE_SCOPES),
         probatio.Optional("themes", default=list): [str],
-        probatio.Optional("span", default="past3"): probatio.In(RELEASE_SPANS),
+        probatio.Optional("span", default="around"): probatio.In(RELEASE_SPANS),
     }
 )
 def websocket_releases(
