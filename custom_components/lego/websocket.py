@@ -112,7 +112,10 @@ def websocket_dashboard(
 
     store = hass.data[PANEL_STORE]
     user_id = connection.user.id if connection.user else None
-    connection.send_result(msg["id"], dashboard_payload(entry, store.settings(user_id)))
+    payload = dashboard_payload(entry, store.settings(user_id))
+    # So the panel offers only the changes this user may make.
+    payload["can_change"] = can_change(entry, connection.user)
+    connection.send_result(msg["id"], payload)
 
 
 @callback

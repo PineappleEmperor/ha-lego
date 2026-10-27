@@ -8,9 +8,10 @@ import {
 import { property, state } from "lit/decorators.js";
 
 import { loadReleases } from "../api";
-import { LegoRow, define } from "../base";
+import { CHANGED, LegoRow, define } from "../base";
 import {
   ROW_SPANS,
+  accountCall,
   SPAN_LABELS,
   TIMELINE_MONTHS,
   count,
@@ -23,7 +24,14 @@ import {
   type ResolvedFilter,
 } from "../format";
 import { slotColour, themeSlots } from "../palette";
-import type { ReleaseRow, Releases, Scope, Span } from "../types";
+import type {
+  FollowResult,
+  ReleaseRow,
+  Releases,
+  Scope,
+  Span,
+  ThemeList,
+} from "../types";
 
 /** Rows with a theme filter and the timeline; the fixed rows have neither. */
 const FILTERED: ReleaseRow[] = ["releases", "themes"];
@@ -39,6 +47,12 @@ export class LegoReleasesRow extends LegoRow {
   @state() private filter?: ResolvedFilter;
   @state() private data?: Releases;
   @state() private error = "";
+  /** The follow editor: open, the themes on offer, and what is typed. */
+  @state() private adding = false;
+  @state() private themeList?: ThemeList;
+  @state() private draft = "";
+  @state() private following = false;
+  @state() private followNote = "";
 
   private filterFor = "";
   private requested = "";
@@ -51,6 +65,29 @@ export class LegoReleasesRow extends LegoRow {
   static override styles = [
     LegoRow.styles,
     css`
+      .follow {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--ha-space-2, 8px);
+        margin: 0 0 var(--ha-space-3, 12px);
+      }
+      .follow input {
+        background: var(--lego-ground);
+        border: var(--lego-line) solid var(--lego-outline);
+        border-radius: var(--ha-border-radius-md, 8px);
+        box-sizing: border-box;
+        color: inherit;
+        flex: 1 1 220px;
+        font: inherit;
+        font-size: var(--ha-font-size-m, 14px);
+        min-height: 40px;
+        padding: 0 var(--ha-space-3, 12px);
+      }
+      .chip .drop {
+        --mdc-icon-size: 18px;
+        margin-inline-end: calc(-1 * var(--ha-space-2, 8px));
+      }
       .timeline {
         height: 64px;
         margin: var(--ha-space-2, 8px) 0 var(--ha-space-3, 12px);
@@ -194,8 +231,10 @@ export class LegoReleasesRow extends LegoRow {
     const dash = this.dash;
     if (!filter || !dash) return html`<p class="muted">Loading…</p>`;
     const status = this.status();
-    if (status === null)
-      return html`<p class="muted">${this.unavailable()}</p>`;
+    if (status === null) {
+      return html`<p class="muted">${this.unavailable()}</p>
+        ${this.kind === "recent" || this.kind === "upcoming" ? nothing : this.followControls()}`;
+    }
     if (status === "fetching") {
       return html`<p class="muted">Fetching this year's releases…</p>`;
     }
@@ -222,9 +261,13 @@ export class LegoReleasesRow extends LegoRow {
       return "Turn on Follow releases across all themes in the integration's options for this row.";
     }
     if (this.kind === "themes") {
-      return "No themes followed yet. Add one in the integration's options to see new sets here.";
+      return this.dash?.can_change
+        ? "No themes followed yet. Follow one to see its new sets here."
+        : "No themes followed yet.";
     }
-    return "Follow themes, or turn on Follow releases across all themes, in the integration's options to see new sets here.";
+    return this.dash?.can_change
+      ? "Follow a theme, or turn on Follow releases across all themes in the integration's options, to see new sets here."
+      : "No themes followed yet.";
   }
 
   private chips(filter: ResolvedFilter): TemplateResult {
@@ -242,47 +285,172 @@ export class LegoReleasesRow extends LegoRow {
       </button>`;
     };
     return html`<div class="chips">
-      ${
-        this.kind === "releases" && dash.release_status.all !== null
-          ? scopeChip("all", "Everything")
-          : nothing
-      }
-      ${
-        dash.followed.length
-          ? scopeChip(
-              "mine",
-              this.kind === "themes" ? "All my themes" : "My themes",
-            )
-          : nothing
-      }
-      ${
-        dash.followed.length && this.kind === "releases"
-          ? html`<span class="divider" aria-hidden="true"></span>`
-          : nothing
-      }
-      ${dash.followed.map((theme) => {
-        const on = filter.scope === "mine" && filter.themes.includes(theme);
-        return html`<button
-          class=${on ? "chip on" : "chip"}
-          aria-pressed=${on}
-          @click=${() =>
-            this.pick({
-              scope: "mine",
-              themes: toggleTheme(
-                filter.scope === "mine" ? filter.themes : [],
-                theme,
-                dash.followed,
-              ),
-            })}
+        ${
+          this.kind === "releases" && dash.release_status.all !== null
+            ? scopeChip("all", "Everything")
+            : nothing
+        }
+        ${
+          dash.followed.length
+            ? scopeChip(
+                "mine",
+                this.kind === "themes" ? "All my themes" : "My themes",
+              )
+            : nothing
+        }
+        ${
+          dash.followed.length && this.kind === "releases"
+            ? html`<span class="divider" aria-hidden="true"></span>`
+            : nothing
+        }
+        ${dash.followed.map((theme) => {
+          const on = filter.scope === "mine" && filter.themes.includes(theme);
+          return html`<button
+            class=${on ? "chip on" : "chip"}
+            aria-pressed=${on}
+            @click=${() =>
+              this.pick({
+                scope: "mine",
+                themes: toggleTheme(
+                  filter.scope === "mine" ? filter.themes : [],
+                  theme,
+                  dash.followed,
+                ),
+              })}
+          >
+            <span
+              class="key"
+              style="background:${slotColour(slots.get(theme))}"
+            ></span>
+            ${theme}
+          </button>`;
+        })}
+        ${this.followChip()}
+      </div>
+      ${this.adding ? this.editor() : nothing}`;
+  }
+
+  private followControls(): TemplateResult | typeof nothing {
+    if (!this.dash?.can_change) return nothing;
+    return html`<div class="chips">${this.followChip()}</div>
+      ${this.adding ? this.editor() : nothing}`;
+  }
+
+  private followChip(): TemplateResult | typeof nothing {
+    if (!this.dash?.can_change || this.adding) return nothing;
+    return html`<button class="chip" @click=${() => void this.openEditor()}>
+      <ha-icon icon="mdi:plus"></ha-icon>
+      Follow a theme
+    </button>`;
+  }
+
+  private async openEditor(): Promise<void> {
+    this.adding = true;
+    this.followNote = "";
+    await this.loadThemes();
+  }
+
+  private async loadThemes(): Promise<void> {
+    try {
+      this.themeList = await this.hass.callWS<ThemeList>(
+        accountCall("lego/themes", this.entryId || this.dash?.entry_id || ""),
+      );
+    } catch (err) {
+      this.followNote = errorText(err);
+    }
+  }
+
+  /** The editor that opens below the chips: a theme to add, and the ones to drop. */
+  private editor(): TemplateResult {
+    const list = this.themeList;
+    const followed = list?.followed ?? this.dash?.followed ?? [];
+    const taken = new Set(followed.map((theme) => theme.toLowerCase()));
+    const cost = list
+      ? list.follow_cost
+        ? count(list.follow_cost, "call", "calls")
+        : "free"
+      : "…";
+    const id = `lego-themes-${this.kind}`;
+    return html`<div class="follow">
+        <input
+          list=${id}
+          .value=${this.draft}
+          placeholder="Theme name, such as Technic"
+          aria-label="Theme to follow"
+          @input=${(ev: Event) => {
+            this.draft = (ev.target as HTMLInputElement).value;
+          }}
+          @keydown=${(ev: KeyboardEvent) => {
+            if (ev.key === "Enter") void this.follow(this.draft, true);
+          }}
+        />
+        <datalist id=${id}>
+          ${(list?.themes ?? [])
+            .filter((theme) => !taken.has(theme.toLowerCase()))
+            .map((theme) => html`<option value=${theme}></option>`)}
+        </datalist>
+        <button
+          class="update"
+          ?disabled=${!this.draft.trim() || this.following}
+          title=${`Follow this theme, using ${cost} of today's Brickset budget`}
+          @click=${() => void this.follow(this.draft, true)}
         >
-          <span
-            class="key"
-            style="background:${slotColour(slots.get(theme))}"
-          ></span>
-          ${theme}
-        </button>`;
-      })}
-    </div>`;
+          <ha-icon icon="mdi:plus"></ha-icon>
+          ${this.following ? "Following…" : "Follow"}
+          <span class="sep" aria-hidden="true"></span>
+          <span class="cost">${cost}</span>
+        </button>
+        <button class="link" @click=${() => (this.adding = false)}>Done</button>
+      </div>
+      ${
+        followed.length
+          ? html`<div class="chips" role="group" aria-label="Themes you follow">
+              ${followed.map(
+                (theme) =>
+                  html`<button
+                    class="chip"
+                    aria-label=${`Stop following ${theme}`}
+                    ?disabled=${this.following}
+                    @click=${() => void this.follow(theme, false)}
+                  >
+                    ${theme}
+                    <ha-icon class="drop" icon="mdi:close"></ha-icon>
+                  </button>`,
+              )}
+            </div>`
+          : nothing
+      }
+      ${this.followNote ? html`<p class="caveat" role="status">${this.followNote}</p>` : nothing}`;
+  }
+
+  private async follow(theme: string, follow: boolean): Promise<void> {
+    const name = theme.trim();
+    if (!name || this.following) return;
+    this.following = true;
+    this.followNote = "";
+    try {
+      const result = await this.hass.callWS<FollowResult>({
+        ...accountCall(
+          "lego/themes/follow",
+          this.entryId || this.dash?.entry_id || "",
+        ),
+        theme: name,
+        follow,
+      });
+      if (follow) this.draft = "";
+      if (!result.complete) {
+        this.followNote = `Following ${name}. Its sets arrive with the next check, as today's budget is spent.`;
+      }
+      await this.loadThemes();
+    } catch (err) {
+      this.followNote = errorText(err);
+      return;
+    } finally {
+      this.following = false;
+    }
+    this.dispatchEvent(
+      new CustomEvent(CHANGED, { bubbles: true, composed: true }),
+    );
   }
 
   /** The colour a set's theme wears: its slot if followed, else "Other"'s grey. */

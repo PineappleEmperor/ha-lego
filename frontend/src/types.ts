@@ -66,7 +66,21 @@ export interface Account {
 
 export interface AccountList {
   accounts: Account[];
+  /** The account the panel opens on: the user's default, else their own. */
   selected: string | null;
+}
+
+export interface ThemeList {
+  themes: string[];
+  followed: string[];
+  follow_cost: number;
+  can_change: boolean;
+}
+
+export interface FollowResult {
+  followed: string[];
+  /** False when the theme's sets wait on the next check, the budget being spent. */
+  complete: boolean;
 }
 
 export type Span = "year" | "past3" | "past1" | "next1" | "next3" | "coming";
@@ -92,6 +106,8 @@ export interface PanelSettings {
 export interface Dashboard extends PanelSettings {
   entry_id: string;
   device_id: string | null;
+  /** Whether this user may change the account, not merely look at it. */
+  can_change: boolean;
   region: string;
   currency: string | null;
   quota: Quota;
