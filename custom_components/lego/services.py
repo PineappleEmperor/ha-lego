@@ -15,7 +15,6 @@ from homeassistant.exceptions import (
     HomeAssistantError,
     ServiceValidationError,
     Unauthorized,
-    UnknownUser,
 )
 from homeassistant.helpers import config_validation as cv, issue_registry as ir
 from homeassistant.helpers.device_registry import (
@@ -108,7 +107,8 @@ async def _async_get_entry(
     if call.context.user_id:
         user = await hass.auth.async_get_user(call.context.user_id)
         if user is None:
-            raise UnknownUser(context=call.context)
+            # A user since deleted may use no account.
+            raise Unauthorized(context=call.context)
     # Checked before the entry's state, so a refusal gives away neither it nor the title.
     if not (can_change if write else can_view)(entry, user):
         raise Unauthorized(context=call.context, config_entry_id=entry.entry_id)
