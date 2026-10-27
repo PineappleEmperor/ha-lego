@@ -41,6 +41,8 @@ export const CHANGED = "lego-changed";
 export const TOGGLE = "lego-toggle";
 /** Fired when a row's handle is moved with the keyboard. */
 export const MOVE = "lego-move";
+/** Fired when a release row saves the filter it was just set to. */
+export const FILTER = "lego-filter";
 
 export interface RowMeta {
   title: string;

@@ -155,6 +155,17 @@ export class LegoPanel extends LitElement {
     this.folded = { ...this.folded, [row]: collapsed };
   };
 
+  private onFilter = (ev: Event): void => {
+    const { row, filter } = (
+      ev as CustomEvent<{ row: string; filter: ReleaseFilter }>
+    ).detail;
+    if (!this.dash) return;
+    this.dash = {
+      ...this.dash,
+      release_filters: { ...this.dash.release_filters, [row]: filter },
+    };
+  };
+
   private onMove = (ev: Event): void => {
     const { row, step } = (ev as CustomEvent<{ row: string; step: number }>)
       .detail;
@@ -368,6 +379,7 @@ export class LegoPanel extends LitElement {
       class="rows"
       @lego-toggle=${this.onToggle}
       @lego-move=${this.onMove}
+      @lego-filter=${this.onFilter}
       @lego-changed=${this.onChanged}
     >
       <div class="homebar">
