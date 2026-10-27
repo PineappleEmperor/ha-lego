@@ -213,19 +213,27 @@ async def test_removing_an_account_clears_its_repairs(
 ) -> None:
     """Neither the paging nor the rejected-write repair outlives its account."""
     entry = await setup_integration(hass, mock_config_entry)
-    issues = (
-        f"theme_feed_paging_{entry.entry_id}",
-        f"collection_write_failed_{entry.entry_id}",
-    )
-    for issue_id in issues:
+    raised = {
+        f"theme_feed_paging_{entry.entry_id}": (
+            "theme_feed_paging",
+            {"name": entry.title, "themes": "Technic", "pages": "2", "calls": "2"},
+        ),
+        f"collection_write_failed_{entry.entry_id}": (
+            "collection_write_failed",
+            {"name": entry.title, "error": "rejected"},
+        ),
+    }
+    for issue_id, (key, placeholders) in raised.items():
         ir.async_create_issue(
             hass,
             DOMAIN,
             issue_id,
             is_fixable=False,
             severity=ir.IssueSeverity.WARNING,
-            translation_key="collection_write_failed",
+            translation_key=key,
+            translation_placeholders=placeholders,
         )
+    issues = tuple(raised)
 
     await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
