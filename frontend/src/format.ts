@@ -278,6 +278,7 @@ export function displayName(item: Pick<LegoSet, "name">): string {
 }
 
 export const SPAN_LABELS: Record<Span, string> = {
+  around: "3 months either side",
   year: "This year",
   past3: "Past 3 months",
   past1: "Past month",
@@ -288,8 +289,8 @@ export const SPAN_LABELS: Record<Span, string> = {
 
 /** The spans each release row offers, in the order its pills show them. */
 export const ROW_SPANS: Record<ReleaseRow, Span[]> = {
-  releases: ["year", "past3", "past1", "next3", "coming"],
-  themes: ["year", "past3", "past1", "next3", "coming"],
+  releases: ["around", "year", "past3", "past1", "next3", "coming"],
+  themes: ["around", "year", "past3", "past1", "next3", "coming"],
   recent: ["past1", "past3", "year"],
   upcoming: ["next1", "next3", "coming"],
 };
@@ -335,7 +336,7 @@ export function releaseFilter(
         ? "next1"
         : row === "recent"
           ? "past1"
-          : "past3";
+          : "around";
   return { scope, themes, span };
 }
 

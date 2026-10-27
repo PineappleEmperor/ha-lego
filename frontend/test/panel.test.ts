@@ -53,12 +53,20 @@ describe("theme colours", () => {
 });
 
 describe("release filters", () => {
-  it("opens the combined row on Everything when all themes are followed", () => {
+  it("opens the combined row on Everything, three months either side", () => {
     expect(releaseFilter("releases", dash({}))).toEqual({
       scope: "all",
       themes: [],
-      span: "past3",
+      span: "around",
     });
+  });
+
+  it("opens on the span picked last time", () => {
+    const filter = releaseFilter(
+      "releases",
+      dash({ release_filters: { releases: { span: "next3" } } }),
+    );
+    expect(filter.span).toBe("next3");
   });
 
   it("falls back to the followed themes when releases are not followed", () => {
@@ -84,7 +92,7 @@ describe("release filters", () => {
     expect(filter).toEqual({
       scope: "mine",
       themes: ["Technic"],
-      span: "past3",
+      span: "around",
     });
   });
 

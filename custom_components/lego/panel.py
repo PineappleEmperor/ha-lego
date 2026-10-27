@@ -306,6 +306,7 @@ def span_window(span: str, today: date) -> tuple[date, date]:
     quarter = timedelta(days=QUARTER_DAYS)
     tomorrow = today + timedelta(days=1)
     windows = {
+        "around": (today - quarter, today + quarter),
         "year": (date(today.year, 1, 1), today),
         "past3": (today - quarter, today),
         "past1": (today - month, today),
@@ -323,7 +324,7 @@ def _is_set(item: LegoSet) -> bool:
 def release_sets(
     sets: list[LegoSet], region: str, span: str, today: date
 ) -> list[LegoSet]:
-    """Pick the sets out within a span: newest first behind today, soonest ahead."""
+    """Pick the sets within a span: newest first behind today, soonest ahead."""
     start, end = span_window(span, today)
     dated: list[tuple[date, LegoSet]] = []
     undated: list[LegoSet] = []
@@ -336,11 +337,18 @@ def release_sets(
             continue
         if start <= released <= end:
             dated.append((released, item))
-    if start > today:
-        dated.sort(key=lambda pair: (pair[0], pair[1].number))
-    else:
-        dated.sort(key=lambda pair: (-pair[0].toordinal(), pair[1].number))
-    return [item for _, item in dated] + sorted(undated, key=lambda item: item.number)
+    out = sorted(
+        (pair for pair in dated if pair[0] <= today),
+        key=lambda pair: (-pair[0].toordinal(), pair[1].number),
+    )
+    ahead = sorted(
+        (pair for pair in dated if pair[0] > today),
+        key=lambda pair: (pair[0], pair[1].number),
+    )
+    # A span either side of today leads with what just came out, then what is next.
+    return [item for _, item in out + ahead] + sorted(
+        undated, key=lambda item: item.number
+    )
 
 
 def release_timeline(

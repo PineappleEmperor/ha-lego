@@ -242,6 +242,13 @@ async def test_release_spans_pick_and_order_the_followed_themes(
         "Due in 100 days",
         "Announced Set",
     ]
+    # Either side of today: what just came out leads, then what is next.
+    assert await names("around") == [
+        "Out today",
+        "Out 30 days ago",
+        "Out 91 days ago",
+        "Due in a month",
+    ]
 
 
 async def test_release_timeline_and_theme_filter(

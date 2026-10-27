@@ -111,7 +111,15 @@ PANEL_DEFAULT_COLLAPSED: Final = ("value", "pieces")
 RELEASE_MODES: Final = ("combined", "separate")
 RELEASE_ROWS: Final = ("releases", "recent", "upcoming", "themes")
 RELEASE_SCOPES: Final = ("all", "mine")
-RELEASE_SPANS: Final = ("year", "past3", "past1", "next1", "next3", "coming")
+RELEASE_SPANS: Final = (
+    "around",
+    "year",
+    "past3",
+    "past1",
+    "next1",
+    "next3",
+    "coming",
+)
 
 MIN_TIME_BETWEEN_QUOTA_CHECKS: Final = timedelta(minutes=30)
 
