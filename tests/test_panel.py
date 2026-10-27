@@ -276,8 +276,18 @@ async def test_release_timeline_and_theme_filter(
     )
     result = (await client.receive_json())["result"]
     assert result["timeline"] == [
-        {"date": date(today.year, 1, 1).isoformat(), "theme": "Technic"},
-        {"date": today.isoformat(), "theme": "Technic"},
+        {
+            "date": date(today.year, 1, 1).isoformat(),
+            "theme": "Technic",
+            "number": "42002-1",
+            "name": "Earlier",
+        },
+        {
+            "date": today.isoformat(),
+            "theme": "Technic",
+            "number": "42001-1",
+            "name": "Later",
+        },
     ]
     assert result["span"] == {
         "from": date(today.year, 1, 1).isoformat(),

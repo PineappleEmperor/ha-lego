@@ -339,6 +339,8 @@ export interface Stack {
   at: number;
   themes: string[];
   extra: number;
+  /** Every set in the stack, the ones past the cap included, for its hover. */
+  points: TimelinePoint[];
 }
 
 /**
@@ -352,20 +354,21 @@ export function stackTimeline(
   gap = 0.15,
   cap = 4,
 ): Stack[] {
-  const stacks: { at: number; themes: string[] }[] = [];
+  const stacks: { at: number; points: TimelinePoint[] }[] = [];
   for (const point of [...points].sort((a, b) =>
     a.date.localeCompare(b.date),
   )) {
     const at = monthsFrom(start, point.date);
     if (at < 0 || at > TIMELINE_MONTHS) continue;
     const last = stacks[stacks.length - 1];
-    if (last && at - last.at <= gap) last.themes.push(point.theme);
-    else stacks.push({ at, themes: [point.theme] });
+    if (last && at - last.at <= gap) last.points.push(point);
+    else stacks.push({ at, points: [point] });
   }
   return stacks.map((s) => ({
     at: s.at,
-    themes: s.themes.slice(0, cap),
-    extra: Math.max(s.themes.length - cap, 0),
+    themes: s.points.slice(0, cap).map((point) => point.theme),
+    extra: Math.max(s.points.length - cap, 0),
+    points: s.points,
   }));
 }
 

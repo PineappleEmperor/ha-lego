@@ -15,6 +15,7 @@ import {
   SPAN_LABELS,
   TIMELINE_MONTHS,
   count,
+  displayName,
   errorText,
   monthsFrom,
   releaseFilter,
@@ -22,6 +23,7 @@ import {
   stackTimeline,
   toggleTheme,
   type ResolvedFilter,
+  type Stack,
 } from "../format";
 import { slotColour, themeSlots } from "../palette";
 import type {
@@ -35,6 +37,8 @@ import type {
 
 /** Rows with a theme filter and the timeline; the fixed rows have neither. */
 const FILTERED: ReleaseRow[] = ["releases", "themes"];
+/** Sets a timeline stack's card names before it counts the rest. */
+const TIP_SETS = 6;
 
 /**
  * A row of new sets. "releases" is the combined row, filtered by scope, themes and
@@ -108,27 +112,107 @@ export class LegoReleasesRow extends LegoRow {
         position: absolute;
         top: 4px;
       }
+      .timeline .stack {
+        appearance: none;
+        background: none;
+        border: 0;
+        border-radius: 50%;
+        cursor: default;
+        height: 24px;
+        padding: 0;
+        position: absolute;
+        top: 21px;
+        transform: translate(-50%, -50%);
+        width: 24px;
+      }
+      .timeline .stack:hover,
+      .timeline .stack:focus-visible {
+        z-index: 30;
+      }
+      .timeline .stack.out {
+        opacity: 0.35;
+      }
       .timeline .disc {
         border-radius: 50%;
         box-shadow: 0 0 0 2px var(--lego-surface);
         height: 10px;
+        left: 50%;
         position: absolute;
-        transform: translate(-50%, -50%);
+        top: 50%;
+        transform: translate(-50%, calc(-50% + var(--rest, 0px)));
+        transition: transform var(--ha-animation-duration-normal, 250ms)
+          ease-out;
         width: 10px;
       }
-      .timeline .disc.out {
-        opacity: 0.35;
+      /* The overlapping discs spread apart, so each can be told from the next. */
+      .timeline .stack:hover .disc,
+      .timeline .stack:focus-visible .disc {
+        transform: translate(-50%, calc(-50% + var(--fan, 0px)));
       }
       .timeline .extra {
         background: var(--lego-surface);
         border: var(--lego-line) solid var(--lego-outline);
         border-radius: var(--ha-border-radius-pill, 9999px);
+        color: var(--lego-text);
         font-size: 10px;
         font-weight: var(--ha-font-weight-bold, 700);
+        left: calc(50% + 9px);
         line-height: 14px;
         padding: 0 4px;
         position: absolute;
-        top: 14px;
+        top: 5px;
+      }
+      .timeline .tip {
+        background: var(--lego-surface);
+        border: var(--lego-line) solid var(--lego-outline);
+        border-radius: var(--ha-border-radius-md, 8px);
+        color: var(--lego-text);
+        display: grid;
+        font-size: var(--ha-font-size-s, 12px);
+        gap: var(--ha-space-1, 4px);
+        left: 50%;
+        max-width: 280px;
+        min-width: 200px;
+        opacity: 0;
+        padding: var(--ha-space-2, 8px) var(--ha-space-3, 12px);
+        pointer-events: none;
+        position: absolute;
+        text-align: start;
+        top: calc(100% + 32px);
+        transform: translateX(-50%);
+        transition: opacity var(--ha-animation-duration-fast, 150ms);
+        visibility: hidden;
+        width: max-content;
+      }
+      .timeline .tip.start {
+        left: 0;
+        transform: none;
+      }
+      .timeline .tip.end {
+        left: auto;
+        right: 0;
+        transform: none;
+      }
+      .timeline .stack:hover .tip,
+      .timeline .stack:focus-visible .tip {
+        opacity: 1;
+        visibility: visible;
+      }
+      .timeline .tipline {
+        align-items: center;
+        display: grid;
+        gap: var(--ha-space-2, 8px);
+        grid-template-columns: 10px minmax(0, 1fr) auto;
+      }
+      .timeline .tipname {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .timeline .tipdate,
+      .timeline .tipmore {
+        color: var(--lego-text-2);
+        font-variant-numeric: tabular-nums;
       }
       .timeline .today {
         --mdc-icon-size: 20px;
@@ -463,6 +547,73 @@ export class LegoReleasesRow extends LegoRow {
     return slotColour(followed ? slots.get(followed) : "other");
   }
 
+  /**
+   * One stack of dots: hovered or focused, the dots spread apart and a card
+   * names the sets they stand for.
+   */
+  private stack(
+    stack: Stack,
+    pct: (months: number) => string,
+    from: number,
+    to: number,
+  ): TemplateResult {
+    const live = stack.at >= from - 0.01 && stack.at <= to + 0.01;
+    const rest = stackOffsets(stack.themes.length);
+    const fan = stackOffsets(stack.themes.length, 14);
+    const language = this.hass?.locale?.language;
+    const day = (iso: string) =>
+      new Date(iso).toLocaleDateString(language, {
+        day: "numeric",
+        month: "short",
+      });
+    const shown = stack.points.slice(0, TIP_SETS);
+    // Near either end the card hangs inward, so it is never cut off.
+    const edge =
+      stack.at < TIMELINE_MONTHS * 0.25
+        ? "tip start"
+        : stack.at > TIMELINE_MONTHS * 0.75
+          ? "tip end"
+          : "tip";
+    return html`<button
+      class=${live ? "stack" : "stack out"}
+      style="left:${pct(stack.at)}"
+      aria-label=${stack.points
+        .map((point) => `${displayName(point)}, ${day(point.date)}`)
+        .join("; ")}
+    >
+      ${stack.themes.map(
+        (theme, i) =>
+          html`<span
+            class="disc"
+            style="--rest:${rest[i]}px;--fan:${fan[i]}px;background:${this.colourOf(
+              theme,
+            )};z-index:${10 - i}"
+          ></span>`,
+      )}
+      ${stack.extra ? html`<span class="extra">+${stack.extra}</span>` : nothing}
+      <span class=${edge} aria-hidden="true">
+        ${shown.map(
+          (point) =>
+            html`<span class="tipline">
+              <span
+                class="key"
+                style="background:${this.colourOf(point.theme)}"
+              ></span>
+              <span class="tipname">${displayName(point)}</span>
+              <span class="tipdate">${day(point.date)}</span>
+            </span>`,
+        )}
+        ${
+          stack.points.length > shown.length
+            ? html`<span class="tipmore"
+                >+${stack.points.length - shown.length} more</span
+              >`
+            : nothing
+        }
+      </span>
+    </button>`;
+  }
+
   private timeline(data: Releases): TemplateResult {
     const now = new Date();
     const start = new Date(now.getFullYear(), 0, 1);
@@ -479,7 +630,7 @@ export class LegoReleasesRow extends LegoRow {
     }).length;
     return html`<div
       class="timeline"
-      role="img"
+      role="group"
       aria-label=${`${count(data.timeline.length, "set", "sets")} from January to next March, ${inSpan} in the chosen span`}
     >
       <div class="line"></div>
@@ -487,25 +638,7 @@ export class LegoReleasesRow extends LegoRow {
         class="window"
         style="left:${pct(from)};width:${pct(Math.max(to - from, 0))}"
       ></div>
-      ${stacks.map((stack) => {
-        const live = stack.at >= from - 0.01 && stack.at <= to + 0.01;
-        const offsets = stackOffsets(stack.themes.length);
-        return html`${stack.themes.map(
-          (theme, i) =>
-            html`<span
-              class=${live ? "disc" : "disc out"}
-              style="left:${pct(stack.at)};top:${
-                21 + offsets[i]
-              }px;background:${this.colourOf(theme)};z-index:${10 - i}"
-            ></span>`,
-        )}${
-          stack.extra
-            ? html`<span class="extra" style="left:calc(${pct(stack.at)} + 9px)"
-                >+${stack.extra}</span
-              >`
-            : nothing
-        }`;
-      })}
+      ${stacks.map((stack) => this.stack(stack, pct, from, to))}
       <ha-icon
         class="today"
         icon="mdi:chevron-down"

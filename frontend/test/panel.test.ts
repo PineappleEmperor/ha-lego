@@ -114,21 +114,39 @@ describe("timeline", () => {
 
   it("stacks sets that would overlap and counts past four", () => {
     const points = ["Botanicals", "Technic", "Icons", "City", "Ninjago"].map(
-      (theme) => ({ date: "2026-08-01", theme }),
+      (theme, i) => ({
+        date: "2026-08-01",
+        theme,
+        number: `${i}-1`,
+        name: theme,
+      }),
     );
-    points.push({ date: "2026-10-01", theme: "Technic" });
+    points.push({
+      date: "2026-10-01",
+      theme: "Technic",
+      number: "9-1",
+      name: "Later",
+    });
     const stacks = stackTimeline(points, start);
     expect(stacks).toHaveLength(2);
     expect(stacks[0].themes).toHaveLength(4);
     expect(stacks[0].extra).toBe(1);
+    // The hover names every set, the one past the cap included.
+    expect(stacks[0].points.map((point) => point.name)).toEqual([
+      "Botanicals",
+      "Technic",
+      "Icons",
+      "City",
+      "Ninjago",
+    ]);
     expect(stacks[1].themes).toEqual(["Technic"]);
   });
 
   it("leaves out dates before January and past the end of next March", () => {
     const stacks = stackTimeline(
       [
-        { date: "2025-12-20", theme: "Technic" },
-        { date: "2027-04-02", theme: "Technic" },
+        { date: "2025-12-20", theme: "Technic", number: "1-1", name: "Early" },
+        { date: "2027-04-02", theme: "Technic", number: "2-1", name: "Late" },
       ],
       start,
     );

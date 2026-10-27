@@ -344,12 +344,16 @@ def release_timeline(
     """Every dated set from 1 January to the end of next March, oldest first."""
     start, end = date(today.year, 1, 1), date(today.year + 1, 3, 31)
     points = [
-        (released, item.theme)
+        (released, item.theme, item.number, item.name)
         for item in filter(_is_set, sets)
         if (released := item.release_date(region)) is not None
         and start <= released <= end
     ]
-    return [{"date": day.isoformat(), "theme": theme} for day, theme in sorted(points)]
+    # Named, so hovering a stack of dots can say which sets they are.
+    return [
+        {"date": day.isoformat(), "theme": theme, "number": number, "name": name}
+        for day, theme, number, name in sorted(points)
+    ]
 
 
 def _release_status(entry: LegoConfigEntry, scope: str) -> str | None:

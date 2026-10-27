@@ -123,6 +123,8 @@ export interface Dashboard extends PanelSettings {
 export interface TimelinePoint {
   date: string;
   theme: string;
+  number: string;
+  name: string;
 }
 
 export interface Releases {
