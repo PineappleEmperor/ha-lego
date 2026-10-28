@@ -100,8 +100,12 @@ export class LegoCollectionRow extends LegoRow {
   protected override willUpdate(changed: PropertyValues): void {
     super.willUpdate(changed);
     // A write or an account switch replaces the dashboard; the grid follows it.
-    if (changed.has("dash") && this.dash !== this.ownedFor)
+    if (changed.has("dash") && this.dash !== this.ownedFor) {
       this.owned = undefined;
+      // An open search re-asks, so a set just marked owned shows its tick and the
+      // record Brickset now holds for it.
+      if (this.query.trim().length >= 2) void this.search(this.query);
+    }
   }
 
   protected override updated(): void {

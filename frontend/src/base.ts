@@ -221,6 +221,10 @@ export abstract class LegoRow extends LitElement {
     } finally {
       this.setPending(item.set_number, false);
     }
+    // Ticked at once; the reload the event starts then brings Brickset's record.
+    item.owned = !item.owned;
+    item.qty_owned = item.owned ? Math.max(item.qty_owned, 1) : 0;
+    this.requestUpdate();
     this.dispatchEvent(
       new CustomEvent(CHANGED, { bubbles: true, composed: true }),
     );

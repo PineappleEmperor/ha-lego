@@ -21,6 +21,7 @@ from custom_components.lego.const import (
     SERVICE_SEARCH_SETS,
     SERVICE_SET_COLLECTION,
 )
+from custom_components.lego.coordinator import FeedsData
 
 from .conftest import (
     SETS_CSV_URL,
@@ -170,6 +171,38 @@ async def test_set_collection_reuses_a_harvested_id(
 
     assert brickset.set_collection_calls[0]["setID"] == "5"
     assert _lookups(brickset, before) == []
+    # The feed's own record is what the collection keeps, picture and all.
+    kept = mock_config_entry.runtime_data.collection.data.all_sets["42200-1"]
+    assert kept.theme == "Technic"
+    assert kept.image_url
+    assert kept.collection.wanted is True
+
+
+async def test_set_collection_fills_a_set_known_only_to_the_index(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """A set seen once but in no feed now keeps what the index holds, free."""
+    await setup_integration(hass, mock_config_entry)
+    mock_config_entry.runtime_data.feeds.async_set_updated_data(FeedsData())
+    before = len(brickset.get_sets_calls)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_COLLECTION,
+        {
+            "device_id": lego_device_id(hass, mock_config_entry),
+            "set_number": "42200-1",
+            "owned": True,
+        },
+        blocking=True,
+    )
+
+    assert _lookups(brickset, before) == []
+    kept = mock_config_entry.runtime_data.collection.data.all_sets["42200-1"]
+    assert (kept.name, kept.theme, kept.year) == ("New Technic Thing", "Technic", 2026)
+    assert kept.thumbnail_url == (
+        "https://cdn.rebrickable.com/media/thumbs/sets/42200-1.jpg/230x230p.jpg"
+    )
 
 
 async def test_set_collection_looks_up_an_unseen_set(

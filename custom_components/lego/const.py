@@ -70,6 +70,10 @@ DEFAULT_DAILY_CALL_BUDGET: Final = 80
 PAGE_SIZE: Final = 500
 
 SETS_CSV_URL: Final = "https://cdn.rebrickable.com/media/downloads/sets.csv.gz"
+# Rebrickable's picture of a set, from its number alone, lower-cased.
+REBRICKABLE_THUMBNAIL_URL: Final = (
+    "https://cdn.rebrickable.com/media/thumbs/sets/{number}.jpg/230x230p.jpg"
+)
 THEMES_CSV_URL: Final = "https://cdn.rebrickable.com/media/downloads/themes.csv.gz"
 
 # Rebrickable files keyrings, lunchboxes and storybooks under these, numbered
