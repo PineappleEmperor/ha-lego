@@ -51,8 +51,9 @@ marks it owned on your Brickset account.
 
 Brickset allows each API key 100 requests for set data a day, the integration's own
 polls included, which searching from a dashboard would soon use up. So the integration also keeps a local list of every LEGO set from
-[Rebrickable](https://rebrickable.com/downloads/), which rebuilds it nightly; the
-integration downloads it every 7 days by default. Searching the panel reads that list
+[Rebrickable](https://rebrickable.com/downloads/), which updates it about daily; the
+integration checks for a new copy once a month by default, and Brickset's own polls
+bring the sets announced in between. Searching the panel reads that list
 and costs nothing. Marking a set owned or wanted costs nothing either once the
 integration has seen the set; a set it has never seen costs one Brickset lookup.
 
@@ -104,7 +105,7 @@ Reachable via **Configure** on the integration entry.
 | Follow releases across all themes | on | Lets the panel's **New releases** row show **Everything**, every set whatever its theme, and fills the **Out recently** and **Coming soon** rows. It reads every set of the year once a day, about 3 calls, and your watched themes then come from the same read rather than costing calls of their own. |
 | Keep a local set index | on | Whether to keep a local copy of Rebrickable's set list, so looking a set up costs no Brickset calls. |
 | Include set names in the index | on | Whether that index stores names as well as numbers, which is what searching by name needs. Takes roughly 1.8 MB on disk instead of 450 KB. |
-| Set index refresh interval | 7 days | How often the local list is re-downloaded, from 1 to 90 days. Costs no Brickset calls, and a set missing from it still works at the price of one lookup. |
+| Set index refresh interval | 30 days | How often the local list is checked for a new copy, from 1 to 90 days. Costs no Brickset calls, and a set missing from it still works at the price of one lookup. |
 
 ### Sharing accounts
 
@@ -390,11 +391,12 @@ integration polls on two schedules, which it sets itself from the daily call bud
   minutes to reconcile the local tally with Brickset's own count, which also catches
   calls made by other tools sharing the key.
 
-The local set index refreshes every 7 days by default from Rebrickable's public CSV,
+The local set index refreshes every 30 days by default from Rebrickable's public CSV,
 which is not a Brickset endpoint and costs nothing from the daily allowance. It seeds in
-the background after setup, so a first start does not wait on the download. The interval
-is configurable; Rebrickable publishes whole snapshots rather than deltas, so a refresh
-is always a full 511 KB download.
+the background after setup, so a first start does not wait on the download. Each refresh
+first asks whether the file has changed and downloads nothing if not; Rebrickable
+publishes whole snapshots rather than changes, so a changed file is a full download of
+about 510 KB.
 
 The options dialog shows the estimated calls/day for your current settings. When the
 budget is spent, polling pauses until Brickset's day resets at midnight UTC and the

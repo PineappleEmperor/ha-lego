@@ -142,7 +142,7 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for LEGO."""
 
     VERSION = 2
-    MINOR_VERSION = 2
+    MINOR_VERSION = 3
 
     def __init__(self) -> None:
         """Initialise the flow."""

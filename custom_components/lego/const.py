@@ -81,7 +81,11 @@ EXCLUDED_ROOT_THEMES: Final = frozenset({"Gear", "Books"})
 
 DEFAULT_CATALOGUE: Final = True
 DEFAULT_CATALOGUE_RICH: Final = True
-DEFAULT_CATALOGUE_INTERVAL_DAYS: Final = 7
+# Monthly, out of respect for Rebrickable's servers; Brickset's polls fill in the
+# sets announced since, so the index only needs to catch up on the long tail.
+DEFAULT_CATALOGUE_INTERVAL_DAYS: Final = 30
+# The default before 1.0.0, which an upgrade moves to the monthly one.
+PREVIOUS_CATALOGUE_INTERVAL_DAYS: Final = 7
 MIN_CATALOGUE_INTERVAL_DAYS: Final = 1
 MAX_CATALOGUE_INTERVAL_DAYS: Final = 90
 
