@@ -8,13 +8,14 @@ import {
   picturesExpired,
   reloadOnReconnect,
 } from "../src/api";
-import { pictureSources, pictureUrl } from "../src/format";
+import { pictureSources, pictureUrl, whenLabel } from "../src/format";
 import {
   chipLayout,
   chipPress,
   foldAll,
   isSearch,
   markedOwned,
+  partialNumbers,
   meterFill,
   pressMyThemes,
 } from "../src/state";
@@ -226,5 +227,34 @@ describe("a window left open across an update", () => {
     // An older Home Assistant that sends no version, or a bundle with none, never asks.
     expect(bundleOutdated(undefined, loaded)).toBe(false);
     expect(bundleOutdated("1.0.0rc7", "file:///src/api.ts")).toBe(false);
+  });
+});
+
+describe("loading details for search results", () => {
+  it("asks only about the sets the index alone describes", () => {
+    expect(
+      partialNumbers([
+        { set_number: "10305-1" },
+        { set_number: "42200-1", partial: true },
+        { set_number: "REDSOX-1", partial: true },
+      ]),
+    ).toEqual(["42200-1", "REDSOX-1"]);
+  });
+});
+
+describe("a set's date line", () => {
+  it("says the details are not loaded rather than unknown", () => {
+    const item = {
+      name: "Green Grocer",
+      available_from: null,
+      available_until: null,
+      partial: true,
+    };
+    expect(whenLabel(item, new Date(), (iso) => iso)).toBe(
+      "Details not loaded",
+    );
+    expect(
+      whenLabel({ ...item, partial: false }, new Date(), (iso) => iso),
+    ).toBe("Date unknown");
   });
 });

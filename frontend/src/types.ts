@@ -25,6 +25,8 @@ export interface LegoSet {
   image_remote?: string | null;
   /** The large copy, offered to high-resolution screens when sharp pictures are on. */
   image_large?: string | null;
+  /** Known only to the local index, so its dates and price are not loaded yet. */
+  partial?: boolean;
   url: string | null;
   owned: boolean;
   wanted: boolean;

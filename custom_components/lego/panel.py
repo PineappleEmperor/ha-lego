@@ -309,6 +309,9 @@ def summarise_entry(entry: CatalogueEntry, owned: bool) -> dict[str, Any]:
         "released": False,
         "available_from": None,
         "available_until": None,
+        # Brickset has not been asked about it, so its dates and price are unknown
+        # rather than missing; the panel offers to fetch them.
+        "partial": True,
     }
 
 

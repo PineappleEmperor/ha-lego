@@ -138,8 +138,12 @@ of rows, each with an icon, a title and a fold arrow:
 - **My collection** shows your totals, with an **Update** button that polls Brickset
   at once and says what that costs ("Update · 2 calls"). It greys out once the refresh
   would go over the daily budget. **Sets** below it unfolds the full grid, and its
-  search box covers both your own sets and the whole catalogue. Untick **Show prices**
-  there to hide each set's price; the choice is saved to your user.
+  search box covers both your own sets and the whole catalogue, matching set numbers
+  first and then names, newest first. Spare-parts packs and boxes of loose bricks only
+  turn up when their number is typed. A set only the local index knows shows **Details
+  not loaded**: **Load details** asks Brickset about every such result at once for one
+  call, after which marking any of them costs nothing. Untick **Show prices** there to
+  hide each set's price; the choice is saved to your user.
 - **New releases** shows new sets as cards with their prices, above a timeline from
   January to next March with a dot per set. It opens on **My themes**; pressing it
   again shows or hides a chip for each theme you follow, so you can narrow it to

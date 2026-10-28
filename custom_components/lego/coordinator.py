@@ -807,6 +807,9 @@ class LegoRuntimeData:
     collection: LegoCollectionCoordinator
     feeds: LegoFeedsCoordinator
     catalogue: SetCatalogue | None
+    # Brickset's records for sets someone asked about from a search, so the cards
+    # show them in full and marking one costs nothing more. Kept until a restart.
+    looked_up: dict[str, LegoSet] = field(default_factory=dict)
 
 
 type LegoConfigEntry = ConfigEntry[LegoRuntimeData]
