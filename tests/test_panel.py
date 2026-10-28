@@ -420,6 +420,12 @@ async def test_dashboard_returns_the_home_view(
     assert result["stats"]["sets_owned"] == 4
     assert result["stats"]["sets_distinct"] == 3
     assert result["stats"]["pieces_owned"] == 7122
+    # Two Galaxy Explorers at 90.00 and the castle at 344.99; the Alienator has
+    # no LEGO.com price, so it is counted as missing rather than as nothing.
+    assert result["stats"]["value"] == 524.99
+    assert result["stats"]["sets_missing_price"] == 1
+    assert result["stats"]["minifigs_owned"] == 31
+    assert result["stats"]["sets_wanted"] == 1
     assert [item["set_number"] for item in result["wishlist"]] == ["10294-1"]
     assert result["followed"] == ["Technic"]
     # Collection value starts folded; the release rows start combined.
@@ -458,10 +464,23 @@ async def test_dashboard_carries_dates_for_the_wishlist(
     await client.send_json_auto_id({"type": "lego/dashboard"})
     wanted = (await client.receive_json())["result"]["wishlist"][0]
 
-    assert wanted["name"] == "Titanic"
-    assert wanted["retail_price"] == 629.99
-    assert "available_from" in wanted
-    assert "available_until" in wanted
+    assert wanted == {
+        "set_number": "10294-1",
+        "name": "Titanic",
+        "year": 2024,
+        "theme": "Icons",
+        "pieces": 9090,
+        "minifigs": 0,
+        "image": "https://images.brickset.com/sets/small/10294-1.jpg",
+        "url": "https://brickset.com/sets/10294-1",
+        "owned": False,
+        "wanted": True,
+        "qty_owned": 0,
+        "retail_price": 629.99,
+        "released": True,
+        "available_from": "2024-01-01",
+        "available_until": "2099-12-31",
+    }
 
 
 @pytest.mark.usefixtures("brickset")
@@ -479,6 +498,18 @@ async def test_collection_filters_and_sorts(
 
     assert all(item["owned"] for item in owned)
     assert owned == sorted(owned, key=lambda item: (item["theme"], item["name"]))
+    # Each card arrives drawn from the set's record, not just its number.
+    castle = next(item for item in owned if item["set_number"] == "10305-1")
+    assert castle["name"] == "Lion Knights' Castle"
+    assert castle["image"] == "https://images.brickset.com/sets/small/10305-1.jpg"
+    assert (castle["retail_price"], castle["qty_owned"]) == (344.99, 1)
+    assert castle["available_until"] == "2099-12-31"
+
+    await client.send_json_auto_id({"type": "lego/collection", "filter": "all"})
+    every = {
+        item["set_number"] for item in (await client.receive_json())["result"]["sets"]
+    }
+    assert every == {item["set_number"] for item in owned} | {"10294-1"}
 
 
 @pytest.mark.usefixtures("brickset")
