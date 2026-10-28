@@ -110,7 +110,7 @@ Reachable via **Configure** on the integration entry.
 | People who use this account | none | The Home Assistant users this Brickset account belongs to. See [Sharing accounts](#sharing-accounts). |
 | Shared with all users | off | Lets every Home Assistant user see and change this account. |
 | Show the LEGO panel in the sidebar | on | Whether to add the sidebar page for browsing your collection, your wishlist and new releases. |
-| Sharper pictures on high-resolution screens | off | Also asked during setup. Off, each set keeps one picture of about 16 KB, about 3 MB for 200 sets, which looks soft at the Medium and Large picture sizes. On, phones, tablets and other high-resolution screens get a copy of about 90 KB instead, up to about 21 MB kept for 200 sets. Each screen loads the smaller picture first and fades the sharper one in. Pictures sit in Home Assistant's cache folder, which backups leave out. |
+| Sharper pictures on high-resolution screens | off | Also asked during setup. Off, each set keeps one picture of about 16 KB, about 3 MB for 200 sets, which looks soft at the Medium and Large picture sizes. On, phones, tablets and other high-resolution screens get a copy of about 90 KB instead, up to about 21 MB kept for 200 sets. Each screen loads the smaller picture first and fades the sharper one in. A dashboard card can turn it on or off for itself. Pictures sit in Home Assistant's cache folder, which backups leave out. |
 | Follow releases across all themes | on | Lets the panel's **New releases** row show **Everything**, every set whatever its theme, and fills the **Out recently** and **Coming soon** rows. It reads every set of the year once a day, about 3 calls, and your watched themes then come from the same read rather than costing calls of their own. |
 | Keep a local set index | on | Whether to keep a local copy of Rebrickable's set list, so looking a set up costs no Brickset calls. |
 | Include set names in the index | on | Whether that index stores names as well as numbers, which is what searching by name needs. Takes roughly 1.8 MB on disk instead of 450 KB. |
@@ -209,6 +209,7 @@ cost no Brickset calls of their own. Every option is in the card's visual editor
 | `account` | all | The Brickset account to show. Leave it out for the one you opened last in the panel. |
 | `collapsed` | all | `true` to show only the card's header until it is opened. |
 | `picture_size` | collection, releases, wishlist | `small`, `medium` or `large`: the set pictures at one, two or three times the size. Your panel setting if left out. Medium and large look sharp only with **Sharper pictures** on. |
+| `sharp_pictures` | collection, releases, wishlist | `on` or `off`: the sharper pictures for this card alone, say for a wall tablet when the account leaves them off. The account's **Sharper pictures** option if left out. |
 | `row` | releases | `releases` (New releases), `recent` (Out recently), `upcoming` (Coming soon) or `themes` (New in my themes). |
 | `scope` | releases | `mine` for your themes or `all` for every theme, which needs **Follow releases across all themes**. |
 | `themes` | releases | Narrows `mine` to some of the themes you follow. |

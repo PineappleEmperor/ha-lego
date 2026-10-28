@@ -20,7 +20,7 @@ from .const import (
     RELEASE_SPANS,
 )
 from .exceptions import BricksetError, BricksetQuotaError
-from .images import with_pictures
+from .images import sharp_by_default, with_pictures
 from .panel import (
     LISTED_STATES,
     PANEL_STORE,
@@ -125,6 +125,7 @@ def websocket_dashboard(
     payload = dashboard_payload(entry, store.settings(user_id))
     with_pictures(hass, entry, payload["wishlist"])
     payload["version"] = hass.data.get(PANEL_VERSION)
+    payload["sharp_pictures"] = sharp_by_default(entry)
     # So the panel offers only the changes this user may make.
     payload["can_change"] = can_change(entry, connection.user)
     connection.send_result(msg["id"], payload)

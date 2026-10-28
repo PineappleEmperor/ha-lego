@@ -494,6 +494,9 @@ async def test_dashboard_returns_the_home_view(
     # The installed version, which a window still running an older bundle compares
     # with its own, to ask for a reload.
     assert result["version"] == str((await async_get_integration(hass, DOMAIN)).version)
+    # The account's own Sharper pictures option, which the panel and the cards
+    # left to follow it draw by.
+    assert result["sharp_pictures"] is False
 
 
 @pytest.mark.usefixtures("brickset")
@@ -511,6 +514,10 @@ async def test_dashboard_carries_dates_for_the_wishlist(
 
     # Drawn from Home Assistant's copy, with Brickset's own as the fallback.
     assert wanted.pop("image").startswith("/api/lego/image/small/10294-1.jpg?authSig=")
+    # Offered with Sharper pictures off, for a card that asks for it on its own.
+    assert wanted.pop("image_large").startswith(
+        "/api/lego/image/large/10294-1.jpg?authSig="
+    )
     assert wanted == {
         "set_number": "10294-1",
         "name": "Titanic",
@@ -519,7 +526,6 @@ async def test_dashboard_carries_dates_for_the_wishlist(
         "pieces": 9090,
         "minifigs": 0,
         "image_remote": "https://images.brickset.com/sets/small/10294-1.jpg",
-        "image_large": None,
         "url": "https://brickset.com/sets/10294-1",
         "owned": False,
         "wanted": True,
