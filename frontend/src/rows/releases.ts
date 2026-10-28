@@ -8,7 +8,7 @@ import {
 import { property, state } from "lit/decorators.js";
 
 import { loadReleases } from "../api";
-import { CHANGED, FILTER, LegoRow, define } from "../base";
+import { CHANGED, FILTER, HOLD_MS, LegoRow, define } from "../base";
 import {
   ROW_SPANS,
   accountCall,
@@ -22,6 +22,7 @@ import {
   spanLabel,
   stackOffsets,
   stackTimeline,
+  timelineGap,
   timelineView,
   toggleTheme,
   type ResolvedFilter,
@@ -41,8 +42,11 @@ import type {
 const FILTERED: ReleaseRow[] = ["releases", "themes"];
 /** Sets a timeline stack's card names before it counts the rest. */
 const TIP_SETS = 6;
-/** How long a press on a theme chip lasts before the chips start to wiggle. */
-const HOLD_MS = 500;
+/** The row width from which the timeline draws its bigger bricks. */
+const WIDE_ROW = 1100;
+/** A brick's body height, and how far apart stacks' centres sit, normal and wide. */
+const BRICK = { normal: 7, wide: 10 };
+const SPACING = { normal: 18, wide: 24 };
 
 /**
  * A row of new sets. "releases" is the combined row, filtered by scope, themes and
@@ -84,8 +88,16 @@ export class LegoReleasesRow extends LegoRow {
   private onKey = (ev: KeyboardEvent): void => {
     if (ev.key === "Escape" && this.wiggling) this.wiggling = false;
   };
+  /** The row's width, in steps of 8 pixels, which sizes and spaces the stacks. */
+  @state() private width = 0;
   /** A phone-width row: the timeline shows only the span, and scrolls. */
-  @state() private compact = false;
+  private get compact(): boolean {
+    return this.width > 0 && this.width < 720;
+  }
+  /** A row wide enough for bigger bricks. */
+  private get wide(): boolean {
+    return this.width >= WIDE_ROW;
+  }
   /** On a phone, the stack whose sets are listed below the timeline. */
   @state() private openStack?: Stack;
 
@@ -95,7 +107,7 @@ export class LegoReleasesRow extends LegoRow {
   public override connectedCallback(): void {
     super.connectedCallback();
     this.sizer = new ResizeObserver(([entry]) => {
-      this.compact = entry.contentRect.width < 720;
+      this.width = Math.round(entry.contentRect.width / 8) * 8;
     });
     this.sizer.observe(this);
     this.addEventListener("keydown", this.onKey);
@@ -183,10 +195,40 @@ export class LegoReleasesRow extends LegoRow {
         --mdc-icon-size: 18px;
         margin-inline-end: calc(-1 * var(--ha-space-2, 8px));
       }
+      /* The brick and the band it sits in, in whole pixels; a wide row draws both
+         bigger. --b-h matches BRICK, which stacks the bricks. */
       .timeline {
-        height: 64px;
+        --b-w: 10px;
+        --b-h: 7px;
+        --b-x: 5px;
+        --b-y: 4px;
+        --stud-w: 6px;
+        --stud-h: 2px;
+        --stud-x: 2px;
+        --lit: 2px;
+        --count-h: 11px;
+        --count-font: 9px;
+        --mid: 21px;
+        --band: 34px;
+        --tip: 32px;
+        height: calc(var(--band) + 30px);
         margin: var(--ha-space-2, 8px) 0 var(--ha-space-3, 12px);
         position: relative;
+      }
+      .timeline.wide {
+        --b-w: 14px;
+        --b-h: 10px;
+        --b-x: 7px;
+        --b-y: 5px;
+        --stud-w: 8px;
+        --stud-h: 3px;
+        --stud-x: 3px;
+        --lit: 3px;
+        --count-h: 14px;
+        --count-font: 11px;
+        --mid: 28px;
+        --band: 48px;
+        --tip: 39px;
       }
       .timeline .line {
         background: var(--lego-outline);
@@ -194,12 +236,12 @@ export class LegoReleasesRow extends LegoRow {
         left: 0;
         position: absolute;
         right: 0;
-        top: 20px;
+        top: calc(var(--mid) - 1px);
       }
       .timeline .window {
         background: var(--lego-pick);
         border-radius: var(--ha-border-radius-sm, 4px);
-        height: 34px;
+        height: var(--band);
         position: absolute;
         top: 4px;
       }
@@ -212,7 +254,7 @@ export class LegoReleasesRow extends LegoRow {
         height: 24px;
         padding: 0;
         position: absolute;
-        top: 21px;
+        top: var(--mid);
         transform: translate(-50%, -50%);
         width: 24px;
       }
@@ -230,64 +272,84 @@ export class LegoReleasesRow extends LegoRow {
            bricks are (the edge in scripts/generate_brand.py), and as fine: their
            edge is a fortieth of a brick across, so half a point is the nearest. */
         --brick-edge: color-mix(in srgb, var(--brick) 42%, black);
-        background: var(--brick);
+        /* The underside in shade, lying over the top of the brick below. */
+        background: linear-gradient(
+          to top,
+          color-mix(in srgb, var(--brick) 70%, black) 1px,
+          var(--brick) 1px
+        );
         border-radius: 1px;
         box-shadow: 0 0 0 0.5px var(--brick-edge);
-        height: 7px;
+        height: var(--b-h);
         /* Whole pixels from the stack's own snapped centre: an edge between two
            pixels smears, and one side reads heavier than the other. */
-        left: calc(50% - 5px);
+        left: calc(50% - var(--b-x));
         position: absolute;
-        top: calc(50% - 4px);
+        top: calc(50% - var(--b-y));
         transform: translateY(var(--rest, 0px));
         transition: transform var(--ha-animation-duration-normal, 250ms)
           ease-out;
-        width: 10px;
+        width: var(--b-w);
       }
       .timeline .brick::before {
         background: var(--brick);
         border-radius: 0.5px;
         box-shadow: 0 0 0 0.5px var(--brick-edge);
         content: "";
-        height: 2px;
-        left: 2px;
+        height: var(--stud-h);
+        left: var(--stud-x);
         position: absolute;
-        top: -2px;
-        width: 6px;
+        top: calc(-1 * var(--stud-h));
+        width: var(--stud-w);
         z-index: -1;
       }
       .timeline .brick::after {
         background: rgb(255 255 255 / 25%);
         border-radius: 1px 1px 0 0;
         content: "";
-        height: 2px;
+        height: var(--lit);
         left: 0;
         position: absolute;
         right: 0;
         top: 0;
+      }
+      /* A full stack's top place: the count of the sets past the bricks, sat on
+         the stack where a brick would be, so it never reaches a neighbour. */
+      .timeline .extra {
+        background: var(--lego-surface);
+        border: var(--lego-line) solid var(--lego-outline);
+        border-radius: var(--ha-border-radius-pill, 9999px);
+        box-sizing: border-box;
+        color: var(--lego-text);
+        font-size: var(--count-font);
+        font-variant-numeric: tabular-nums;
+        font-weight: var(--ha-font-weight-bold, 700);
+        height: var(--count-h);
+        left: 50%;
+        line-height: calc(var(--count-h) - 2 * var(--lego-line));
+        min-width: var(--b-w);
+        padding: 0 3px;
+        position: absolute;
+        top: calc(50% - var(--b-y) + var(--b-h) - var(--count-h));
+        transform: translate(-50%, var(--rest, 0px));
+        transition: transform var(--ha-animation-duration-normal, 250ms)
+          ease-out;
+        z-index: 11;
       }
       /* The stacked bricks lift apart, so each can be told from the next. */
       .timeline .stack:hover .brick,
       .timeline .stack:focus-visible .brick {
         transform: translateY(var(--fan, 0px));
       }
+      .timeline .stack:hover .extra,
+      .timeline .stack:focus-visible .extra {
+        transform: translate(-50%, var(--fan, 0px));
+      }
       @media (prefers-reduced-motion: reduce) {
-        .timeline .brick {
+        .timeline .brick,
+        .timeline .extra {
           transition: none;
         }
-      }
-      .timeline .extra {
-        background: var(--lego-surface);
-        border: var(--lego-line) solid var(--lego-outline);
-        border-radius: var(--ha-border-radius-pill, 9999px);
-        color: var(--lego-text);
-        font-size: 10px;
-        font-weight: var(--ha-font-weight-bold, 700);
-        left: calc(50% + 9px);
-        line-height: 14px;
-        padding: 0 4px;
-        position: absolute;
-        top: 5px;
       }
       .timeline .tip {
         background: var(--lego-surface);
@@ -305,7 +367,7 @@ export class LegoReleasesRow extends LegoRow {
         pointer-events: none;
         position: absolute;
         text-align: start;
-        top: calc(100% + 32px);
+        top: calc(100% + var(--tip));
         transform: translateX(-50%);
         transition: opacity var(--ha-animation-duration-fast, 150ms);
         visibility: hidden;
@@ -344,16 +406,41 @@ export class LegoReleasesRow extends LegoRow {
       .timeline .today {
         --mdc-icon-size: 20px;
         color: var(--lego-primary);
+        display: flex;
         position: absolute;
-        top: 6px;
+        top: calc(var(--mid) - 15px);
         transform: translateX(-50%);
+      }
+      /* Today's date, over the arrow while it is hovered. */
+      .timeline .todaytip {
+        background: var(--lego-surface);
+        border: var(--lego-line) solid var(--lego-outline);
+        border-radius: var(--ha-border-radius-sm, 4px);
+        bottom: 100%;
+        color: var(--lego-text);
+        font-size: var(--ha-font-size-s, 12px);
+        left: 50%;
+        opacity: 0;
+        padding: var(--ha-space-1, 4px) var(--ha-space-2, 8px);
+        pointer-events: none;
+        position: absolute;
+        transform: translateX(-50%);
+        transition: opacity var(--ha-animation-duration-fast, 150ms);
+        white-space: nowrap;
+        z-index: 31;
+      }
+      .timeline .today:hover {
+        z-index: 32;
+      }
+      .timeline .today:hover .todaytip {
+        opacity: 1;
       }
       .timeline .month {
         color: var(--lego-text-2);
         font-size: 11px;
         position: absolute;
         text-align: center;
-        top: 46px;
+        top: calc(var(--band) + 12px);
       }
       /* On a phone the timeline is drawn wider than the row and scrolls, so the
          hover card, which would be clipped, gives way to the list below it. */
@@ -801,8 +888,8 @@ export class LegoReleasesRow extends LegoRow {
   }
 
   /**
-   * One stack of dots: hovered or focused, the dots spread apart and a card
-   * names the sets they stand for.
+   * One stack of bricks, topped by a count when it holds more than fit: hovered
+   * or focused, the bricks lift apart and a card names the sets they stand for.
    */
   private stack(
     stack: Stack,
@@ -812,10 +899,14 @@ export class LegoReleasesRow extends LegoRow {
   ): TemplateResult {
     const pct = (months: number) => `${pos(months) * 100}%`;
     const live = stack.at >= from - 0.01 && stack.at <= to + 0.01;
-    // A brick's body is 7 points tall, so stacked ones sit 7 apart, studs hidden
-    // under the brick above; hovered, they lift apart.
-    const rest = stackOffsets(stack.themes.length, 7).map(Math.round);
-    const fan = stackOffsets(stack.themes.length, 14);
+    // Each brick sits a pixel down over the one below, so its dark bottom edge
+    // overlaps the lower one's top, studs hidden; hovered, they lift apart. The
+    // count takes the top place.
+    const body = this.wide ? BRICK.wide : BRICK.normal;
+    const top = stack.extra ? 1 : 0;
+    const places = stack.themes.length + top;
+    const rest = stackOffsets(places, body - 1).map(Math.round);
+    const fan = stackOffsets(places, body * 2);
     const language = this.hass?.locale?.language;
     const day = (iso: string) =>
       new Date(iso).toLocaleDateString(language, {
@@ -844,16 +935,24 @@ export class LegoReleasesRow extends LegoRow {
         }
       }}
     >
+      ${
+        stack.extra
+          ? html`<span
+              class="extra"
+              style="--rest:${rest[0]}px;--fan:${fan[0]}px"
+              >+${stack.extra}</span
+            >`
+          : nothing
+      }
       ${stack.themes.map(
         (theme, i) =>
           html`<span
             class="brick"
-            style="--rest:${rest[i]}px;--fan:${fan[i]}px;--brick:${this.themeColour(
+            style="--rest:${rest[i + top]}px;--fan:${fan[i + top]}px;--brick:${this.themeColour(
               theme,
-            )};z-index:${10 - i}"
+            )};z-index:${10 - i - top}"
           ></span>`,
       )}
-      ${stack.extra ? html`<span class="extra">+${stack.extra}</span>` : nothing}
       <span class=${edge} aria-hidden="true">
         ${shown.map(
           (point) =>
@@ -890,7 +989,12 @@ export class LegoReleasesRow extends LegoRow {
     const pct = (months: number) => `${pos(months) * 100}%`;
     const shown = (months: number) =>
       months >= view.from - 0.05 && months <= view.to + 0.05;
-    const stacks = stackTimeline(data.timeline, start).filter((stack) =>
+    const gap = timelineGap(
+      this.width * view.width,
+      view.to - view.from,
+      this.wide ? SPACING.wide : SPACING.normal,
+    );
+    const stacks = stackTimeline(data.timeline, start, gap).filter((stack) =>
       shown(stack.at),
     );
     const language = this.hass?.locale?.language;
@@ -903,7 +1007,7 @@ export class LegoReleasesRow extends LegoRow {
         class=${this.compact ? "timescroll compact" : "timescroll"}
       >
         <div
-          class="timeline"
+          class=${this.wide ? "timeline wide" : "timeline"}
           role="group"
           style="width:${view.width * 100}%"
           aria-label=${`${count(data.timeline.length, "set", "sets")} from January to next March, ${inSpan} in the chosen span`}
@@ -913,16 +1017,22 @@ export class LegoReleasesRow extends LegoRow {
             class="window"
             style="left:${pct(from)};width:${pct(view.from + Math.max(to - from, 0))}"
           ></div>
-          ${stacks.map((stack) => this.stack(stack, pos, from, to))}
           ${
+            // Drawn first, so a stack on today's date sits over it.
             shown(today)
-              ? html`<ha-icon
-                  class="today"
-                  icon="mdi:chevron-down"
-                  style="left:${pct(today)}"
-                ></ha-icon>`
+              ? html`<span class="today" style="left:${pct(today)}"
+                  ><ha-icon icon="mdi:chevron-down"></ha-icon
+                  ><span class="todaytip"
+                    >Today,
+                    ${now.toLocaleDateString(language, {
+                      day: "numeric",
+                      month: "long",
+                    })}</span
+                  ></span
+                >`
               : nothing
           }
+          ${stacks.map((stack) => this.stack(stack, pos, from, to))}
           ${Array.from({ length: TIMELINE_MONTHS }, (_, i) => i)
             .filter((i) => i + 1 > view.from && i < view.to)
             .map((i) => {

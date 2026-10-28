@@ -168,7 +168,11 @@ of rows, each with an icon, a title and a fold arrow:
   bricks on the timeline, or tabbing to it, lifts them apart and names their sets; on a
   phone, tap the stack, and the timeline shows only the span, scrolling when it is
   long.
-- **My wishlist** runs soonest to retire first, each set stamped **Wanted**.
+- **My wishlist** runs soonest to retire first, each set stamped **Wanted**, and a set
+  that has already left sale also carries a round **Retired** stamp with its year. On
+  any card in the panel, tapping **+** adds the set to your collection, and holding the
+  picture, the name or the **+** for half a second stamps it onto your wishlist instead;
+  hold again to take it off. Neither costs a call.
 - **Collection value** and **Pieces** show a donut and a bar per theme. Hovering a theme
   lists the sets behind it, and **Trend over a year** unfolds a line from Home
   Assistant's recorded statistics, which fills in week by week after you install.

@@ -383,14 +383,18 @@ export const CARDS = css`
     overflow: hidden;
     position: relative;
   }
-  /* A rubber stamp pressed onto the picture's corner: a double rule, spaced capitals,
-     a tilt, and ink that missed in places. */
-  .stamp {
-    /* Red ink on paper in either theme: the photo behind is white, or the dark
-       edge of the picture box, and only a paper backing reads on both. */
+  /* A rubber stamp pressed onto the picture's corner: a ruled border, spaced
+     capitals and a tilt. */
+  .stamp,
+  .seal {
+    /* Ink on paper in either theme: the photo behind is white, or the dark edge
+       of the picture box, and only a paper backing reads on both. Paper and ink
+       are both solid, so nothing in the photo shows through either. */
     --lego-stamp-ink: #b3121b;
     --lego-stamp-paper: #fffaf3;
-    background: color-mix(in srgb, var(--lego-stamp-paper) 92%, transparent);
+  }
+  .stamp {
+    background: var(--lego-stamp-paper);
     border: 0.18em solid currentColor;
     border-radius: 0.35em;
     color: var(--lego-stamp-ink);
@@ -398,11 +402,6 @@ export const CARDS = css`
     font-weight: var(--ha-font-weight-bold, 700);
     letter-spacing: 0.16em;
     line-height: 1;
-    -webkit-mask-image: var(--lego-ink);
-    mask-image: var(--lego-ink);
-    mask-size: 9em 3em;
-    outline: 0.08em solid currentColor;
-    outline-offset: 0.18em;
     padding: 0.35em 0.45em 0.3em 0.6em;
     pointer-events: none;
     position: absolute;
@@ -410,8 +409,43 @@ export const CARDS = css`
     text-transform: uppercase;
     top: calc(var(--ha-space-2, 8px) + 1.1em);
     transform: rotate(-9deg);
-    /* A light speckle: enough to read as ink, never enough to break a letter. */
-    --lego-ink: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='90' height='30'><filter id='i'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.5 2.4'/></filter><rect width='90' height='30' filter='url(%23i)'/></svg>");
+  }
+  /* A round date stamp in the opposite corner, in black, on a wanted set that
+     has left sale: a double ring, the word, and the year. */
+  .seal {
+    --lego-stamp-ink: #161616;
+    align-content: center;
+    background: var(--lego-stamp-paper);
+    border: 0.16em solid currentColor;
+    border-radius: 50%;
+    box-shadow:
+      inset 0 0 0 0.26em var(--lego-stamp-paper),
+      inset 0 0 0 0.38em currentColor;
+    box-sizing: border-box;
+    color: var(--lego-stamp-ink);
+    display: grid;
+    font-size: var(--lego-stamp);
+    font-weight: var(--ha-font-weight-bold, 700);
+    gap: 0.12em;
+    height: 5.6em;
+    justify-items: center;
+    line-height: 1;
+    pointer-events: none;
+    position: absolute;
+    right: calc(var(--ha-space-2, 8px) + 0.3em);
+    text-transform: uppercase;
+    top: calc(var(--ha-space-2, 8px) + var(--lego-pic-h) - 6em);
+    transform: rotate(12deg);
+    width: 5.6em;
+  }
+  .seal span:first-child {
+    font-size: 0.72em;
+    letter-spacing: 0.08em;
+  }
+  .seal .year {
+    font-size: 1.2em;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
   }
   /* Set photos come on white; inset and rounded they read as photos rather
      than as gaps in a dark card. */
@@ -555,6 +589,75 @@ export const CARDS = css`
   .act.pending {
     cursor: progress;
     opacity: 0.5;
+  }
+  /* What a hold does, shown on hover: the native title tooltip is slow, and
+     some browsers never show one at all. */
+  .act::after {
+    background: var(--lego-surface);
+    border: var(--lego-line) solid var(--lego-outline);
+    border-radius: var(--ha-border-radius-sm, 4px);
+    bottom: calc(100% - var(--ha-space-1, 4px));
+    color: var(--lego-text);
+    content: attr(data-hint);
+    font-size: var(--ha-font-size-s, 12px);
+    max-width: calc(var(--lego-card-w) - var(--ha-space-6, 24px));
+    opacity: 0;
+    padding: var(--ha-space-1, 4px) var(--ha-space-2, 8px);
+    pointer-events: none;
+    position: absolute;
+    right: var(--ha-space-1, 4px);
+    text-align: end;
+    transition: opacity var(--ha-animation-duration-fast, 150ms);
+    width: max-content;
+  }
+  @media (hover: hover) {
+    .act:hover::after {
+      opacity: 1;
+      transition-delay: 400ms;
+    }
+  }
+  /* The picture and the name can be held too, so neither selects nor opens a
+     menu on a long press. */
+  .pic,
+  .name {
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+  /* Held, the ring inks in red over the half second that makes it a hold. */
+  .act.holding::before {
+    border-color: #b3121b;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .act.holding::before {
+      animation: inking 500ms linear forwards;
+    }
+  }
+  @keyframes inking {
+    from {
+      box-shadow: 0 0 0 0 #b3121b;
+    }
+    to {
+      box-shadow: 0 0 0 3px #b3121b;
+    }
+  }
+  /* A stamp a hold has just put there comes down onto the picture. */
+  @media (prefers-reduced-motion: no-preference) {
+    .stamp.landed {
+      animation: land var(--ha-animation-duration-slow, 350ms) ease-in;
+    }
+  }
+  @keyframes land {
+    from {
+      opacity: 0;
+      transform: rotate(-9deg) scale(1.6);
+    }
+    70% {
+      opacity: 1;
+      transform: rotate(-9deg) scale(0.94);
+    }
+    to {
+      transform: rotate(-9deg) scale(1);
+    }
   }
   .act:focus-visible {
     outline-offset: calc(-1 * var(--ha-space-1, 4px));

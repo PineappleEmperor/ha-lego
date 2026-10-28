@@ -286,7 +286,13 @@ export class LegoPanel extends LitElement {
         <span class="logo">${drawSvg(LOGO)}</span>
         <h1>LEGO</h1>
       </div>
-      ${this.accounts.length > 1 ? this.accountPicker() : nothing}
+      ${
+        this.accounts.length > 1
+          ? this.accountPicker()
+          : this.accounts.length
+            ? this.accountName(this.accounts[0])
+            : nothing
+      }
     </header>`;
   }
 
@@ -373,6 +379,17 @@ export class LegoPanel extends LitElement {
             </ul>`
           : nothing
       }
+    </div>`;
+  }
+
+  /** A lone account: named where the picker would be, with nothing to pick. */
+  private accountName(item: Account): TemplateResult {
+    return html`<div class="accountpick">
+      <div class="accountbar">
+        <span class="account single" title="Brickset account">
+          <span class="names"><span class="name">${item.name}</span></span>
+        </span>
+      </div>
     </div>`;
   }
 
@@ -872,6 +889,10 @@ export class LegoPanel extends LitElement {
       }
       /* Every name shares one cell, so the picker is as wide as the longest and
          keeps its width whichever account shows. */
+      .account.single {
+        cursor: default;
+        padding-inline-end: var(--ha-space-3, 12px);
+      }
       .account .names {
         display: inline-grid;
         justify-items: start;

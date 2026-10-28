@@ -22,6 +22,7 @@ import {
   webUrl,
   whenLabel,
   whenTone,
+  wishlistCall,
   type DateFocus,
 } from "./format";
 import { SERIES_COLOURS, slotColour, themeSlots } from "./palette";
@@ -60,6 +61,10 @@ export const TOGGLE = "lego-toggle";
 export const MOVE = "lego-move";
 /** Fired when a release row saves the filter it was just set to. */
 export const FILTER = "lego-filter";
+/** How long a press lasts before it counts as a hold. */
+export const HOLD_MS = 500;
+/** The parts of a card a hold stamps wanted from. */
+const HOLDABLE = ".pic, .name, .act";
 
 export interface RowMeta {
   title: string;
@@ -98,6 +103,8 @@ export abstract class LegoRow extends LitElement {
 
   @state() protected pending = new Set<string>();
   @state() protected writeError = "";
+  /** The set whose button is being held, filling its ring. */
+  @state() private wishing = "";
 
   static override styles: CSSResultGroup = [
     TOKENS,
@@ -226,30 +233,96 @@ export abstract class LegoRow extends LitElement {
     );
   }
 
-  protected async toggleOwned(item: LegoSet): Promise<void> {
+  protected toggleOwned(item: LegoSet): Promise<void> {
+    const call = ownershipCall(this.dash?.device_id ?? "", item);
+    return this.write(item, call, {
+      ...markedOwned(item),
+      ...("wanted" in call ? { wanted: false } : {}),
+    });
+  }
+
+  /** Stamp a set onto the wishlist, or lift it off. */
+  protected toggleWanted(item: LegoSet): Promise<void> {
+    if (!item.wanted) this.stamped.add(item.set_number);
+    return this.write(item, wishlistCall(this.dash?.device_id ?? "", item), {
+      wanted: !item.wanted,
+    });
+  }
+
+  private async write(
+    item: LegoSet,
+    call: Record<string, unknown>,
+    change: Partial<LegoSet>,
+  ): Promise<void> {
     if (this.pending.has(item.set_number)) return;
     this.writeError = "";
     this.setPending(item.set_number, true);
     try {
-      await this.hass.callService(
-        "lego",
-        "set_collection",
-        ownershipCall(this.dash?.device_id ?? "", item),
-      );
+      await this.hass.callService("lego", "set_collection", call);
     } catch (err) {
       // A rejected write used to fail only in the console, which read as a
       // flaky button rather than a broken one.
       this.writeError = errorText(err);
+      this.stamped.delete(item.set_number);
       return;
     } finally {
       this.setPending(item.set_number, false);
     }
-    // Ticked at once; the reload the event starts then brings Brickset's record.
-    Object.assign(item, markedOwned(item));
+    // Shown at once; the reload the event starts then brings Brickset's record.
+    Object.assign(item, change);
     this.requestUpdate();
     this.dispatchEvent(
       new CustomEvent(CHANGED, { bubbles: true, composed: true }),
     );
+  }
+
+  /** Sets just stamped by a hold, whose stamp lands rather than simply showing. */
+  private stamped = new Set<string>();
+  private wishTimer?: number;
+  /** The set whose hold fired, so the click that ends the press does nothing. */
+  private wished = "";
+
+  /** Where a pointer hold began, so a drag or a scroll can call it off. */
+  private wishFrom?: { x: number; y: number };
+
+  private wishStart(item: LegoSet): void {
+    window.clearTimeout(this.wishTimer);
+    this.wished = "";
+    this.wishing = item.set_number;
+    this.wishTimer = window.setTimeout(() => {
+      this.wished = item.set_number;
+      this.wishing = "";
+      void this.toggleWanted(item);
+    }, HOLD_MS);
+  }
+
+  private wishEnd = (): void => {
+    window.clearTimeout(this.wishTimer);
+    this.wishFrom = undefined;
+    this.wishing = "";
+  };
+
+  /** A hold on the picture, the name or the button stamps the set wanted. */
+  private holdDown(ev: PointerEvent, item: LegoSet): void {
+    const target = ev.composedPath()[0] as Element;
+    if (ev.button !== 0 || !target.closest?.(HOLDABLE)) return;
+    this.wishFrom = { x: ev.clientX, y: ev.clientY };
+    this.wishStart(item);
+  }
+
+  private holdMove = (ev: PointerEvent): void => {
+    const from = this.wishFrom;
+    if (from && Math.hypot(ev.clientX - from.x, ev.clientY - from.y) > 8) {
+      this.wishEnd();
+    }
+  };
+
+  /** The click that ends a hold neither ticks the set nor follows its link. */
+  private holdClick(ev: Event, item: LegoSet): void {
+    if (this.wished !== item.set_number) return;
+    this.wished = "";
+    ev.preventDefault();
+    ev.stopPropagation();
   }
 
   private setPending(number: string, pending: boolean): void {
@@ -331,6 +404,8 @@ export abstract class LegoRow extends LitElement {
     showPrice = true,
   ): TemplateResult {
     const now = new Date();
+    const until = item.available_until ? new Date(item.available_until) : null;
+    const retired = until && until < now ? until : null;
     const picture = pictureSources(item, this.size());
     const image = picture.src ?? picture.fallback;
     const price = showPrice
@@ -340,8 +415,26 @@ export abstract class LegoRow extends LitElement {
           this.hass?.locale?.language,
         )
       : "";
+    const wishHint = item.wanted
+      ? "Hold to take off your wishlist"
+      : "Hold to add to your wishlist";
     return html`
-      <article class="card">
+      <article
+        class="card"
+        @pointerdown=${(ev: PointerEvent) => this.holdDown(ev, item)}
+        @pointermove=${this.holdMove}
+        @pointerup=${this.wishEnd}
+        @pointercancel=${this.wishEnd}
+        @dragstart=${this.wishEnd}
+        @click=${{
+          handleEvent: (ev: Event) => this.holdClick(ev, item),
+          capture: true,
+        }}
+        @contextmenu=${(ev: Event) => {
+          // A long press on a phone would open the link's menu over the stamp.
+          if (this.wishing || this.wished) ev.preventDefault();
+        }}
+      >
         ${this.linked(
           item,
           // Keyed by set, so a reused card never shows the last set's picture.
@@ -382,7 +475,21 @@ export abstract class LegoRow extends LitElement {
         )}
         ${
           // Pressed onto the picture, outside its link so it is still read out.
-          item.wanted ? html`<span class="stamp">Wanted</span>` : nothing
+          item.wanted
+            ? html`<span
+                class=${this.stamped.has(item.set_number) ? "stamp landed" : "stamp"}
+                >Wanted</span
+              >`
+            : nothing
+        }
+        ${
+          // A wanted set gone from sale is still wanted, so it says both.
+          item.wanted && retired
+            ? html`<span class="seal"
+                ><span>Retired</span
+                ><span class="year">${retired.getFullYear()}</span></span
+              >`
+            : nothing
         }
         <div class="meta">
           ${this.linked(
@@ -426,18 +533,22 @@ export abstract class LegoRow extends LitElement {
                 "act",
                 item.owned ? "on" : "",
                 this.pending.has(item.set_number) ? "pending" : "",
+                this.wishing === item.set_number ? "holding" : "",
               ].join(" ")}
               ?disabled=${this.pending.has(item.set_number)}
-              title=${
-                item.owned
-                  ? "Remove from your collection"
-                  : "Add to your collection"
-              }
               aria-label=${
                 item.owned
                   ? `Remove ${displayName(item)} from your collection`
                   : `Add ${displayName(item)} to your collection`
               }
+              aria-description=${wishHint}
+              data-hint=${wishHint}
+              @keydown=${(ev: KeyboardEvent) => {
+                if (ev.key === " " && !ev.repeat) this.wishStart(item);
+                // Enter clicks at once, so it can never be the end of a hold.
+                if (ev.key === "Enter") this.wished = "";
+              }}
+              @keyup=${this.wishEnd}
               @click=${() => void this.toggleOwned(item)}
             >
               <ha-icon icon=${item.owned ? "mdi:check" : "mdi:plus"}></ha-icon>

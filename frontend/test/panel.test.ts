@@ -12,6 +12,7 @@ import {
   spanProblem,
   stackOffsets,
   stackTimeline,
+  timelineGap,
   timelineView,
   toggleTheme,
   webUrl,
@@ -166,8 +167,9 @@ describe("timeline", () => {
     });
     const stacks = stackTimeline(points, start);
     expect(stacks).toHaveLength(2);
-    expect(stacks[0].themes).toHaveLength(4);
-    expect(stacks[0].extra).toBe(1);
+    // Five sets fill four places: three bricks under a count of the other two.
+    expect(stacks[0].themes).toHaveLength(3);
+    expect(stacks[0].extra).toBe(2);
     // The hover names every set, the one past the cap included.
     expect(stacks[0].points.map((point) => point.name)).toEqual([
       "Botanicals",
@@ -177,6 +179,28 @@ describe("timeline", () => {
       "Ninjago",
     ]);
     expect(stacks[1].themes).toEqual(["Technic"]);
+  });
+
+  it("draws four sets as four bricks, with no count", () => {
+    const points = ["Botanicals", "Technic", "Icons", "City"].map(
+      (theme, i) => ({
+        date: "2026-08-01",
+        theme,
+        number: `${i}-1`,
+        name: theme,
+      }),
+    );
+    const [stack] = stackTimeline(points, start);
+    expect(stack.themes).toHaveLength(4);
+    expect(stack.extra).toBe(0);
+  });
+
+  it("keeps stacks a set number of pixels apart, however wide the row", () => {
+    // 15 months across 1500 pixels is 100 a month, so 20 pixels is a fifth.
+    expect(timelineGap(1500, 15, 20)).toBeCloseTo(0.2);
+    expect(timelineGap(750, 15, 20)).toBeCloseTo(0.4);
+    // Before the row is measured, the old fixed gap.
+    expect(timelineGap(0, 15, 20)).toBe(0.15);
   });
 
   it("leaves out dates before January and past the end of next March", () => {
