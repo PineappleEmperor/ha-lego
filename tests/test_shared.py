@@ -1,5 +1,6 @@
 """Tests for whole-year reads shared between Brickset accounts."""
 
+from datetime import date
 from typing import Any
 
 from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
@@ -74,6 +75,12 @@ async def test_a_second_account_reads_no_year_the_first_just_read(
     # The reader owned the set; the second account's copy carries its own status.
     assert first.runtime_data.feeds.data.releases[0].collection.owned is True
     assert releases[0].collection.owned is False
+    # Only the status is the second account's own; the record itself is shared.
+    copy = releases[0]
+    assert (copy.name, copy.theme) == ("Shared Technic", "Technic")
+    assert copy.price("UK") == 99.99
+    assert copy.retirement_date("UK") == date(2099, 12, 31)
+    assert copy.thumbnail_url == "https://images.brickset.com/sets/small/42301-1.jpg"
 
 
 @pytest.mark.usefixtures("this_year")
