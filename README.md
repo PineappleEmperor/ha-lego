@@ -138,10 +138,12 @@ of rows, each with an icon, a title and a fold arrow:
   all themes** in options, which reads the whole year at about 3 calls a day. The
   span is **Past 3 months**, **Now** (three months either side of today, where it
   opens), the current year, or **Unreleased**: every set announced and not yet out,
-  dated or not. Whatever you pick is where the row opens next time. **Edit themes**
-  (**Follow a theme** until you follow one) adds a theme from a list of Brickset's and
-  shows what it costs first: one call, or nothing when every theme is read anyway. It
-  also lists the themes you follow, and a theme's × stops following it. Hovering a stack of
+  dated or not. Whatever you pick is where the row opens next time. With your themes
+  unfolded, **Edit themes** (**Follow a theme** until you follow one) adds a theme from
+  a list of Brickset's and shows what it costs first: one call, or nothing when every
+  theme is read anyway. To stop following one, press and hold any theme chip until
+  they wiggle, then tap the × on it; **Done** or Escape stops the wiggle. Edit themes
+  lists them with an × too, for a keyboard. Hovering a stack of
   dots on the timeline, or tabbing to it, spreads them out and names their sets; on a
   phone, tap the stack, and the timeline shows only the span, scrolling when it is
   long.

@@ -40,6 +40,8 @@ import type {
 const FILTERED: ReleaseRow[] = ["releases", "themes"];
 /** Sets a timeline stack's card names before it counts the rest. */
 const TIP_SETS = 6;
+/** How long a press on a theme chip lasts before the chips start to wiggle. */
+const HOLD_MS = 500;
 
 /**
  * A row of new sets. "releases" is the combined row, filtered by scope, themes and
@@ -60,6 +62,27 @@ export class LegoReleasesRow extends LegoRow {
   @state() private followNote = "";
   /** Whether the followed themes' own chips show under My themes. */
   @state() private themesOpen = false;
+  /** Holding a theme chip sets the chips wiggling, each with a × to unfollow it. */
+  @state() private wiggling = false;
+  private holdTimer?: number;
+  private held = false;
+
+  private holdStart = (): void => {
+    if (!this.dash?.can_change || this.wiggling) return;
+    window.clearTimeout(this.holdTimer);
+    this.holdTimer = window.setTimeout(() => {
+      this.held = true;
+      this.wiggling = true;
+    }, HOLD_MS);
+  };
+
+  private holdEnd = (): void => {
+    window.clearTimeout(this.holdTimer);
+  };
+
+  private onKey = (ev: KeyboardEvent): void => {
+    if (ev.key === "Escape" && this.wiggling) this.wiggling = false;
+  };
   /** A phone-width row: the timeline shows only the span, and scrolls. */
   @state() private compact = false;
   /** On a phone, the stack whose sets are listed below the timeline. */
@@ -74,11 +97,14 @@ export class LegoReleasesRow extends LegoRow {
       this.compact = entry.contentRect.width < 720;
     });
     this.sizer.observe(this);
+    this.addEventListener("keydown", this.onKey);
   }
 
   public override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.sizer?.disconnect();
+    this.removeEventListener("keydown", this.onKey);
+    window.clearTimeout(this.holdTimer);
   }
 
   private filterFor = "";
@@ -92,6 +118,47 @@ export class LegoReleasesRow extends LegoRow {
   static override styles = [
     LegoRow.styles,
     css`
+      /* A theme chip and, while the chips wiggle, its × in the corner. */
+      .chipwrap {
+        display: inline-flex;
+        position: relative;
+        -webkit-touch-callout: none;
+        user-select: none;
+      }
+      .chipwrap .remove {
+        align-items: center;
+        appearance: none;
+        background: var(--lego-text);
+        border: 2px solid var(--lego-surface);
+        border-radius: 50%;
+        color: var(--lego-surface);
+        cursor: pointer;
+        display: flex;
+        height: 24px;
+        justify-content: center;
+        padding: 0;
+        position: absolute;
+        right: -8px;
+        top: -8px;
+        width: 24px;
+        --mdc-icon-size: 14px;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .chipwrap.wiggle .chip {
+          animation: wiggle 0.3s ease-in-out infinite alternate;
+        }
+        .chipwrap.wiggle:nth-child(odd) .chip {
+          animation-delay: -0.15s;
+        }
+      }
+      @keyframes wiggle {
+        from {
+          transform: rotate(-1.5deg);
+        }
+        to {
+          transform: rotate(1.5deg);
+        }
+      }
       .follow {
         align-items: center;
         display: flex;
@@ -475,6 +542,7 @@ export class LegoReleasesRow extends LegoRow {
       aria-pressed=${mine}
       aria-expanded=${mine && this.themesOpen}
       @click=${() => {
+        this.wiggling = false;
         if (mine) {
           this.themesOpen = !this.themesOpen;
         } else {
@@ -502,27 +570,66 @@ export class LegoReleasesRow extends LegoRow {
         }
         ${(showThemes ? dash.followed : []).map((theme) => {
           const on = filter.scope === "mine" && filter.themes.includes(theme);
-          return html`<button
-            class=${on ? "chip on" : "chip"}
-            aria-pressed=${on}
-            @click=${() =>
-              this.pick({
-                scope: "mine",
-                themes: toggleTheme(
-                  filter.scope === "mine" ? filter.themes : [],
-                  theme,
-                  dash.followed,
-                ),
-              })}
+          return html`<span
+            class=${this.wiggling ? "chipwrap wiggle" : "chipwrap"}
           >
-            <span
-              class="key"
-              style="background:${slotColour(slots.get(theme))}"
-            ></span>
-            ${theme}
-          </button>`;
+            <button
+              class=${on ? "chip on" : "chip"}
+              aria-pressed=${on}
+              @pointerdown=${this.holdStart}
+              @pointerup=${this.holdEnd}
+              @pointerleave=${this.holdEnd}
+              @pointercancel=${this.holdEnd}
+              @contextmenu=${(ev: Event) => ev.preventDefault()}
+              @click=${() => {
+                // The press that started the wiggle is not also a pick.
+                if (this.held) {
+                  this.held = false;
+                  return;
+                }
+                if (this.wiggling) return;
+                this.pick({
+                  scope: "mine",
+                  themes: toggleTheme(
+                    filter.scope === "mine" ? filter.themes : [],
+                    theme,
+                    dash.followed,
+                  ),
+                });
+              }}
+            >
+              <span
+                class="key"
+                style="background:${slotColour(slots.get(theme))}"
+              ></span>
+              ${theme}
+            </button>
+            ${
+              this.wiggling
+                ? html`<button
+                    class="remove"
+                    aria-label=${`Stop following ${theme}`}
+                    ?disabled=${this.following}
+                    @click=${() => void this.follow(theme, false)}
+                  >
+                    <ha-icon icon="mdi:close"></ha-icon>
+                  </button>`
+                : nothing
+            }
+          </span>`;
         })}
-        ${this.followChip()}
+        ${
+          this.wiggling
+            ? html`<button
+                class="chip on"
+                @click=${() => (this.wiggling = false)}
+              >
+                Done
+              </button>`
+            : showThemes || !dash.followed.length
+              ? this.followChip()
+              : nothing
+        }
       </div>
       ${this.adding ? this.editor() : nothing}
       ${
