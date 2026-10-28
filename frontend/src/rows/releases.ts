@@ -522,7 +522,7 @@ export class LegoReleasesRow extends LegoRow {
             ${theme}
           </button>`;
         })}
-        ${showThemes || !dash.followed.length ? this.followChip() : nothing}
+        ${this.followChip()}
       </div>
       ${this.adding ? this.editor() : nothing}
       ${
@@ -538,11 +538,13 @@ export class LegoReleasesRow extends LegoRow {
       ${this.adding ? this.editor() : nothing}`;
   }
 
+  /** Opens the editor that adds a theme and removes one; shown however the chips fold. */
   private followChip(): TemplateResult | typeof nothing {
     if (!this.dash?.can_change || this.adding) return nothing;
+    const any = this.dash.followed.length > 0;
     return html`<button class="chip" @click=${() => void this.openEditor()}>
-      <ha-icon icon="mdi:plus"></ha-icon>
-      Follow a theme
+      <ha-icon icon=${any ? "mdi:pencil" : "mdi:plus"}></ha-icon>
+      ${any ? "Edit themes" : "Follow a theme"}
     </button>`;
   }
 
