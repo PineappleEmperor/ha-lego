@@ -15,8 +15,8 @@ import {
   refreshCall,
   syncedAgo,
 } from "../format";
-import { isSearch, partialNumbers } from "../state";
-import type { LegoSet } from "../types";
+import { isSearch, keepsOwnedList, partialNumbers } from "../state";
+import type { Dashboard, LegoSet } from "../types";
 
 /** Stats, the update button, and every owned set behind a fold of their own. */
 export class LegoCollectionRow extends LegoRow {
@@ -34,7 +34,7 @@ export class LegoCollectionRow extends LegoRow {
   /** A tick not yet back from the server; the dashboard's copy wins once it is. */
   @state() private pricesPick?: boolean;
 
-  private ownedFor?: object;
+  private ownedFor?: Dashboard;
 
   static override styles = [
     LegoRow.styles,
@@ -137,7 +137,9 @@ export class LegoCollectionRow extends LegoRow {
     if (changed.has("dash")) this.pricesPick = undefined;
     // A write or an account switch replaces the dashboard; the grid follows it.
     if (changed.has("dash") && this.dash !== this.ownedFor) {
-      this.owned = undefined;
+      // After a write the old grid stays until the new one arrives: emptying it
+      // first collapsed the page and threw the reader back up it.
+      if (!keepsOwnedList(this.ownedFor, this.dash)) this.owned = undefined;
       // An open search re-asks, so a set just marked owned shows its tick and the
       // record Brickset now holds for it.
       if (isSearch(this.query)) void this.search(this.query);
@@ -145,7 +147,7 @@ export class LegoCollectionRow extends LegoRow {
   }
 
   protected override updated(): void {
-    if (this.setsOpen && !this.collapsed && this.owned === undefined) {
+    if (this.setsOpen && !this.collapsed && this.dash !== this.ownedFor) {
       void this.loadOwned();
     }
   }

@@ -14,6 +14,7 @@ import {
   chipPress,
   foldAll,
   isSearch,
+  keepsOwnedList,
   markedOwned,
   partialNumbers,
   meterFill,
@@ -256,5 +257,16 @@ describe("a set's date line", () => {
     expect(
       whenLabel({ ...item, partial: false }, new Date(), (iso) => iso),
     ).toBe("Date unknown");
+  });
+});
+
+describe("the owned grid after a write", () => {
+  it("keeps showing for the same account while the fresh list loads", () => {
+    expect(keepsOwnedList({ entry_id: "a" }, { entry_id: "a" })).toBe(true);
+  });
+
+  it("empties for another account, or before anything has loaded", () => {
+    expect(keepsOwnedList({ entry_id: "a" }, { entry_id: "b" })).toBe(false);
+    expect(keepsOwnedList(undefined, { entry_id: "a" })).toBe(false);
   });
 });

@@ -577,19 +577,37 @@ export const CARDS = css`
      bricks take the whole width, which lego-bricks fills, and the hint sits below. */
   .filler {
     display: flex;
+    min-height: 236px;
+  }
+  /* The bricks sit in a card like the sets beside them, open at the right edge, as
+     if the row ran on past it. */
+  .fillcard {
+    background: var(--lego-surface);
+    border: var(--lego-line) solid var(--lego-outline);
+    border-radius: var(--lego-radius) 0 0 var(--lego-radius);
+    border-right: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex: 1;
     flex-direction: column;
     gap: var(--ha-space-4, 16px);
     justify-content: center;
-    min-height: 236px;
-    padding: 0 var(--ha-space-2, 8px);
+    min-width: 0;
+    padding: var(--ha-space-4, 16px) var(--ha-space-3, 12px);
   }
   /* After a short row of cards, the room the cards leave; none once they fill it. */
   .carousel .tail {
+    align-self: stretch;
     container-type: inline-size;
     flex: 1 1 0;
     min-height: auto;
     min-width: 0;
-    padding: 0 var(--ha-space-3, 12px);
+  }
+  /* Too little room for any bricks, so not even a sliver of empty card. */
+  @container (max-width: 56px) {
+    .tail .fillcard {
+      display: none;
+    }
   }
   @container (max-width: 240px) {
     .tail .hint {

@@ -1,7 +1,7 @@
 // The decisions the rows make, kept apart from the drawing so a test can reach
 // them without a page to render into.
 
-import type { LegoSet, Quota } from "./types";
+import type { Dashboard, LegoSet, Quota } from "./types";
 
 /** A set once Brickset has taken the Owned press, before the reload lands. */
 export function markedOwned(
@@ -16,6 +16,18 @@ export function partialNumbers(
   items: Pick<LegoSet, "set_number" | "partial">[],
 ): string[] {
   return items.filter((item) => item.partial).map((item) => item.set_number);
+}
+
+/**
+ * Whether the owned grid may keep showing while a fresh copy loads: yes for the
+ * same account, so a write does not empty the page under the reader; no for another
+ * account, whose sets must not be shown as this one's.
+ */
+export function keepsOwnedList(
+  loadedFor: Pick<Dashboard, "entry_id"> | undefined,
+  next: Pick<Dashboard, "entry_id"> | undefined,
+): boolean {
+  return !!loadedFor && !!next && loadedFor.entry_id === next.entry_id;
 }
 
 /** Whether the search box holds a query rather than a stray letter. */
