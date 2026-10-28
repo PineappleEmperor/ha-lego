@@ -100,6 +100,8 @@ export abstract class LegoRow extends LitElement {
   @property({ type: Boolean, reflect: true }) public dark = false;
   /** A dashboard card's own picture size; the panel's setting applies otherwise. */
   @property({ attribute: false }) public pictureSize?: PictureSize;
+  /** A dashboard card's own Sharper pictures choice; the account's applies otherwise. */
+  @property({ attribute: false }) public sharpPictures?: boolean;
 
   @state() protected pending = new Set<string>();
   @state() protected writeError = "";
@@ -369,6 +371,11 @@ export abstract class LegoRow extends LitElement {
     return this.pictureSize ?? this.dash?.picture_size ?? "medium";
   }
 
+  /** Whether this row draws the sharper pictures: a card's choice, else the account's. */
+  protected sharp(): boolean {
+    return this.sharpPictures ?? this.dash?.sharp_pictures ?? false;
+  }
+
   /** The sharper layer fades in once loaded, over the standard picture. */
   private reveal = (ev: Event): void => {
     (ev.target as HTMLImageElement).classList.add("ready");
@@ -406,7 +413,7 @@ export abstract class LegoRow extends LitElement {
     const now = new Date();
     const until = item.available_until ? new Date(item.available_until) : null;
     const retired = until && until < now ? until : null;
-    const picture = pictureSources(item, this.size());
+    const picture = pictureSources(item, this.size(), this.sharp());
     const image = picture.src ?? picture.fallback;
     const price = showPrice
       ? formatPrice(

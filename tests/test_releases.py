@@ -268,7 +268,9 @@ async def test_feed_spends_nothing_it_cannot_finish(
 ) -> None:
     """A poll that would run out of budget part way spends none of it."""
     brickset.year_sets[:] = [_on(dt_util.now().date(), 1, "Out today")]
-    # The collection's 2 calls leave 2 of 4, short of the 3 pages a year plans on.
+    # Even the reserve is nearly gone: the collection's 2 calls leave 1 of
+    # Brickset's 100, short of the 3 pages a year plans on.
+    brickset.usage_today = 97
     entry = await setup_integration(
         hass, _with_releases(mock_config_entry, **{CONF_DAILY_CALL_BUDGET: 4})
     )
@@ -313,7 +315,8 @@ async def test_a_tight_budget_does_not_fail_setup(
 ) -> None:
     """Watched themes read from whole years load in the background, not at setup."""
     brickset.year_sets[:] = [_on(dt_util.now().date(), 1, "Technic set")]
-    # The collection's 2 calls fit a budget of 4; a year's 3 pages after them do not.
+    # The collection's 2 calls fit a budget of 4; a year's 3 pages after them do not,
+    # so the first read, with nothing yet to show, comes from the calls above it.
     entry = await setup_integration(
         hass,
         _with_releases(
@@ -323,7 +326,8 @@ async def test_a_tight_budget_does_not_fail_setup(
     )
 
     assert entry.state is ConfigEntryState.LOADED
-    assert _rows(entry)["status"] == "failed"
+    assert _rows(entry)["status"] == "ready"
+    assert _year_calls(brickset)
 
 
 async def test_feeds_keep_polling_with_the_calendar_disabled(

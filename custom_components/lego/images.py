@@ -207,11 +207,17 @@ def with_pictures(
     hass: HomeAssistant, entry: LegoConfigEntry, cards: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     """Point each card at Home Assistant's copy, keeping Brickset's as a fallback."""
+    # The sharper copy is offered whatever the option says, since a dashboard card
+    # may ask for it on its own; it is only fetched once a screen draws it.
     cache = hass.data[IMAGE_CACHE]
-    sharp = entry.options.get(CONF_SHARP_PICTURES, DEFAULT_SHARP_PICTURES)
     for card in cards:
         number = card["set_number"]
         card["image_remote"] = card["image"]
         card["image"] = cache.url(number, "small") or card["image"]
-        card["image_large"] = cache.url(number, "large") if sharp else None
+        card["image_large"] = cache.url(number, "large")
     return cards
+
+
+def sharp_by_default(entry: LegoConfigEntry) -> bool:
+    """Whether the panel, and cards left to follow it, draw the sharper pictures."""
+    return bool(entry.options.get(CONF_SHARP_PICTURES, DEFAULT_SHARP_PICTURES))

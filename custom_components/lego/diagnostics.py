@@ -49,8 +49,8 @@ async def async_get_config_entry_diagnostics(
             "collection": {
                 "last_update_success": collection.last_update_success,
                 "update_interval_hours": (
-                    collection.update_interval.total_seconds() / 3600
-                    if collection.update_interval
+                    collection.planned_interval.total_seconds() / 3600
+                    if collection.planned_interval
                     else None
                 ),
                 "owned_sets": len(data.owned) if data else 0,
@@ -59,8 +59,8 @@ async def async_get_config_entry_diagnostics(
             "feeds": {
                 "last_update_success": feeds.last_update_success,
                 "update_interval_hours": (
-                    feeds.update_interval.total_seconds() / 3600
-                    if feeds.update_interval
+                    feeds.planned_interval.total_seconds() / 3600
+                    if feeds.planned_interval
                     else None
                 ),
                 "calls_per_poll": feeds.measured_cost,

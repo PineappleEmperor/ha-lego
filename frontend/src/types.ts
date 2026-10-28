@@ -72,6 +72,9 @@ export interface Quota {
 export interface Account {
   entry_id: string;
   name: string;
+  /** False when the account failed to load; `reason` then says why. */
+  loaded: boolean;
+  reason: string | null;
 }
 
 export interface AccountList {
@@ -126,6 +129,8 @@ export interface Dashboard extends PanelSettings {
   device_id: string | null;
   /** The integration version installed, to spot a window running an older bundle. */
   version?: string | null;
+  /** The account's Sharper pictures option, which cards follow unless set. */
+  sharp_pictures?: boolean;
   /** Whether this user may change the account, not merely look at it. */
   can_change: boolean;
   region: string;

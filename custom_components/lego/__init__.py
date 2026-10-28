@@ -49,6 +49,7 @@ from .panel import (
     async_refresh_panel,
     async_setup_panel_static,
 )
+from .poll_cache import PollCache
 from .quota import QuotaManager
 from .services import async_setup_services, write_issue_id
 from .websocket import async_setup_websocket
@@ -81,6 +82,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool:
     """Set up a Brickset account from a config entry."""
+    # Before anything can fail, so an account that cannot load still has the panel
+    # to say why.
+    await async_refresh_panel(hass)
     quota = QuotaManager(
         entry.options.get(CONF_DAILY_CALL_BUDGET, DEFAULT_DAILY_CALL_BUDGET)
     )
@@ -106,11 +110,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
         hass, entry, client, quota, catalogue, collection=collection
     )
 
-    await collection.async_config_entry_first_refresh()
+    # What the polls held before a restart is shown at once, and a poll that is not
+    # yet due waits its turn rather than spending calls to learn the same again.
+    cache = PollCache(hass, entry.entry_id)
+    await cache.async_load()
+    if collection.async_resume(cache):
+        # Free, and the only way to learn today's count without a poll.
+        await collection.async_sync_quota()
+    else:
+        # With nothing saved, Brickset's own limit spent is the one thing that can
+        # keep an account from loading, and setup retries until it resets.
+        await collection.async_config_entry_first_refresh()
+    feeds_due = not feeds.async_resume(cache)
     # A theme feed is one call, worth having before the entities appear; a read of
-    # whole years is a few, which a tight budget must not let fail the entry.
-    if feeds.themes and not feeds.releases:
-        await feeds.async_config_entry_first_refresh()
+    # whole years is a few, which a tight budget must not let fail the entry. Either
+    # way the collection loaded, so a failed feed waits on its retry, not the entry.
+    if feeds_due and feeds.themes and not feeds.releases:
+        await feeds.async_refresh()
 
     entry.runtime_data = LegoRuntimeData(
         client=client,
@@ -118,13 +134,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
         collection=collection,
         feeds=feeds,
         catalogue=catalogue,
+        cache=cache,
     )
 
     # A coordinator schedules polls only while something listens, and the panel and
     # the new-set events need them even with every entity disabled. Kept even while
     # nothing is followed, so a theme followed from the panel starts polling.
     entry.async_on_unload(feeds.async_add_listener(lambda: None))
-    if feeds.releases:
+    if feeds_due and feeds.releases:
         entry.async_create_background_task(
             hass, feeds.async_refresh(), "lego_feeds_refresh"
         )
@@ -207,6 +224,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> boo
     if unloaded:
         if entry.runtime_data.catalogue is not None:
             await entry.runtime_data.catalogue.async_save_if_dirty()
+        if entry.runtime_data.cache is not None:
+            # A reload reads the file at once, before a delayed write would land.
+            await entry.runtime_data.cache.async_flush()
         await async_refresh_panel(hass)
     return unloaded
 
@@ -215,6 +235,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> Non
     """Drop the sidebar panel once the last entry is gone, and its repairs."""
     ir.async_delete_issue(hass, DOMAIN, paging_issue_id(entry.entry_id))
     ir.async_delete_issue(hass, DOMAIN, write_issue_id(entry.entry_id))
+    await PollCache(hass, entry.entry_id).async_remove()
     if not hass.config_entries.async_entries(DOMAIN):
         # The set index and everyone's panel layout belong to no account once the
         # last one goes, so removing the integration leaves nothing behind.

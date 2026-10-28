@@ -8,7 +8,12 @@ import {
   picturesExpired,
   reloadOnReconnect,
 } from "../src/api";
-import { pictureSources, pictureUrl, whenLabel } from "../src/format";
+import {
+  pictureSources,
+  pictureUrl,
+  sharpChoice,
+  whenLabel,
+} from "../src/format";
 import {
   chipLayout,
   chipPress,
@@ -171,6 +176,18 @@ describe("set pictures", () => {
     });
     expect(pictureSources(item, "medium").sharp?.sizes).toBe("280px");
     expect(pictureSources(item, "large").sharp?.sizes).toBe("420px");
+  });
+
+  it("leaves the sharper layer out where the screen does not draw it", () => {
+    const item = { image: local, image_large: large, image_remote: remote };
+    expect(pictureSources(item, "large", false).sharp).toBeNull();
+    expect(pictureSources(item, "large", true).sharp?.srcset).toContain(large);
+  });
+
+  it("reads a card's own choice, or follows the account when left empty", () => {
+    expect(sharpChoice("on")).toBe(true);
+    expect(sharpChoice("off")).toBe(false);
+    expect(sharpChoice(undefined)).toBeUndefined();
   });
 
   it("draws a card from an older reply with only Brickset's address", () => {

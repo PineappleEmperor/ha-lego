@@ -109,11 +109,11 @@ Reachable via **Configure** on the integration entry.
 |--------|---------|-------|
 | Pricing region | from HA's country | Which LEGO.com market supplies prices and availability dates (`UK`, `US`, `CA`, `DE`). |
 | Themes to watch | none | Which themes to follow for new releases, also changeable from the panel. However many you pick, they ride in one call per refresh, until together they hold more than 500 sets in a year. |
-| Daily call budget | 80 | The most calls Home Assistant spends a day. The refresh intervals are set from it (see [Data updates](#data-updates)), and polling pauses until midnight UTC once it is spent. |
+| Daily call budget | 80 | The calls a day Home Assistant plans its refreshes around. The refresh intervals are set from it (see [Data updates](#data-updates)), and polling pauses until midnight UTC once it is spent, apart from a reserve held back above it. |
 | People who use this account | none | The Home Assistant users this Brickset account belongs to. See [Sharing accounts](#sharing-accounts). |
 | Shared with all users | off | Lets every Home Assistant user see and change this account. |
 | Show the LEGO panel in the sidebar | on | Whether to add the sidebar page for browsing your collection, your wishlist and new releases. |
-| Sharper pictures on high-resolution screens | off | Also asked during setup. Off, each set keeps one picture of about 16 KB, about 3 MB for 200 sets, which looks soft at the Medium and Large picture sizes. On, phones, tablets and other high-resolution screens get a copy of about 90 KB instead, up to about 21 MB kept for 200 sets. Each screen loads the smaller picture first and fades the sharper one in. Pictures sit in Home Assistant's cache folder, which backups leave out. |
+| Sharper pictures on high-resolution screens | off | Also asked during setup. Off, each set keeps one picture of about 16 KB, about 3 MB for 200 sets, which looks soft at the Medium and Large picture sizes. On, phones, tablets and other high-resolution screens get a copy of about 90 KB instead, up to about 21 MB kept for 200 sets. Each screen loads the smaller picture first and fades the sharper one in. A dashboard card can turn it on or off for itself. Pictures sit in Home Assistant's cache folder, which backups leave out. |
 | Follow releases across all themes | on | Lets the panel's **New releases** row show **Everything**, every set whatever its theme, and fills the **Out recently** and **Coming soon** rows. It reads every set of the year once a day, about 3 calls, and your watched themes then come from the same read rather than costing calls of their own. |
 | Keep a local set index | on | Whether to keep a local copy of Rebrickable's set list, so looking a set up costs no Brickset calls. |
 | Include set names in the index | on | Whether that index stores names as well as numbers, which is what searching by name needs. Takes roughly 1.8 MB on disk instead of 450 KB. |
@@ -212,6 +212,7 @@ cost no Brickset calls of their own. Every option is in the card's visual editor
 | `account` | all | The Brickset account to show. Leave it out for the one you opened last in the panel. |
 | `collapsed` | all | `true` to show only the card's header until it is opened. |
 | `picture_size` | collection, releases, wishlist | `small`, `medium` or `large`: the set pictures at one, two or three times the size. Your panel setting if left out. Medium and large look sharp only with **Sharper pictures** on. |
+| `sharp_pictures` | collection, releases, wishlist | `on` or `off`: the sharper pictures for this card alone, say for a wall tablet when the account leaves them off. The account's **Sharper pictures** option if left out. |
 | `row` | releases | `releases` (New releases), `recent` (Out recently), `upcoming` (Coming soon) or `themes` (New in my themes). |
 | `scope` | releases | `mine` for your themes or `all` for every theme, which needs **Follow releases across all themes**. |
 | `themes` | releases | Narrows `mine` to some of the themes you follow. |
@@ -292,7 +293,7 @@ a response when an automation asks for one:
 
 | Event | Fired when | Data |
 |-------|-----------|------|
-| `lego_new_set` | A watched theme gains a set since the previous poll. The first poll after setup only records what is there, so a restart does not replay the catalogue. | `entry_id`, `device_id`, `theme`, `set_number`, `name`, `year`, `pieces`, `minifigs`, `image_url`, `brickset_url`, `released`, `release_date`, `retirement_date`, `retail_price`, `region` |
+| `lego_new_set` | A watched theme gains a set since the previous poll. The first poll after an account is added only records what is there. After a restart the account compares against what it saw before, so a set announced while Home Assistant was off still fires, once. | `entry_id`, `device_id`, `theme`, `set_number`, `name`, `year`, `pieces`, `minifigs`, `image_url`, `brickset_url`, `released`, `release_date`, `retirement_date`, `retail_price`, `region` |
 | `lego_wanted_set_changed` | A set on your wishlist changes price, retirement date or availability. | `entry_id`, `device_id`, `set_number`, `name`, `brickset_url`, and whichever of `price`, `retirement_date` and `availability` changed |
 
 ## Examples
@@ -413,10 +414,11 @@ integration polls on two schedules, which it sets itself from the daily call bud
     it, at the cost of one call.
   - Once a poll has counted its pages, the budget plans on that count, and what the
     feeds spend comes out of the collection's share. A poll reserves all its pages
-    first, so it never spends calls it cannot finish. Following all themes fetches in
-    the background after setup, so each Home Assistant restart or options save spends
-    one more poll than the daily estimate shows; a failed first fetch is retried every
-    3 hours.
+    first, so it never spends calls it cannot finish. A failed first fetch is retried
+    every 3 hours.
+- Each account saves what its last polls returned in Home Assistant's storage. A
+  restart or an options save shows that at once and polls only when the next poll was
+  due anyway, so restarting costs no calls.
 - `getKeyUsageStats` does not count against the 100. It is polled at most every 30
   minutes to reconcile the local tally with Brickset's own count, which also catches
   calls made by other tools sharing the key.
@@ -430,7 +432,13 @@ about 510 KB.
 
 The options dialog shows the estimated calls/day for your current settings. When the
 budget is spent, polling pauses until Brickset's day resets at midnight UTC and the
-entities keep serving the last successful poll rather than going unavailable. To tell
+entities keep serving the last successful poll rather than going unavailable. The
+calls between the budget and Brickset's 100 are held back as a reserve, never spent on
+the regular schedule. It lets an account with nothing saved start up, and while the
+budget is spent it refreshes your collection every 6 hours, which for most collections
+is 8 calls a day. Only once all 100 are spent can an account with nothing saved fail to
+start, and setup then retries. An account that failed to start stays in the panel's
+account menu, marked unavailable, and opening it shows the reason. Raising the budget takes effect as soon as you save it. To tell
 how old that data is, `sensor.lego_*_last_synced` holds the time of the last sync,
 and the panel shows it under **My collection** ("Updated 3 hours ago") along with when
 updates resume. `sensor.lego_*_brickset_calls_today` shows usage, budget and
@@ -462,8 +470,9 @@ the saved token, usually after a password change. Open the prompt and enter your
 and password again; the password is used once and not stored.
 
 **The numbers look out of date.** Check the **Last synced** sensor or the panel's
-"Updated … ago". If the daily call budget is spent, polling resumes at midnight UTC; raise
-the budget under **Configure** if that happens often. If Last synced is recent, the data
+"Updated … ago". If the daily call budget is spent, the collection refreshes every 6
+hours from the reserve and polling resumes at midnight UTC; raise the budget under
+**Configure** if that happens often. If Last synced is recent, the data
 is what Brickset holds.
 
 **A repair says Brickset rejected a collection change.** The change did not apply. The
@@ -492,7 +501,7 @@ logger:
 ## Removal
 
 **Settings → Devices & services → LEGO → ⋮ → Delete**. That removes the config
-entry, its device, all its entities and any repairs it raised. Deleting the last
+entry, its device, all its entities, its saved polls and any repairs it raised. Deleting the last
 account also deletes the local set index and everyone's panel layout from Home
 Assistant's storage. Nothing is written to Brickset, so sets you marked owned or wanted
 stay marked on your account. Uninstall from HACS afterwards if you want the

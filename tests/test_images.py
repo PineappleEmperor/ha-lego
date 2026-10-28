@@ -211,7 +211,7 @@ async def test_sharp_pictures_offer_the_large_copy(
     mock_config_entry: MockConfigEntry,
     cache_dir: Path,
 ) -> None:
-    """Only with the option on, and from its own folder."""
+    """The option tells the panel to draw it, served from its own folder."""
     aioclient_mock.get(LARGE, content=JPEG, headers={"Content-Type": "image/jpeg"})
     entry = MockConfigEntry(
         domain=mock_config_entry.domain,
@@ -223,7 +223,10 @@ async def test_sharp_pictures_offer_the_large_copy(
         options={**mock_config_entry.options, CONF_SHARP_PICTURES: True},
     )
     await _start(hass, entry, cache_dir)
-    card = await _wishlist_card(hass, hass_ws_client)
+    client = await hass_ws_client(hass)
+    card = await _wishlist_card(hass, hass_ws_client, client)
+    await client.send_json_auto_id({"type": "lego/dashboard"})
+    assert (await client.receive_json())["result"]["sharp_pictures"] is True
 
     assert card["image_large"].startswith("/api/lego/image/large/10294-1.jpg?authSig=")
     response = await (await hass_client_no_auth()).get(card["image_large"])

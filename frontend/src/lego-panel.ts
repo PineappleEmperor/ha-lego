@@ -58,6 +58,12 @@ export class LegoPanel extends LitElement {
   @state() private dragging = "";
   @state() private over = "";
 
+  /** The open account, when it failed to load. */
+  private get down(): Account | undefined {
+    const open = this.accounts.find((item) => item.entry_id === this.account);
+    return open && !open.loaded ? open : undefined;
+  }
+
   private foldedFor = "";
 
   public override connectedCallback(): void {
@@ -83,13 +89,22 @@ export class LegoPanel extends LitElement {
 
   private async load(): Promise<void> {
     try {
-      if (!this.accounts.length) {
+      const listed = !!this.accounts.length;
+      if (!listed || this.down) {
+        // Asked again while an account is down, so one that has since loaded opens.
         const list = await this.hass.callWS<AccountList>({
           type: "lego/accounts",
         });
         this.accounts = list.accounts;
-        this.account = list.selected ?? "";
-        this.defaultAccount = this.account;
+        if (!listed) {
+          this.account = list.selected ?? "";
+          this.defaultAccount = this.account;
+        }
+      }
+      if (this.down) {
+        this.dash = undefined;
+        this.error = "";
+        return;
       }
       const dash = await this.hass.callWS<Dashboard>(
         accountCall("lego/dashboard", this.account),
@@ -264,12 +279,22 @@ export class LegoPanel extends LitElement {
                       Try again
                     </button>
                   </div>`
-                : this.renderHome()
+                : this.down
+                  ? this.renderDown(this.down)
+                  : this.renderHome()
             }
           </div>
         </div>
       </div>
     `;
+  }
+
+  /** An account that failed to load: what Home Assistant says is wrong. */
+  private renderDown(account: Account): TemplateResult {
+    return html`<div class="error" role="status">
+      <p>${account.name} is unavailable. ${account.reason ?? ""}</p>
+      <button class="link" @click=${() => void this.load()}>Check again</button>
+    </div>`;
   }
 
   private renderHeader(): TemplateResult {
@@ -371,7 +396,13 @@ export class LegoPanel extends LitElement {
                         void this.selectAccount(item.entry_id);
                       }}
                     >
-                      ${item.name}
+                      ${item.name}${
+                        item.loaded
+                          ? nothing
+                          : html`<span class="unavailable">
+                              · unavailable</span
+                            >`
+                      }
                     </button>
                     ${this.brickButton(item)}
                   </li>`,
@@ -926,6 +957,10 @@ export class LegoPanel extends LitElement {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+      .pick .unavailable {
+        color: var(--lego-text-2);
+        font-size: var(--ha-font-size-s, 12px);
       }
       .menu li {
         align-items: center;

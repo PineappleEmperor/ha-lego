@@ -67,7 +67,7 @@ from .exceptions import (
     BricksetError,
     BricksetUserHashError,
 )
-from .quota import collection_interval, feeds_calls_per_day
+from .quota import collection_interval, feeds_calls_per_day, reserve_calls_per_day
 
 if TYPE_CHECKING:
     from .coordinator import LegoConfigEntry
@@ -465,6 +465,12 @@ class LegoOptionsFlow(OptionsFlowWithReload):
                 ),
                 "budget": str(
                     options.get(CONF_DAILY_CALL_BUDGET, DEFAULT_DAILY_CALL_BUDGET)
+                ),
+                "reserve_calls": str(
+                    reserve_calls_per_day(
+                        options.get(CONF_DAILY_CALL_BUDGET, DEFAULT_DAILY_CALL_BUDGET),
+                        self._poll_cost,
+                    )
                 ),
             },
         )

@@ -358,22 +358,34 @@ const SHARP_PX = 690;
 export interface PictureSources {
   /** The standard picture, drawn at once. */
   src: string | null;
-  /** The sharper layer that fades in over it, when the account offers one. */
+  /** The sharper layer that fades in over it, when this screen draws one. */
   sharp: { srcset: string; sizes: string } | null;
   /** Brickset's own address, tried when Home Assistant's copy fails. */
   fallback: string | null;
 }
 
 /**
- * The pictures a card draws: the standard one straight away, then whichever file
- * the browser judges sharp enough for this size on this screen, laid over it.
+ * A card's Sharper pictures choice: on or off, or undefined to follow the
+ * account's own option.
+ */
+export function sharpChoice(value?: string): boolean | undefined {
+  if (value === "on") return true;
+  if (value === "off") return false;
+  return undefined;
+}
+
+/**
+ * The pictures a card draws: the standard one straight away, then, if `sharp`,
+ * whichever file the browser judges sharp enough for this size on this screen,
+ * laid over it.
  */
 export function pictureSources(
   item: Pick<LegoSet, "image" | "image_large" | "image_remote">,
   size: PictureSize = "small",
+  sharp = true,
 ): PictureSources {
   const src = pictureUrl(item.image);
-  const large = pictureUrl(item.image_large);
+  const large = sharp ? pictureUrl(item.image_large) : null;
   const remote = webUrl(item.image_remote);
   return {
     src,
