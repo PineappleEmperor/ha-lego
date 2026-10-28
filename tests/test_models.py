@@ -14,6 +14,14 @@ def test_parses_a_full_record() -> None:
     assert lego_set.set_id == 1
     assert lego_set.number == "10497-1"
     assert lego_set.name == "Galaxy Explorer"
+    assert lego_set.theme == "Icons"
+    assert lego_set.year == 2024
+    assert lego_set.released is True
+    assert lego_set.availability == "Retail"
+    assert lego_set.thumbnail_url == (
+        "https://images.brickset.com/sets/small/10497-1.jpg"
+    )
+    assert lego_set.image_url == "https://images.brickset.com/sets/images/10497-1.jpg"
     assert lego_set.pieces == 1254
     assert lego_set.minifigs == 4
     assert lego_set.collection.owned is True

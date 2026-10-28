@@ -122,17 +122,37 @@ def _assert_shape(records: list[dict[str, Any]], source: str) -> list[str]:
     the test reports them rather than failing on them.
     """
     undated: list[str] = []
+    pictured = 0
     for record in records:
         number = f"{record.get('number')}-{record.get('numberVariant')}"
         where = f"{source} {number}"
 
         for key in ("setID", "number", "numberVariant", "name", "year", "theme"):
             assert key in record, f"{where} has no {key}"
+        assert str(record.get("bricksetURL", "")).startswith("https://"), (
+            f"{where} has no bricksetURL"
+        )
+        # A set with no picture is real, so the keys are checked where any is sent.
+        image = record.get("image") or {}
+        assert isinstance(image, dict), f"{where} has an image that is not a dict"
+        if image:
+            assert {"thumbnailURL", "imageURL"} & image.keys(), (
+                f"{where} names its pictures {sorted(image)}"
+            )
+            pictured += 1
+        for region, pricing in (record.get("LEGOCom") or {}).items():
+            assert isinstance(pricing, dict), f"{where} LEGOCom {region} is not a dict"
+            assert not pricing or pricing.keys() & {
+                "retailPrice",
+                "dateFirstAvailable",
+                "dateLastAvailable",
+            }, f"{where} LEGOCom {region} carries {sorted(pricing)}"
 
         if not _has_exit_date(record):
             undated.append(
                 f"{number} ({record.get('year')}, {record.get('availability')})"
             )
+    assert pictured or not records, f"{source} sent no set with a picture"
     print(f"\n{source} without an exit date: {undated or 'none'}")  # noqa: T201
     return undated
 
