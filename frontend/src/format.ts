@@ -407,6 +407,46 @@ export function toggleTheme(
 /** Months the timeline spans: January this year to the end of next March. */
 export const TIMELINE_MONTHS = 15;
 
+/** On a phone, the months one screen's width of timeline shows. */
+const COMPACT_MONTHS = 3;
+/** The least a phone shows, so a short span still has some year around it. */
+const COMPACT_LEAST = 2;
+const COMPACT_MARGIN = 0.25;
+
+export interface TimelineView {
+  /** The first and last month shown, in months from 1 January. */
+  from: number;
+  to: number;
+  /** How many screen widths the timeline is drawn across; above 1 it scrolls. */
+  width: number;
+}
+
+/**
+ * The part of the timeline to draw. A wide screen shows all of it; a phone shows
+ * only the chosen span, at a readable scale, scrolling once the span is longer
+ * than a screen's width holds.
+ */
+export function timelineView(
+  from: number,
+  to: number,
+  compact: boolean,
+): TimelineView {
+  if (!compact) return { from: 0, to: TIMELINE_MONTHS, width: 1 };
+  let first = Math.max(from - COMPACT_MARGIN, 0);
+  let last = Math.min(to + COMPACT_MARGIN, TIMELINE_MONTHS);
+  const short = COMPACT_LEAST - (last - first);
+  if (short > 0) {
+    first = Math.max(first - short / 2, 0);
+    last = Math.min(first + COMPACT_LEAST, TIMELINE_MONTHS);
+    first = Math.max(last - COMPACT_LEAST, 0);
+  }
+  return {
+    from: first,
+    to: last,
+    width: Math.max((last - first) / COMPACT_MONTHS, 1),
+  };
+}
+
 /** A date's position on the timeline, in months from 1 January this year. */
 export function monthsFrom(start: Date, iso: string | Date): number {
   const d =

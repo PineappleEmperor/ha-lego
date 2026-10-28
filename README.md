@@ -145,12 +145,13 @@ of rows, each with an icon, a title and a fold arrow:
 
 **Customise** chooses which rows show, whether each one starts open or folded, and the
 filters each release row opens on. It can also split New releases into the older
-**Out recently**, **Coming soon** and **New in my themes** rows. Drag a row's handle, or
-use its arrow keys, to reorder. All of it is remembered per Home Assistant user, so it
-follows you to every device.
+**Out recently**, **Coming soon** and **New in my themes** rows. Drag a row's handle,
+with a mouse or a finger, or use its arrow keys, to reorder. All of it is remembered per
+Home Assistant user, so it follows you to every device.
 
-The header shows how many Brickset calls today has used against your budget, and the
-logo takes your theme's primary colour. One sidebar entry serves every Brickset account
+The header shows how many Brickset calls today has used against your budget, as a bar
+on a wide screen and as a line under the title on a phone, and the logo takes your
+theme's primary colour. One sidebar entry serves every Brickset account
 you may use: a menu appears in the header when there is more than one. Picking an
 account shows it; pressing its brick makes it the one your panel opens on. Until you
 choose, your own account opens ahead of a shared one.

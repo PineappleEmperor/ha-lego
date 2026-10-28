@@ -138,6 +138,11 @@ export const ROW = css`
     .drag {
       order: 2;
     }
+    /* The title and its line beneath fill the header's height, so give them
+       room above rather than letting them sit against the row's edge. */
+    .rowhead {
+      padding-top: var(--ha-space-2, 8px);
+    }
     .actions {
       flex-basis: 100%;
       justify-content: flex-start;
@@ -156,6 +161,8 @@ export const ROW = css`
     color: var(--lego-text-2);
     cursor: grab;
     display: grid;
+    /* A finger on the handle drags the row rather than scrolling the page. */
+    touch-action: none;
     flex: none;
     min-height: 48px;
     min-width: 48px;

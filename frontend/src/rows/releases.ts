@@ -22,6 +22,7 @@ import {
   spanLabel,
   stackOffsets,
   stackTimeline,
+  timelineView,
   toggleTheme,
   type ResolvedFilter,
   type Stack,
@@ -59,6 +60,26 @@ export class LegoReleasesRow extends LegoRow {
   @state() private followNote = "";
   /** Whether the followed themes' own chips show under My themes. */
   @state() private themesOpen = false;
+  /** A phone-width row: the timeline shows only the span, and scrolls. */
+  @state() private compact = false;
+  /** On a phone, the stack whose sets are listed below the timeline. */
+  @state() private openStack?: Stack;
+
+  private sizer?: ResizeObserver;
+  private scrolledFor = "";
+
+  public override connectedCallback(): void {
+    super.connectedCallback();
+    this.sizer = new ResizeObserver(([entry]) => {
+      this.compact = entry.contentRect.width < 720;
+    });
+    this.sizer.observe(this);
+  }
+
+  public override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.sizer?.disconnect();
+  }
 
   private filterFor = "";
   private requested = "";
@@ -230,11 +251,39 @@ export class LegoReleasesRow extends LegoRow {
         text-align: center;
         top: 46px;
       }
-      /* Too narrow for every month: the quarters alone. */
-      @container (max-width: 720px) {
-        .timeline .month:not(.quarter) {
-          visibility: hidden;
-        }
+      /* On a phone the timeline is drawn wider than the row and scrolls, so the
+         hover card, which would be clipped, gives way to the list below it. */
+      .timescroll.compact {
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        scrollbar-width: thin;
+      }
+      .timescroll.compact .tip {
+        display: none;
+      }
+      .picked {
+        background: var(--lego-ground);
+        border-radius: var(--ha-border-radius-md, 8px);
+        display: grid;
+        font-size: var(--ha-font-size-s, 12px);
+        gap: var(--ha-space-1, 4px);
+        margin: 0 0 var(--ha-space-3, 12px);
+        padding: var(--ha-space-2, 8px) var(--ha-space-3, 12px);
+      }
+      .picked .tipline {
+        align-items: center;
+        display: grid;
+        gap: var(--ha-space-2, 8px);
+        grid-template-columns: 10px minmax(0, 1fr) auto;
+      }
+      .picked .tipname {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .picked .tipdate {
+        color: var(--lego-text-2);
+        font-variant-numeric: tabular-nums;
       }
     `,
   ];
@@ -255,6 +304,19 @@ export class LegoReleasesRow extends LegoRow {
     if (!this.collapsed && this.filter && this.dash && this.hass) {
       void this.fetch();
     }
+    this.scrollToToday();
+  }
+
+  /** On a phone, open a scrolling timeline on today, once for each span picked. */
+  private scrollToToday(): void {
+    const scroller = this.renderRoot.querySelector<HTMLElement>(
+      ".timescroll.compact",
+    );
+    const today = scroller?.querySelector<HTMLElement>(".today");
+    const key = `${this.filter?.span}:${this.data?.span.from}`;
+    if (!scroller || !today || key === this.scrolledFor) return;
+    this.scrolledFor = key;
+    scroller.scrollLeft = today.offsetLeft - scroller.clientWidth / 2;
   }
 
   private async fetch(): Promise<void> {
@@ -281,6 +343,7 @@ export class LegoReleasesRow extends LegoRow {
   private pick(change: Partial<ResolvedFilter>): void {
     if (!this.filter) return;
     this.filter = { ...this.filter, ...change };
+    this.openStack = undefined;
     const { scope, themes, span } = this.filter;
     const saved = { scope, themes, span };
     this.hass
@@ -600,10 +663,11 @@ export class LegoReleasesRow extends LegoRow {
    */
   private stack(
     stack: Stack,
-    pct: (months: number) => string,
+    pos: (months: number) => number,
     from: number,
     to: number,
   ): TemplateResult {
+    const pct = (months: number) => `${pos(months) * 100}%`;
     const live = stack.at >= from - 0.01 && stack.at <= to + 0.01;
     const rest = stackOffsets(stack.themes.length);
     const fan = stackOffsets(stack.themes.length, 14);
@@ -616,9 +680,9 @@ export class LegoReleasesRow extends LegoRow {
     const shown = stack.points.slice(0, TIP_SETS);
     // Near either end the card hangs inward, so it is never cut off.
     const edge =
-      stack.at < TIMELINE_MONTHS * 0.25
+      pos(stack.at) < 0.25
         ? "tip start"
-        : stack.at > TIMELINE_MONTHS * 0.75
+        : pos(stack.at) > 0.75
           ? "tip end"
           : "tip";
     return html`<button
@@ -627,6 +691,13 @@ export class LegoReleasesRow extends LegoRow {
       aria-label=${stack.points
         .map((point) => `${displayName(point)}, ${day(point.date)}`)
         .join("; ")}
+      aria-pressed=${this.compact ? this.openStack?.at === stack.at : nothing}
+      @click=${() => {
+        // A phone has no hover, so a tap lists the stack's sets below instead.
+        if (this.compact) {
+          this.openStack = this.openStack?.at === stack.at ? undefined : stack;
+        }
+      }}
     >
       ${stack.themes.map(
         (theme, i) =>
@@ -664,45 +735,89 @@ export class LegoReleasesRow extends LegoRow {
   private timeline(data: Releases): TemplateResult {
     const now = new Date();
     const start = new Date(now.getFullYear(), 0, 1);
-    const pct = (months: number) => `${(months / TIMELINE_MONTHS) * 100}%`;
     const from = Math.max(monthsFrom(start, data.span.from), 0);
     const to = data.span.to
       ? Math.min(monthsFrom(start, data.span.to), TIMELINE_MONTHS)
       : TIMELINE_MONTHS;
-    const stacks = stackTimeline(data.timeline, start);
+    const view = timelineView(from, to, this.compact);
+    const pos = (months: number) =>
+      (months - view.from) / (view.to - view.from);
+    const pct = (months: number) => `${pos(months) * 100}%`;
+    const shown = (months: number) =>
+      months >= view.from - 0.05 && months <= view.to + 0.05;
+    const stacks = stackTimeline(data.timeline, start).filter((stack) =>
+      shown(stack.at),
+    );
     const language = this.hass?.locale?.language;
     const inSpan = data.timeline.filter((p) => {
       const at = monthsFrom(start, p.date);
       return at >= from && at <= to;
     }).length;
+    const today = monthsFrom(start, now);
     return html`<div
-      class="timeline"
-      role="group"
-      aria-label=${`${count(data.timeline.length, "set", "sets")} from January to next March, ${inSpan} in the chosen span`}
-    >
-      <div class="line"></div>
-      <div
-        class="window"
-        style="left:${pct(from)};width:${pct(Math.max(to - from, 0))}"
-      ></div>
-      ${stacks.map((stack) => this.stack(stack, pct, from, to))}
-      <ha-icon
-        class="today"
-        icon="mdi:chevron-down"
-        style="left:${pct(monthsFrom(start, now))}"
-      ></ha-icon>
-      ${Array.from({ length: TIMELINE_MONTHS }, (_, i) => {
-        const label = new Date(start.getFullYear(), i, 1).toLocaleDateString(
-          language,
-          { month: "short" },
-        );
-        return html`<span
-          class=${i % 3 === 0 ? "month quarter" : "month"}
-          style="left:${pct(i)};width:${pct(1)}"
-          aria-hidden="true"
-          >${label}</span
-        >`;
-      })}
+        class=${this.compact ? "timescroll compact" : "timescroll"}
+      >
+        <div
+          class="timeline"
+          role="group"
+          style="width:${view.width * 100}%"
+          aria-label=${`${count(data.timeline.length, "set", "sets")} from January to next March, ${inSpan} in the chosen span`}
+        >
+          <div class="line"></div>
+          <div
+            class="window"
+            style="left:${pct(from)};width:${pct(view.from + Math.max(to - from, 0))}"
+          ></div>
+          ${stacks.map((stack) => this.stack(stack, pos, from, to))}
+          ${
+            shown(today)
+              ? html`<ha-icon
+                  class="today"
+                  icon="mdi:chevron-down"
+                  style="left:${pct(today)}"
+                ></ha-icon>`
+              : nothing
+          }
+          ${Array.from({ length: TIMELINE_MONTHS }, (_, i) => i)
+            .filter((i) => i + 1 > view.from && i < view.to)
+            .map((i) => {
+              const label = new Date(
+                start.getFullYear(),
+                i,
+                1,
+              ).toLocaleDateString(language, { month: "short" });
+              return html`<span
+                class=${i % 3 === 0 ? "month quarter" : "month"}
+                style="left:${pct(i)};width:${pct(view.from + 1)}"
+                aria-hidden="true"
+                >${label}</span
+              >`;
+            })}
+        </div>
+      </div>
+      ${this.compact && this.openStack ? this.picked(this.openStack) : nothing}`;
+  }
+
+  /** On a phone, the sets of the stack last tapped, listed under the timeline. */
+  private picked(stack: Stack): TemplateResult {
+    const language = this.hass?.locale?.language;
+    return html`<div class="picked" role="status">
+      ${stack.points.map(
+        (point) =>
+          html`<span class="tipline">
+            <span
+              class="key"
+              style="background:${this.colourOf(point.theme)}"
+            ></span>
+            <span class="tipname">${displayName(point)}</span>
+            <span class="tipdate"
+              >${new Date(point.date).toLocaleDateString(language, {
+                day: "numeric",
+                month: "short",
+              })}</span
+            >
+          </span>`,
+      )}
     </div>`;
   }
 

@@ -11,6 +11,7 @@ import {
   spanLabel,
   stackOffsets,
   stackTimeline,
+  timelineView,
   toggleTheme,
   webUrl,
 } from "../src/format";
@@ -176,6 +177,18 @@ describe("timeline", () => {
       start,
     );
     expect(stacks).toEqual([]);
+  });
+
+  it("shows a wide screen the whole year and a phone only the span", () => {
+    expect(timelineView(9, 10, false)).toEqual({ from: 0, to: 15, width: 1 });
+    // A month fits on a phone with room either side, so it does not scroll.
+    const month = timelineView(9, 10, true);
+    expect(month.width).toBe(1);
+    expect(month.to - month.from).toBeGreaterThanOrEqual(2);
+    // The whole year does not, so it scrolls, at a phone's three months a screen.
+    const year = timelineView(0, 12, true);
+    expect(year.width).toBeCloseTo((12.25 - 0) / 3);
+    expect(year.from).toBe(0);
   });
 
   it("centres a stack on the line, rather than growing it upwards", () => {
