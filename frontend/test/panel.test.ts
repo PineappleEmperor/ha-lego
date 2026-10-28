@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  brickGap,
   budgetTitle,
+  fitBricks,
   monthsFrom,
   moveRow,
   releaseFilter,
@@ -273,13 +273,35 @@ describe("generated drawings", () => {
     expect([...lengths].sort((a, b) => a - b)).toEqual(lengths);
   });
 
-  it("leave the bigger pieces wider gaps, an average gap weighing 1", () => {
-    const gaps = RAINBOW.slice(1).map((brick, i) =>
-      brickGap(RAINBOW[i].width, brick.width),
+  const widths = RAINBOW.map((brick) => Math.round(brick.width * 0.54));
+  const total = (fit: { count: number; gaps: number[] }) =>
+    widths.slice(0, fit.count).reduce((sum, w) => sum + w, 0) +
+    fit.gaps.reduce((sum, g) => sum + g, 0);
+
+  it("show only the bricks that fit, never spilling past the width", () => {
+    const phone = fitBricks(widths, 320);
+    expect(phone.count).toBeGreaterThan(1);
+    expect(phone.count).toBeLessThan(widths.length);
+    expect(total(phone)).toBeLessThanOrEqual(320);
+    expect(fitBricks(widths, 0)).toEqual({ count: 0, gaps: [] });
+  });
+
+  it("share the spare room, the bigger pieces' gaps widest", () => {
+    const fit = fitBricks(widths, 700);
+    expect(fit.count).toBe(widths.length);
+    expect([...fit.gaps].sort((a, b) => a - b)).toEqual(fit.gaps);
+    expect(total(fit)).toBeCloseTo(700, 0);
+  });
+
+  it("stop widening the gaps once the bricks would look scattered", () => {
+    const fit = fitBricks(widths, 4000);
+    expect(total(fit)).toBeLessThan(4000);
+    const mean = widths.reduce((sum, w) => sum + w, 0) / widths.length;
+    expect(fit.gaps[0]).toBeLessThanOrEqual(
+      ((12 * (widths[0] + widths[1])) / 2 / mean) * 10 + 0.1,
     );
-    expect([...gaps].sort((a, b) => a - b)).toEqual(gaps);
-    expect(gaps[0]).toBeLessThan(1);
-    expect(gaps[gaps.length - 1]).toBeGreaterThan(1);
+    // A desktop row is filled.
+    expect(total(fitBricks(widths, 1300))).toBeCloseTo(1300, 0);
   });
 });
 

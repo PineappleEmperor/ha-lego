@@ -695,6 +695,7 @@ export class LegoReleasesRow extends LegoRow {
       ${sets.map((item) =>
         this.card(item, "release", this.colourOf(item.theme)),
       )}
+      ${this.tail()}
     </div>`;
   }
 }

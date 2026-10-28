@@ -10,17 +10,55 @@ import type {
   ThemeTotal,
   TimelinePoint,
 } from "./types";
-import { RAINBOW } from "./generated/brand";
+/** The narrowest gap between two average bricks, and how far one may widen. */
+const BRICK_GAP = 12;
+// Wide enough that the rainbow fills a desktop row, around 1,300 pixels.
+const BRICK_GAP_STRETCH = 10;
 
-const MEAN_BRICK =
-  RAINBOW.reduce((sum, brick) => sum + brick.width, 0) / RAINBOW.length;
+export interface BrickFit {
+  /** How many of the bricks fit, smallest first. */
+  count: number;
+  /** The gap after each shown brick but the last, in pixels. */
+  gaps: number[];
+}
 
 /**
- * How much of the spare width the gap between two bricks takes, against an
- * average gap of 1: the bigger the pieces either side, the wider the gap.
+ * Fit the rainbow into a width: as many bricks as fit at the narrowest gaps,
+ * then the spare width shared between the gaps, the bigger pieces' gaps taking
+ * more, up to a stretch past which the bricks would read as scattered.
  */
-export function brickGap(before: number, after: number): number {
-  return Math.round(((before + after) / 2 / MEAN_BRICK) * 100) / 100;
+export function fitBricks(widths: number[], available: number): BrickFit {
+  // Weighed against these widths, which may be drawn at any scale.
+  const mean = widths.reduce((sum, w) => sum + w, 0) / (widths.length || 1);
+  const base = (i: number) =>
+    (BRICK_GAP * (widths[i] + widths[i + 1])) / 2 / mean;
+  let count = 0;
+  let used = 0;
+  for (const [i, width] of widths.entries()) {
+    const next = used + (i ? base(i - 1) : 0) + width;
+    if (next > available) break;
+    used = next;
+    count = i + 1;
+  }
+  const gaps = Array.from({ length: Math.max(count - 1, 0) }, (_, i) =>
+    base(i),
+  );
+  let spare = available - used;
+  // Shared by weight; a gap that reaches its cap passes the rest to the others.
+  let open = gaps.map((_, i) => i);
+  while (spare > 0.5 && open.length) {
+    const weight = open.reduce((sum, i) => sum + base(i), 0);
+    const share = spare;
+    spare = 0;
+    open = open.filter((i) => {
+      const cap = base(i) * BRICK_GAP_STRETCH;
+      const want = gaps[i] + (share * base(i)) / weight;
+      gaps[i] = Math.min(want, cap);
+      spare += want - gaps[i];
+      return gaps[i] < cap;
+    });
+  }
+  return { count, gaps: gaps.map((gap) => Math.round(gap * 10) / 10) };
 }
 
 // Brickset publishes a set before its name is announced and fills the name with
