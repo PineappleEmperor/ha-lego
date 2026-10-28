@@ -570,12 +570,28 @@ export function stackTimeline(
     if (last && at - last.at <= gap) last.points.push(point);
     else stacks.push({ at, points: [point] });
   }
-  return stacks.map((s) => ({
-    at: s.at,
-    themes: s.points.slice(0, cap).map((point) => point.theme),
-    extra: Math.max(s.points.length - cap, 0),
-    points: s.points,
-  }));
+  // A full stack gives its top place to the count, so it never grows sideways.
+  return stacks.map((s) => {
+    const bricks = s.points.length > cap ? cap - 1 : cap;
+    return {
+      at: s.at,
+      themes: s.points.slice(0, bricks).map((point) => point.theme),
+      extra: Math.max(s.points.length - bricks, 0),
+      points: s.points,
+    };
+  });
+}
+
+/**
+ * The `gap` for `stackTimeline` that keeps stacks `spacing` pixels apart on a
+ * timeline `width` pixels across showing `months`, so neighbours never touch.
+ */
+export function timelineGap(
+  width: number,
+  months: number,
+  spacing: number,
+): number {
+  return width > 0 ? (spacing * months) / width : 0.15;
 }
 
 /**
