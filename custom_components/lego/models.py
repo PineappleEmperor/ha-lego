@@ -24,6 +24,11 @@ def _parse_datetime(value: Any) -> datetime | None:
     return dt_util.parse_datetime(value)
 
 
+def _iso(value: date | None) -> str | None:
+    """Write a date or datetime the parsers above read back."""
+    return value.isoformat() if value is not None else None
+
+
 def _as_int(value: Any) -> int | None:
     """Coerce a Brickset numeric field to int, tolerating nulls and strings."""
     if isinstance(value, bool) or value is None or value == "":
@@ -177,6 +182,84 @@ class LegoSet:
                 for region, payload in lego_com.items()
                 if isinstance(payload, dict)
             },
+        )
+
+    def to_store(self) -> dict[str, Any]:
+        """Return the set as JSON-safe data, for the poll cache."""
+        status = self.collection
+        return {
+            "set_id": self.set_id,
+            "number": self.number,
+            "name": self.name,
+            "year": self.year,
+            "theme": self.theme,
+            "theme_group": self.theme_group,
+            "subtheme": self.subtheme,
+            "category": self.category,
+            "released": self.released,
+            "pieces": self.pieces,
+            "minifigs": self.minifigs,
+            "image_url": self.image_url,
+            "thumbnail_url": self.thumbnail_url,
+            "brickset_url": self.brickset_url,
+            "rating": self.rating,
+            "availability": self.availability,
+            "last_updated": _iso(self.last_updated),
+            "collection": {
+                "owned": status.owned,
+                "wanted": status.wanted,
+                "qty_owned": status.qty_owned,
+                "qty_wanted": status.qty_wanted,
+                "qty_owned_new": status.qty_owned_new,
+                "qty_owned_used": status.qty_owned_used,
+                "wanted_priority": status.wanted_priority,
+                "rating": status.rating,
+                "notes": status.notes,
+            },
+            "pricing": {
+                region: [
+                    price.retail_price,
+                    _iso(price.date_first_available),
+                    _iso(price.date_last_available),
+                ]
+                for region, price in self.pricing.items()
+            },
+            "launch_date": _iso(self.launch_date),
+            "exit_date": _iso(self.exit_date),
+        }
+
+    @classmethod
+    def from_store(cls, data: dict[str, Any]) -> LegoSet:
+        """Rebuild a set saved by to_store."""
+        return cls(
+            set_id=data["set_id"],
+            number=data["number"],
+            name=data["name"],
+            year=data.get("year"),
+            theme=data.get("theme", ""),
+            theme_group=data.get("theme_group", ""),
+            subtheme=data.get("subtheme", ""),
+            category=data.get("category", ""),
+            released=data.get("released", False),
+            pieces=data.get("pieces"),
+            minifigs=data.get("minifigs"),
+            image_url=data.get("image_url"),
+            thumbnail_url=data.get("thumbnail_url"),
+            brickset_url=data.get("brickset_url"),
+            rating=data.get("rating"),
+            availability=data.get("availability", ""),
+            last_updated=_parse_datetime(data.get("last_updated")),
+            collection=CollectionStatus(**data.get("collection", {})),
+            pricing={
+                region: RegionPricing(
+                    retail_price=price,
+                    date_first_available=_parse_date(first),
+                    date_last_available=_parse_date(last),
+                )
+                for region, (price, first, last) in data.get("pricing", {}).items()
+            },
+            launch_date=_parse_date(data.get("launch_date")),
+            exit_date=_parse_date(data.get("exit_date")),
         )
 
     def price(self, region: str) -> float | None:

@@ -150,6 +150,8 @@ RELEASE_SPANS: Final = (
 )
 
 MIN_TIME_BETWEEN_QUOTA_CHECKS: Final = timedelta(minutes=30)
+# The soonest the first poll after a restart comes, however nearly due it was.
+MIN_RESUME_WAIT: Final = timedelta(minutes=1)
 
 EVENT_NEW_SET: Final = f"{DOMAIN}_new_set"
 EVENT_WANTED_CHANGED: Final = f"{DOMAIN}_wanted_set_changed"

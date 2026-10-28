@@ -26,6 +26,7 @@ from .const import (
     EVENT_WANTED_CHANGED,
     FEEDS_RETRY_HOURS,
     MIN_COLLECTION_POLL_COST,
+    MIN_RESUME_WAIT,
     MIN_TIME_BETWEEN_QUOTA_CHECKS,
     NEXT_YEAR_FROM_MONTH,
     RELEASES_PAGES_ESTIMATE,
@@ -38,6 +39,7 @@ from .exceptions import (
     BricksetUserHashError,
 )
 from .models import CollectionSummary, LegoSet, ThemeSpan
+from .poll_cache import PollCache
 from .quota import (
     QuotaManager,
     collection_interval,
@@ -132,8 +134,60 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         # data is while the budget is spent.
         self.last_synced: datetime | None = None
         self._quota_paused = False
+        self.cache: PollCache | None = None
+        # The usual interval, while a shorter one brings the first poll after a
+        # restart round when it was due.
+        self._resume_interval: timedelta | None = None
 
-    async def _sync_quota(self) -> None:
+    def async_resume(self, cache: PollCache) -> bool:
+        """Take up the data saved before a restart; True if no poll is due yet."""
+        self.cache = cache
+        if (snapshot := cache.get(self._cache_name)) is None:
+            return False
+        try:
+            data = self._decode(snapshot.data)
+        except (KeyError, TypeError, ValueError) as err:
+            _LOGGER.debug("Ignoring %s's saved data: %s", self.name, err)
+            return False
+        self.async_set_updated_data(data)
+        self.last_synced = snapshot.synced
+        self._took_up(data)
+        if (interval := self.update_interval) is None:
+            return True
+        age = dt_util.utcnow() - snapshot.synced
+        if age >= interval:
+            return False
+        self._resume_interval = interval
+        self.update_interval = max(interval - age, MIN_RESUME_WAIT)
+        return True
+
+    @property
+    def planned_interval(self) -> timedelta | None:
+        """Return the usual interval, even while the first poll after a restart is nearer."""
+        return self._resume_interval or self.update_interval
+
+    def _remember(self, data: DataT) -> None:
+        """Save the data a poll or a write left, for the next restart."""
+        if self.cache is not None and self.last_synced is not None:
+            self.cache.put(self._cache_name, self.last_synced, self._encode(data))
+
+    def _took_up(self, data: DataT) -> None:
+        """Set whatever a poll would have set from data taken up after a restart."""
+
+    @property
+    def _cache_name(self) -> str:
+        """Return the name this coordinator's data is saved under."""
+        raise NotImplementedError
+
+    def _encode(self, data: DataT) -> dict[str, Any]:
+        """Return the data as JSON-safe values."""
+        raise NotImplementedError
+
+    def _decode(self, saved: dict[str, Any]) -> DataT:
+        """Rebuild data saved by _encode."""
+        raise NotImplementedError
+
+    async def async_sync_quota(self) -> None:
         """Refresh the unbilled server-side call count, rate limited separately."""
         now = dt_util.utcnow()
         if (
@@ -152,8 +206,10 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
     @override
     async def _async_update_data(self) -> DataT:
         """Poll Brickset, mapping API failures onto coordinator semantics."""
+        if self._resume_interval is not None:
+            self.update_interval, self._resume_interval = self._resume_interval, None
         try:
-            await self._sync_quota()
+            await self.async_sync_quota()
             data = await self._fetch()
         except BricksetQuotaError as err:
             return self._serve_cached(err)
@@ -171,6 +227,7 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
             _LOGGER.info("Brickset call budget reset; %s is polling again", self.name)
             self._quota_paused = False
         self.last_synced = dt_util.utcnow()
+        self._remember(data)
         # Listeners hear only about changed data, and most polls change nothing, so
         # the sync time goes out on its own signal.
         async_dispatcher_send(self.hass, self.signal_synced)
@@ -267,6 +324,35 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
         """Return the billed calls one refresh would spend."""
         return _collection_poll_cost(self._previous)
 
+    @property
+    @override
+    def _cache_name(self) -> str:
+        return "collection"
+
+    @override
+    def _encode(self, data: CollectionData) -> dict[str, Any]:
+        return {
+            "owned": [item.to_store() for item in data.owned],
+            "wanted": [item.to_store() for item in data.wanted],
+        }
+
+    @override
+    def _decode(self, saved: dict[str, Any]) -> CollectionData:
+        owned = [LegoSet.from_store(item) for item in saved["owned"]]
+        wanted = [LegoSet.from_store(item) for item in saved["wanted"]]
+        return CollectionData(
+            owned=owned,
+            wanted=wanted,
+            summary=CollectionSummary.from_sets(owned, wanted, self.region),
+        )
+
+    @override
+    def _took_up(self, data: CollectionData) -> None:
+        # A collection past a page polls less often, as it would after a poll.
+        self.update_interval = _collection_interval(
+            self.config_entry, self.quota, _collection_poll_cost(data)
+        )
+
     def apply_collection_change(
         self,
         lego_set: LegoSet,
@@ -303,13 +389,13 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
         if status.wanted:
             wanted.append(lego_set)
 
-        self.async_set_updated_data(
-            CollectionData(
-                owned=owned,
-                wanted=wanted,
-                summary=CollectionSummary.from_sets(owned, wanted, self.region),
-            )
+        changed = CollectionData(
+            owned=owned,
+            wanted=wanted,
+            summary=CollectionSummary.from_sets(owned, wanted, self.region),
         )
+        self.async_set_updated_data(changed)
+        self._remember(changed)
 
     @override
     async def _fetch(self) -> CollectionData:
@@ -516,16 +602,57 @@ class LegoFeedsCoordinator(LegoBaseCoordinator[FeedsData]):
             return self.last_update_success and set(self.themes) <= (
                 self.data.themes.keys() if self.data else set()
             )
-        self.async_set_updated_data(
-            FeedsData(
-                themes={
-                    theme: newest_first(sets, self.region, today)
-                    for theme, sets in themes.items()
-                },
-                releases=previous.releases if previous else None,
-            )
+        changed = FeedsData(
+            themes={
+                theme: newest_first(sets, self.region, today)
+                for theme, sets in themes.items()
+            },
+            releases=previous.releases if previous else None,
         )
+        self.async_set_updated_data(changed)
+        self._remember(changed)
         return True
+
+    @property
+    @override
+    def _cache_name(self) -> str:
+        return "feeds"
+
+    @override
+    def _encode(self, data: FeedsData) -> dict[str, Any]:
+        # What the last poll cost goes too, so the collection's interval after a
+        # restart is planned around it rather than an estimate.
+        return {
+            "themes": {
+                theme: [item.to_store() for item in sets]
+                for theme, sets in data.themes.items()
+            },
+            "releases": (
+                None
+                if data.releases is None
+                else [item.to_store() for item in data.releases]
+            ),
+            "measured": self._measured,
+            "pages": {str(year): pages for year, pages in self._pages.items()},
+        }
+
+    @override
+    def _decode(self, saved: dict[str, Any]) -> FeedsData:
+        releases = saved["releases"]
+        data = FeedsData(
+            themes={
+                theme: [LegoSet.from_store(item) for item in sets]
+                for theme, sets in saved["themes"].items()
+            },
+            releases=(
+                None
+                if releases is None
+                else [LegoSet.from_store(item) for item in releases]
+            ),
+        )
+        self._measured = saved.get("measured")
+        self._pages = {int(year): pages for year, pages in saved["pages"].items()}
+        return data
 
     @property
     def measured_cost(self) -> int | None:
@@ -807,6 +934,7 @@ class LegoRuntimeData:
     collection: LegoCollectionCoordinator
     feeds: LegoFeedsCoordinator
     catalogue: SetCatalogue | None
+    cache: PollCache | None = None
     # Brickset's records for sets someone asked about from a search, so the cards
     # show them in full and marking one costs nothing more. Kept until a restart.
     looked_up: dict[str, LegoSet] = field(default_factory=dict)

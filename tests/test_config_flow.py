@@ -405,9 +405,12 @@ async def test_options_flow(
     assert mock_config_entry.options["catalogue_interval"] == 14
     assert mock_config_entry.options[CONF_SHARP_PICTURES] is True
     assert mock_config_entry.options[CONF_THEMES] == ["Technic", "Icons"]
-    # A smaller budget stretches the collection interval on the reload.
+    # A smaller budget stretches the collection interval on the reload, whose
+    # first poll comes when the last one before it would have been followed.
     collection = mock_config_entry.runtime_data.collection
-    assert collection.update_interval == timedelta(hours=2)
+    assert collection.planned_interval == timedelta(hours=2)
+    assert collection.update_interval is not None
+    assert collection.update_interval <= timedelta(hours=2)
 
 
 @pytest.mark.usefixtures("brickset", "spring")

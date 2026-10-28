@@ -289,7 +289,7 @@ a response when an automation asks for one:
 
 | Event | Fired when | Data |
 |-------|-----------|------|
-| `lego_new_set` | A watched theme gains a set since the previous poll. The first poll after setup only records what is there, so a restart does not replay the catalogue. | `entry_id`, `device_id`, `theme`, `set_number`, `name`, `year`, `pieces`, `minifigs`, `image_url`, `brickset_url`, `released`, `release_date`, `retirement_date`, `retail_price`, `region` |
+| `lego_new_set` | A watched theme gains a set since the previous poll. The first poll after an account is added only records what is there. After a restart the account compares against what it saw before, so a set announced while Home Assistant was off still fires, once. | `entry_id`, `device_id`, `theme`, `set_number`, `name`, `year`, `pieces`, `minifigs`, `image_url`, `brickset_url`, `released`, `release_date`, `retirement_date`, `retail_price`, `region` |
 | `lego_wanted_set_changed` | A set on your wishlist changes price, retirement date or availability. | `entry_id`, `device_id`, `set_number`, `name`, `brickset_url`, and whichever of `price`, `retirement_date` and `availability` changed |
 
 ## Examples
@@ -410,10 +410,11 @@ integration polls on two schedules, which it sets itself from the daily call bud
     it, at the cost of one call.
   - Once a poll has counted its pages, the budget plans on that count, and what the
     feeds spend comes out of the collection's share. A poll reserves all its pages
-    first, so it never spends calls it cannot finish. Following all themes fetches in
-    the background after setup, so each Home Assistant restart or options save spends
-    one more poll than the daily estimate shows; a failed first fetch is retried every
-    3 hours.
+    first, so it never spends calls it cannot finish. A failed first fetch is retried
+    every 3 hours.
+- Each account saves what its last polls returned in Home Assistant's storage. A
+  restart or an options save shows that at once and polls only when the next poll was
+  due anyway, so restarting costs no calls.
 - `getKeyUsageStats` does not count against the 100. It is polled at most every 30
   minutes to reconcile the local tally with Brickset's own count, which also catches
   calls made by other tools sharing the key.
@@ -489,7 +490,7 @@ logger:
 ## Removal
 
 **Settings → Devices & services → LEGO → ⋮ → Delete**. That removes the config
-entry, its device, all its entities and any repairs it raised. Deleting the last
+entry, its device, all its entities, its saved polls and any repairs it raised. Deleting the last
 account also deletes the local set index and everyone's panel layout from Home
 Assistant's storage. Nothing is written to Brickset, so sets you marked owned or wanted
 stay marked on your account. Uninstall from HACS afterwards if you want the
