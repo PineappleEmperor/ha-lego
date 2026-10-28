@@ -133,6 +133,13 @@ async def test_rows_keep_four_weeks_either_side(
     # The card shows the date the row was sorted by, not "Date unknown".
     upcoming = releases_payload(entry, "all", [], "next1")["sets"]
     assert upcoming[1]["available_from"] == ahead(3).isoformat()
+    # A release card draws from the set's record like any other card.
+    number = upcoming[0]["set_number"]
+    assert (
+        upcoming[0]["image"] == f"https://images.brickset.com/sets/small/{number}.jpg"
+    )
+    assert upcoming[0]["url"] == f"https://brickset.com/sets/{number}"
+    assert upcoming[0]["owned"] is False
 
 
 @pytest.mark.parametrize(
