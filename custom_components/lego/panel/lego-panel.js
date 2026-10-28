@@ -1871,7 +1871,7 @@ var Rr=Object.defineProperty;var zr=Object.getOwnPropertyDescriptor;var p=(i,t,e
         <span class="logo">${De(ir)}</span>
         <h1>LEGO</h1>
       </div>
-      ${this.accounts.length>1?this.accountPicker():c}
+      ${this.accounts.length>1?this.accountPicker():this.accounts.length?this.accountName(this.accounts[0]):c}
     </header>`}renderMeter(e){let{share:r,tight:s}=mr(e);return n`<div
       class=${s?"meter tight":"meter"}
       title=${Bt(e.calls_today,e.budget,new Date(e.resets_at).toLocaleTimeString(this.hass?.locale?.language,{hour:"2-digit",minute:"2-digit"}))}
@@ -1921,6 +1921,12 @@ var Rr=Object.defineProperty;var zr=Object.getOwnPropertyDescriptor;var p=(i,t,e
                     ${this.brickButton(r)}
                   </li>`)}
             </ul>`:c}
+    </div>`}accountName(e){return n`<div class="accountpick">
+      <div class="accountbar">
+        <span class="account single" title="Brickset account">
+          <span class="names"><span class="name">${e.name}</span></span>
+        </span>
+      </div>
     </div>`}brickButton(e){let r=e.entry_id===this.defaultAccount,s=r?`${e.name} opens by default`:`Open ${e.name} by default`;return n`<button
       class="brick"
       title=${s}
@@ -2237,6 +2243,10 @@ var Rr=Object.defineProperty;var zr=Object.getOwnPropertyDescriptor;var p=(i,t,e
       }
       /* Every name shares one cell, so the picker is as wide as the longest and
          keeps its width whichever account shows. */
+      .account.single {
+        cursor: default;
+        padding-inline-end: var(--ha-space-3, 12px);
+      }
       .account .names {
         display: inline-grid;
         justify-items: start;
