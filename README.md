@@ -15,8 +15,9 @@
 
 # LEGO for Home Assistant
 
-Keep up with LEGO from Home Assistant. Your [Brickset](https://brickset.com) wishlist
-warns you before a set leaves sale, new sets show up the day Brickset lists them in the
+Keep up with LEGO from Home Assistant. It counts down to the next set leaving your
+[Brickset](https://brickset.com) wishlist and tells your automations when a wanted set's
+price or retirement date changes, new sets show up the day Brickset lists them in the
 themes you follow, and releases and retirements land on Home Assistant's calendar. Your
 collection's totals and its value at LEGO.com prices come with it, and a sidebar panel
 and dashboard cards show the lot.
@@ -32,9 +33,11 @@ and dashboard cards show the lot.
 
 ## What you can do with it
 
-- Get a reminder before a set on your wishlist leaves sale, or when its price changes.
-- Hear about a new set the day Brickset lists it in a theme you follow, and add it to
-  your wishlist from the panel or an automation.
+- Build a reminder for a set on your wishlist that is about to leave sale or changes
+  price, from a countdown sensor and an event the integration provides. The
+  [examples](#examples) show how.
+- See a new set the day Brickset lists it in a theme you follow, with an event an
+  automation can act on, and add it to your wishlist from the panel or an automation.
 - See releases, retirements and the birthdays of your own sets on Home Assistant's
   calendar.
 - Mark a set owned or wanted from the panel, an automation or a script, without opening
