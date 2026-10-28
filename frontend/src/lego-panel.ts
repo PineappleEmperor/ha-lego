@@ -236,27 +236,29 @@ export class LegoPanel extends LitElement {
     return html`
       <div class="app">
         ${this.renderHeader()}
-        ${
-          this.switching
-            ? html`<p class="muted switching" role="status">
-                Loading ${this.switching}…
-              </p>`
-            : nothing
-        }
-        <div
-          class=${this.switching ? "busy" : ""}
-          aria-busy=${!!this.switching}
-        >
+        <div class="page">
           ${
-            this.error
-              ? html`<div class="error" role="alert">
-                  <p>${this.error}</p>
-                  <button class="link" @click=${() => void this.load()}>
-                    Try again
-                  </button>
-                </div>`
-              : this.renderHome()
+            this.switching
+              ? html`<p class="muted switching" role="status">
+                  Loading ${this.switching}…
+                </p>`
+              : nothing
           }
+          <div
+            class=${this.switching ? "busy" : ""}
+            aria-busy=${!!this.switching}
+          >
+            ${
+              this.error
+                ? html`<div class="error" role="alert">
+                    <p>${this.error}</p>
+                    <button class="link" @click=${() => void this.load()}>
+                      Try again
+                    </button>
+                  </div>`
+                : this.renderHome()
+            }
+          </div>
         </div>
       </div>
     `;
@@ -727,12 +729,15 @@ export class LegoPanel extends LitElement {
         min-height: 100vh;
       }
       .app {
-        margin: 0 auto;
-        max-width: 1400px;
         padding: 0 0 var(--ha-space-8, 32px);
       }
-      /* One toolbar row at Home Assistant's own header height; on a phone the
-         meter takes a row of its own below it. */
+      /* The toolbar spans the window like Home Assistant's own; only the rows
+         below it are capped, so a wide screen does not stretch the cards. */
+      .page {
+        margin: 0 auto;
+        max-width: 1400px;
+      }
+      /* One toolbar row at Home Assistant's own header height. */
       header {
         align-items: center;
         background: var(--lego-surface);

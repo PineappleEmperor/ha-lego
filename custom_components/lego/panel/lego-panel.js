@@ -1618,19 +1618,21 @@ var Ze=Object.defineProperty;var ts=Object.getOwnPropertyDescriptor;var u=(i,s,t
     ></lego-releases-row>`}},Ps=[["lego-collection-card",Xt,"LEGO collection","Your Brickset collection's totals, with every set and a search."],["lego-releases-card",te,"LEGO releases","New and upcoming sets, across every theme or the ones you follow."],["lego-wishlist-card",Qt,"LEGO wishlist","The sets you want, soonest to retire first."],["lego-value-card",Zt,"LEGO collection value","What your collection is worth at LEGO.com RRP, by theme."]],Ns="https://github.com/PineappleEmperor/ha-lego#dashboard-cards";for(let[i,s,t,e]of Ps)T(i,s),window.customCards=window.customCards??[],window.customCards.some(r=>r.type===i)||window.customCards.push({type:i,name:t,description:e,preview:!0,documentationURL:Ns});var Je=["releases","recent","upcoming","themes"],_=class extends C{constructor(){super(...arguments);this.narrow=!1;this.dark=!1;this.error="";this.accounts=[];this.account="";this.defaultAccount="";this.switching="";this.picking=!1;this.customising=!1;this.folded={};this.dragging="";this.over="";this.foldedFor="";this.onToggle=t=>{let{row:e,collapsed:r}=t.detail;this.folded={...this.folded,[e]:r}};this.onFilter=t=>{let{row:e,filter:r}=t.detail;this.dash&&(this.dash={...this.dash,release_filters:{...this.dash.release_filters,[e]:r}})};this.onMove=t=>{let{row:e,step:r}=t.detail;this.move(e,r,this.visible())};this.onChanged=()=>{bt(),this.load()};this.onTouchMove=t=>{if(!this.dragging||t.pointerType==="mouse")return;let e=this.renderRoot.elementsFromPoint(t.clientX,t.clientY).map(r=>r.closest(".slot")).find(r=>r&&r.dataset.row);e?.dataset.row&&(this.over=e.dataset.row)};this.onPickerKey=t=>{t.key==="Escape"&&this.picking&&(this.picking=!1,this.renderRoot.querySelector(".account")?.focus())};this.onOutside=t=>{let e=this.renderRoot.querySelector(".accountpick");this.picking&&e&&!t.composedPath().includes(e)&&(this.picking=!1)}}connectedCallback(){super.connectedCallback(),window.addEventListener("click",this.onOutside),this.load()}disconnectedCallback(){super.disconnectedCallback(),window.removeEventListener("click",this.onOutside)}willUpdate(){this.dark=!!this.hass?.themes?.darkMode}async load(){try{if(!this.accounts.length){let e=await this.hass.callWS({type:"lego/accounts"});this.accounts=e.accounts,this.account=e.selected??"",this.defaultAccount=this.account}let t=await this.hass.callWS(z("lego/dashboard",this.account));t.entry_id!==this.foldedFor&&(this.foldedFor=t.entry_id,this.folded=Object.fromEntries(t.collapsed.map(e=>[e,!0]))),this.dash=t,this.error=""}catch(t){this.error=A(t)}}async selectAccount(t){if(t!==this.account){this.account=t,this.switching=this.accounts.find(e=>e.entry_id===t)?.name??"account";try{await this.load()}finally{this.switching=""}}}async makeDefault(t){try{await this.hass.callWS({type:"lego/account/set",config_entry_id:t}),this.defaultAccount=t}catch(e){this.error=A(e)}}async save(t){if(this.dash){this.dash={...this.dash,...t};try{let e=await this.hass.callWS({type:"lego/panel_config/set",...t});this.dash&&(this.dash={...this.dash,...e})}catch{}}}visible(){let t=this.dash;return t?Wt(t.rows,t.release_mode).filter(e=>!t.hidden.includes(e)):[]}move(t,e,r){if(!this.dash)return;let a=De(this.dash.rows,r,t,e);a!==this.dash.rows&&(this.save({rows:a}),this.updateComplete.then(()=>this.renderRoot.querySelector(`[data-row="${t}"] > *`)?.focusHandle?.()))}onTouchStart(t,e){t.pointerType==="mouse"||!t.composedPath().some(a=>a instanceof Element&&a.classList.contains("drag"))||(t.currentTarget.setPointerCapture(t.pointerId),this.dragging=e,this.over=e)}onTouchEnd(t){this.dragging&&this.onDrop(this.over,t)}onDrop(t,e){let r=this.dragging;if(this.dragging="",this.over="",!this.dash||!r||r===t)return;let a=this.dash.rows.filter(c=>c!==r),o=a.indexOf(t),l=e.indexOf(r)<e.indexOf(t);a.splice(o+(l?1:0),0,r),this.save({rows:a})}render(){return n`
       <div class="app">
         ${this.renderHeader()}
-        ${this.switching?n`<p class="muted switching" role="status">
-                Loading ${this.switching}…
-              </p>`:d}
-        <div
-          class=${this.switching?"busy":""}
-          aria-busy=${!!this.switching}
-        >
-          ${this.error?n`<div class="error" role="alert">
-                  <p>${this.error}</p>
-                  <button class="link" @click=${()=>{this.load()}}>
-                    Try again
-                  </button>
-                </div>`:this.renderHome()}
+        <div class="page">
+          ${this.switching?n`<p class="muted switching" role="status">
+                  Loading ${this.switching}…
+                </p>`:d}
+          <div
+            class=${this.switching?"busy":""}
+            aria-busy=${!!this.switching}
+          >
+            ${this.error?n`<div class="error" role="alert">
+                    <p>${this.error}</p>
+                    <button class="link" @click=${()=>{this.load()}}>
+                      Try again
+                    </button>
+                  </div>`:this.renderHome()}
+          </div>
         </div>
       </div>
     `}renderHeader(){let t=this.dash?.quota,e=t?Math.min(t.calls_today/(t.budget||1),1):0,r=!!t&&t.remaining<t.refresh_cost*3;return n`<header class=${this.narrow?"narrow":""}>
@@ -1864,12 +1866,15 @@ var Ze=Object.defineProperty;var ts=Object.getOwnPropertyDescriptor;var u=(i,s,t
         min-height: 100vh;
       }
       .app {
-        margin: 0 auto;
-        max-width: 1400px;
         padding: 0 0 var(--ha-space-8, 32px);
       }
-      /* One toolbar row at Home Assistant's own header height; on a phone the
-         meter takes a row of its own below it. */
+      /* The toolbar spans the window like Home Assistant's own; only the rows
+         below it are capped, so a wide screen does not stretch the cards. */
+      .page {
+        margin: 0 auto;
+        max-width: 1400px;
+      }
+      /* One toolbar row at Home Assistant's own header height. */
       header {
         align-items: center;
         background: var(--lego-surface);
