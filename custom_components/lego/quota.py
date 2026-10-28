@@ -5,6 +5,9 @@
 # server-side figure from getKeyUsageStats. The day is Brickset's, which rolls
 # over at midnight UTC whatever the Home Assistant time zone.
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import UTC, date, datetime, time, timedelta
 import math
 
@@ -14,6 +17,7 @@ from .const import (
     BRICKSET_DAILY_CALL_LIMIT,
     COLLECTION_INTERVAL_STEPS_HOURS,
     FEEDS_INTERVAL_HOURS,
+    KEEPALIVE_INTERVAL,
     NEXT_YEAR_FROM_MONTH,
     POLL_SHARE_OF_BUDGET,
     RELEASES_INTERVAL_HOURS,
@@ -21,6 +25,10 @@ from .const import (
     RELEASES_WINDOW_DAYS,
 )
 from .exceptions import BricksetQuotaError
+
+# The calls between the budget and Brickset's 100 are held back for keeping an
+# account showing anything at all: never for a scheduled poll.
+_DRAWING_RESERVE: ContextVar[bool] = ContextVar("lego_drawing_reserve", default=False)
 
 
 def window_years(today: date) -> list[int]:
@@ -90,6 +98,13 @@ def feeds_calls_per_day(
     return polls * cost
 
 
+def reserve_calls_per_day(budget: int, poll_cost: int) -> int:
+    """Return the most the collection draws above the budget once it is spent."""
+    # A poll every KEEPALIVE_INTERVAL, never past Brickset's own limit.
+    keepalive = math.ceil(timedelta(days=1) / KEEPALIVE_INTERVAL) * poll_cost
+    return min(keepalive, max(BRICKSET_DAILY_CALL_LIMIT - budget, 0))
+
+
 def collection_interval(budget: int, poll_cost: int, feeds_calls: int) -> timedelta:
     """Return the shortest collection interval whose polls fit the budget."""
     available = budget * POLL_SHARE_OF_BUDGET - feeds_calls
@@ -113,6 +128,11 @@ class QuotaManager:
     def budget(self) -> int:
         """Return the configured daily budget."""
         return self._budget
+
+    @property
+    def limit(self) -> int:
+        """Return Brickset's own daily limit, which the reserve may reach."""
+        return BRICKSET_DAILY_CALL_LIMIT
 
     @property
     def calls_today(self) -> int:
@@ -151,12 +171,28 @@ class QuotaManager:
         if reported is not None and reported > self._calls_today:
             self._calls_today = reported
 
+    def fits(self, count: int) -> bool:
+        """Whether count more calls fit the budget, the reserve left untouched."""
+        return self.calls_today + count <= self._budget
+
+    @contextmanager
+    def drawing_reserve(self, draw: bool = True) -> Iterator[None]:
+        """Let the calls inside spend past the budget, up to Brickset's own limit."""
+        # A context variable rather than a flag, so the other coordinator's poll,
+        # running alongside in its own task, cannot draw on it too.
+        token = _DRAWING_RESERVE.set(draw or _DRAWING_RESERVE.get())
+        try:
+            yield
+        finally:
+            _DRAWING_RESERVE.reset(token)
+
     def reserve(self, count: int = 1) -> None:
         """Raise if making count more calls would exceed the budget."""
         self._roll_day()
-        if self._calls_today + count > self._budget:
+        cap = BRICKSET_DAILY_CALL_LIMIT if _DRAWING_RESERVE.get() else self._budget
+        if self._calls_today + count > cap:
             raise BricksetQuotaError(
-                f"Daily Brickset call budget spent ({self._calls_today}/{self._budget})"
+                f"Daily Brickset call budget spent ({self._calls_today}/{cap})"
             )
 
     def record(self, count: int = 1) -> None:

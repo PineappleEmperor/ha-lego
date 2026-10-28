@@ -137,6 +137,9 @@
     "entry_not_loaded": {
       "message": "The LEGO entry {title} is not loaded."
     },
+    "limit_spent": {
+      "message": "A refresh needs {cost} Brickset calls but all {limit} of today's are spent ({calls_today} used). They reset at midnight UTC."
+    },
     "no_changes": {
       "message": "Provide at least one field to change."
     },
@@ -180,7 +183,7 @@
           "catalogue": "Downloads the public LEGO set list so searching and checking a set number costs no Brickset calls. Uses no part of your daily allowance.",
           "catalogue_interval": "How often to check the public LEGO set list for a new copy; an unchanged list is not downloaded again. Monthly is plenty, since Brickset's own polls bring new releases in between, and a set the index has not heard of still works at the cost of one Brickset call.",
           "catalogue_rich": "Names make the index searchable, at roughly 1.8 MB instead of 450 KB. Turn off on a storage-constrained machine, and search falls back to set numbers only.",
-          "daily_call_budget": "The most calls Home Assistant spends a day. Refresh intervals are set from it, and polling pauses until midnight UTC once it is spent.",
+          "daily_call_budget": "The calls a day Home Assistant plans its refreshes around. Once it is spent, refreshes pause until midnight UTC, apart from the reserve described above. A new budget takes effect as soon as it is saved.",
           "panel": "Adds a page for browsing your collection, your wishlist and new releases in the themes you follow. Turning it off removes the sidebar entry.",
           "region": "Which LEGO.com market supplies recommended retail prices and retirement dates.",
           "releases": "Fills the panel's Out recently and Coming soon rows with every set out in the last four weeks or due in the next four, whatever its theme. Checks once a day, reading the whole year at about 3 calls, and your watched themes then come from the same read instead of costing calls of their own.",
@@ -189,7 +192,7 @@
           "themes": "However many themes you pick, they are fetched together in one API call per refresh.",
           "users": "Home Assistant users who see this account in the LEGO panel and can change it. Admins can always use every account. This scopes the panel and the actions only: the integration's sensors and calendars stay visible to every user, as all entities are."
         },
-        "description": "Brickset allows 100 catalogue calls per API key per day. Within your budget of {budget}, your collection refreshes every {collection_hours} h and new releases every 12 h, or once a day when following releases across all themes, about {estimated_calls} calls a day. A quarter of the budget is kept free for actions such as a manual refresh.",
+        "description": "Brickset allows 100 catalogue calls per API key per day. Within your budget of {budget}, your collection refreshes every {collection_hours} h and new releases every 12 h, or once a day when following releases across all themes, about {estimated_calls} calls a day. A quarter of the budget is kept free for actions such as a manual refresh.\n\nThe calls between your budget and 100 are held back as a reserve. It lets an account with nothing saved start up, and once the budget is spent it keeps your collection no more than 6 h old, at most {reserve_calls} calls a day.",
         "title": "LEGO options"
       }
     }

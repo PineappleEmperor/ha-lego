@@ -115,12 +115,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool
         # Free, and the only way to learn today's count without a poll.
         await collection.async_sync_quota()
     else:
+        # With nothing saved, Brickset's own limit spent is the one thing that can
+        # keep an account from loading, and setup retries until it resets.
         await collection.async_config_entry_first_refresh()
     feeds_due = not feeds.async_resume(cache)
     # A theme feed is one call, worth having before the entities appear; a read of
-    # whole years is a few, which a tight budget must not let fail the entry.
+    # whole years is a few, which a tight budget must not let fail the entry. Either
+    # way the collection loaded, so a failed feed waits on its retry, not the entry.
     if feeds_due and feeds.themes and not feeds.releases:
-        await feeds.async_config_entry_first_refresh()
+        await feeds.async_refresh()
 
     entry.runtime_data = LegoRuntimeData(
         client=client,

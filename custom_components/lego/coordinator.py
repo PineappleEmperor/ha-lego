@@ -25,11 +25,13 @@ from .const import (
     EVENT_NEW_SET,
     EVENT_WANTED_CHANGED,
     FEEDS_RETRY_HOURS,
+    KEEPALIVE_INTERVAL,
     MIN_COLLECTION_POLL_COST,
     MIN_RESUME_WAIT,
     MIN_TIME_BETWEEN_QUOTA_CHECKS,
     NEXT_YEAR_FROM_MONTH,
     RELEASES_PAGES_ESTIMATE,
+    RESET_MARGIN,
     YEAR_MAX_PAGES,
 )
 from .exceptions import (
@@ -137,7 +139,7 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         self.cache: PollCache | None = None
         # The usual interval, while a shorter one brings the first poll after a
         # restart round when it was due.
-        self._resume_interval: timedelta | None = None
+        self._usual_interval: timedelta | None = None
 
     def async_resume(self, cache: PollCache) -> bool:
         """Take up the data saved before a restart; True if no poll is due yet."""
@@ -157,14 +159,19 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         age = dt_util.utcnow() - snapshot.synced
         if age >= interval:
             return False
-        self._resume_interval = interval
-        self.update_interval = max(interval - age, MIN_RESUME_WAIT)
+        self._wait(interval - age)
         return True
+
+    def _wait(self, until_next: timedelta) -> None:
+        """Make the next poll come after until_next, then go back to the usual."""
+        if self._usual_interval is None:
+            self._usual_interval = self.update_interval
+        self.update_interval = max(until_next, MIN_RESUME_WAIT)
 
     @property
     def planned_interval(self) -> timedelta | None:
         """Return the usual interval, even while the first poll after a restart is nearer."""
-        return self._resume_interval or self.update_interval
+        return self._usual_interval or self.update_interval
 
     def _remember(self, data: DataT) -> None:
         """Save the data a poll or a write left, for the next restart."""
@@ -206,11 +213,13 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
     @override
     async def _async_update_data(self) -> DataT:
         """Poll Brickset, mapping API failures onto coordinator semantics."""
-        if self._resume_interval is not None:
-            self.update_interval, self._resume_interval = self._resume_interval, None
+        if self._usual_interval is not None:
+            self.update_interval, self._usual_interval = self._usual_interval, None
         try:
             await self.async_sync_quota()
-            data = await self._fetch()
+            reserve = not self.quota.fits(self.poll_cost) and self._may_draw_reserve()
+            with self.quota.drawing_reserve(reserve):
+                data = await self._fetch()
         except BricksetQuotaError as err:
             return self._serve_cached(err)
         except (BricksetAuthError, BricksetUserHashError) as err:
@@ -223,7 +232,7 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
                 translation_key="api_error",
                 translation_placeholders={"error": str(err)},
             ) from err
-        if self._quota_paused:
+        if self._quota_paused and not reserve:
             _LOGGER.info("Brickset call budget reset; %s is polling again", self.name)
             self._quota_paused = False
         self.last_synced = dt_util.utcnow()
@@ -251,14 +260,18 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
         # Going unavailable would blank every dashboard for the rest of the day over
         # a self-imposed limit; last_synced tells anyone who asks how old it is.
         if (previous := self._previous) is None:
+            # Even the reserve is gone, so asking again before the reset would
+            # only be refused again.
+            until_reset = self.quota.resets_at - dt_util.utcnow() + RESET_MARGIN
             raise UpdateFailed(
                 translation_domain=DOMAIN,
-                translation_key="quota_spent",
+                translation_key="limit_spent",
                 translation_placeholders={
                     "cost": str(self.poll_cost),
                     "calls_today": str(self.quota.calls_today),
-                    "budget": str(self.quota.budget),
+                    "limit": str(self.quota.limit),
                 },
+                retry_after=until_reset.total_seconds(),
             ) from err
         if not self._quota_paused:
             _LOGGER.warning(
@@ -271,6 +284,12 @@ class LegoBaseCoordinator[DataT](DataUpdateCoordinator[DataT]):
             )
             self._quota_paused = True
         return previous
+
+    def _may_draw_reserve(self) -> bool:
+        """Whether a poll the budget cannot cover may spend from the reserve."""
+        # Only with nothing at all to show: the reserve keeps an account up, it does
+        # not keep it as fresh as the budget would.
+        return self._previous is None
 
     @property
     def poll_cost(self) -> int:
@@ -344,6 +363,15 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
             owned=owned,
             wanted=wanted,
             summary=CollectionSummary.from_sets(owned, wanted, self.region),
+        )
+
+    @override
+    def _may_draw_reserve(self) -> bool:
+        # Once the budget is spent the sensors still move, if less often.
+        return (
+            super()._may_draw_reserve()
+            or self.last_synced is None
+            or dt_util.utcnow() - self.last_synced >= KEEPALIVE_INTERVAL
         )
 
     @override

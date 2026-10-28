@@ -384,6 +384,8 @@ async def test_options_flow(
         "budget": "80",
         "collection_hours": "1",
         "estimated_calls": "50",
+        # A 2-call poll every 6 h once the budget is spent, well within the 20 above it.
+        "reserve_calls": "8",
     }
 
     result = await hass.config_entries.options.async_configure(

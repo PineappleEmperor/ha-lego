@@ -106,7 +106,7 @@ Reachable via **Configure** on the integration entry.
 |--------|---------|-------|
 | Pricing region | from HA's country | Which LEGO.com market supplies prices and availability dates (`UK`, `US`, `CA`, `DE`). |
 | Themes to watch | none | Which themes to follow for new releases, also changeable from the panel. However many you pick, they ride in one call per refresh, until together they hold more than 500 sets in a year. |
-| Daily call budget | 80 | The most calls Home Assistant spends a day. The refresh intervals are set from it (see [Data updates](#data-updates)), and polling pauses until midnight UTC once it is spent. |
+| Daily call budget | 80 | The calls a day Home Assistant plans its refreshes around. The refresh intervals are set from it (see [Data updates](#data-updates)), and polling pauses until midnight UTC once it is spent, apart from a reserve held back above it. |
 | People who use this account | none | The Home Assistant users this Brickset account belongs to. See [Sharing accounts](#sharing-accounts). |
 | Shared with all users | off | Lets every Home Assistant user see and change this account. |
 | Show the LEGO panel in the sidebar | on | Whether to add the sidebar page for browsing your collection, your wishlist and new releases. |
@@ -428,7 +428,12 @@ about 510 KB.
 
 The options dialog shows the estimated calls/day for your current settings. When the
 budget is spent, polling pauses until Brickset's day resets at midnight UTC and the
-entities keep serving the last successful poll rather than going unavailable. To tell
+entities keep serving the last successful poll rather than going unavailable. The
+calls between the budget and Brickset's 100 are held back as a reserve, never spent on
+the regular schedule. It lets an account with nothing saved start up, and while the
+budget is spent it refreshes your collection every 6 hours, which for most collections
+is 8 calls a day. Only once all 100 are spent can an account with nothing saved fail to
+start, and setup then retries. Raising the budget takes effect as soon as you save it. To tell
 how old that data is, `sensor.lego_*_last_synced` holds the time of the last sync,
 and the panel shows it under **My collection** ("Updated 3 hours ago") along with when
 updates resume. `sensor.lego_*_brickset_calls_today` shows usage, budget and
@@ -460,8 +465,9 @@ the saved token, usually after a password change. Open the prompt and enter your
 and password again; the password is used once and not stored.
 
 **The numbers look out of date.** Check the **Last synced** sensor or the panel's
-"Updated … ago". If the daily call budget is spent, polling resumes at midnight UTC; raise
-the budget under **Configure** if that happens often. If Last synced is recent, the data
+"Updated … ago". If the daily call budget is spent, the collection refreshes every 6
+hours from the reserve and polling resumes at midnight UTC; raise the budget under
+**Configure** if that happens often. If Last synced is recent, the data
 is what Brickset holds.
 
 **A repair says Brickset rejected a collection change.** The change did not apply. The
