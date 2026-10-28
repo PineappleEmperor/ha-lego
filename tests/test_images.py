@@ -22,6 +22,7 @@ from .conftest import setup_integration
 
 SMALL = "https://images.brickset.com/sets/small/10294-1.jpg"
 LARGE = "https://images.brickset.com/sets/images/10294-1.jpg"
+BACKUP_SMALL = "https://cdn.rebrickable.com/media/thumbs/sets/10294-1.jpg/230x230p.jpg"
 JPEG = b"\xff\xd8\xff\xe0 picture of the Titanic"
 
 
@@ -120,14 +121,46 @@ async def test_a_set_brickset_has_no_picture_of_is_not_found(
     mock_config_entry: MockConfigEntry,
     cache_dir: Path,
 ) -> None:
-    """A 404 upstream is a 404 here, and nothing is stored."""
+    """No picture on either site is a 404, remembered rather than asked again."""
     aioclient_mock.get(SMALL, status=HTTPStatus.NOT_FOUND)
+    aioclient_mock.get(BACKUP_SMALL, status=HTTPStatus.NOT_FOUND)
+    await _start(hass, mock_config_entry, cache_dir)
+    client = await hass_client()
+
+    for _ in range(2):
+        response = await client.get("/api/lego/image/small/10294-1.jpg")
+        assert response.status == HTTPStatus.NOT_FOUND
+
+    assert not any(cache_dir.rglob("*.jpg"))
+    asked = [str(call[1]) for call in aioclient_mock.mock_calls]
+    assert (asked.count(SMALL), asked.count(BACKUP_SMALL)) == (1, 1)
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_rebrickable_pictures_a_set_brickset_cannot(
+    hass: HomeAssistant,
+    hass_client: ClientSessionGenerator,
+    aioclient_mock: AiohttpClientMocker,
+    mock_config_entry: MockConfigEntry,
+    cache_dir: Path,
+) -> None:
+    """Mostly promotional sets: Rebrickable's copy, by its lower-case number, is kept."""
+    aioclient_mock.get(
+        "https://images.brickset.com/sets/small/REDSOX2016-1.jpg",
+        status=HTTPStatus.NOT_FOUND,
+    )
+    aioclient_mock.get(
+        "https://cdn.rebrickable.com/media/thumbs/sets/redsox2016-1.jpg/230x230p.jpg",
+        content=JPEG,
+        headers={"Content-Type": "image/jpeg"},
+    )
     await _start(hass, mock_config_entry, cache_dir)
 
-    response = await (await hass_client()).get("/api/lego/image/small/10294-1.jpg")
+    response = await (await hass_client()).get("/api/lego/image/small/REDSOX2016-1.jpg")
 
-    assert response.status == HTTPStatus.NOT_FOUND
-    assert not any(cache_dir.rglob("*.jpg"))
+    assert response.status == HTTPStatus.OK
+    assert await response.read() == JPEG
+    assert (cache_dir / "small" / "redsox2016-1.jpg").read_bytes() == JPEG
 
 
 @pytest.mark.usefixtures("brickset")
@@ -140,6 +173,7 @@ async def test_an_unreachable_brickset_says_so(
 ) -> None:
     """Offline and not yet stored: 502, so the panel tries Brickset itself."""
     aioclient_mock.get(SMALL, exc=aiohttp.ClientConnectionError())
+    aioclient_mock.get(BACKUP_SMALL, exc=aiohttp.ClientConnectionError())
     await _start(hass, mock_config_entry, cache_dir)
 
     response = await (await hass_client()).get("/api/lego/image/small/10294-1.jpg")

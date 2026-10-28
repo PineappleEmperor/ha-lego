@@ -75,6 +75,15 @@ SETS_CSV_URL: Final = "https://cdn.rebrickable.com/media/downloads/sets.csv.gz"
 # 2026-10-28: the small one runs about 16 KB, the large one about 90 KB.
 BRICKSET_THUMBNAIL_URL: Final = "https://images.brickset.com/sets/small/{number}.jpg"
 BRICKSET_IMAGE_URL: Final = "https://images.brickset.com/sets/images/{number}.jpg"
+# Rebrickable's, for the sets Brickset has no picture of. Its thumbnailer makes the
+# sizes nearest Brickset's on request: 230 px (about 13 KB) and 690 px (about 90 KB),
+# square with white margins. Its terms allow set images to be used and linked to.
+REBRICKABLE_THUMBNAIL_URL: Final = (
+    "https://cdn.rebrickable.com/media/thumbs/sets/{number}.jpg/230x230p.jpg"
+)
+REBRICKABLE_IMAGE_URL: Final = (
+    "https://cdn.rebrickable.com/media/thumbs/sets/{number}.jpg/690x690p.jpg"
+)
 # Whether a high-resolution screen is offered the large picture as well.
 CONF_SHARP_PICTURES: Final = "sharp_pictures"
 DEFAULT_SHARP_PICTURES: Final = False

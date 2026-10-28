@@ -25,8 +25,8 @@ and dashboard cards show the lot.
 > This project is **not affiliated with, authorised by, or endorsed by the LEGO Group**.
 > LEGO® is a trademark of the LEGO Group. Set data, prices and images come from
 > [Brickset.com](https://brickset.com) via their public API, and every set links back to
-> its Brickset page. The local set index comes from
-> [Rebrickable](https://rebrickable.com/downloads/). Neither Brickset nor Rebrickable is
+> its Brickset page. The local set index, and the pictures of the few sets Brickset has
+> none of, come from [Rebrickable](https://rebrickable.com/downloads/). Neither Brickset nor Rebrickable is
 > affiliated with this project or involved in it. No affiliate or referral links are used
 > anywhere in this integration.
 
@@ -52,8 +52,10 @@ marks it owned on your Brickset account.
 Set pictures are plain image files on Brickset's site and cost no API calls. Home
 Assistant downloads each one the first time a card shows it and keeps it in its cache
 folder, which backups leave out, so a dashboard on a network without internet still
-draws every set it has shown before. A picture not yet kept is fetched from Brickset
-directly, and a set Brickset has no picture of shows the integration's icon.
+draws every set it has shown before. For a set Brickset has no picture of, mostly
+promotional ones, Home Assistant keeps Rebrickable's picture instead, and a set neither
+has a picture of shows the integration's icon. A picture not yet kept is fetched from
+Brickset directly.
 
 Brickset allows each API key 100 requests for set data a day, the integration's own
 polls included, which searching from a dashboard would soon use up. So the integration also keeps a local list of every LEGO set from
