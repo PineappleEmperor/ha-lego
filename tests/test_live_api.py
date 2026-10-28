@@ -41,6 +41,7 @@ import pytest_socket
 
 from custom_components.lego.api import API_BASE, BricksetClient
 from custom_components.lego.const import (
+    BRICKSET_IMAGE_URL,
     BRICKSET_THUMBNAIL_URL,
     PAGE_SIZE,
     REBRICKABLE_IMAGE_URL,
@@ -224,8 +225,10 @@ async def test_pictures_are_found_by_set_number_alone() -> None:
     # lower case, as the index holds it. Image requests are not billed.
     numbers = ("75192-1", "10497-1", "6876-1", "comcon001-1")
     async with aiohttp.ClientSession() as session:
-        for number in numbers:
-            url = BRICKSET_THUMBNAIL_URL.format(number=number)
+        # The standard size for each, and the large one sharp pictures ask for.
+        urls = [BRICKSET_THUMBNAIL_URL.format(number=number) for number in numbers]
+        urls.append(BRICKSET_IMAGE_URL.format(number=numbers[0]))
+        for url in urls:
             async with session.get(url) as response:
                 assert response.status == 200, f"{url} answered {response.status}"
                 assert response.content_type.startswith("image/"), (
