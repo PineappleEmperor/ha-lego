@@ -8,8 +8,10 @@ import {
 } from "lit";
 import { property, state } from "lit/decorators.js";
 
+import { picturesExpired } from "./api";
 import "./bricks";
 import {
+  LOCAL_PICTURE,
   displayName,
   errorText,
   formatPrice,
@@ -274,7 +276,9 @@ export abstract class LegoRow extends LitElement {
   private noArt = (ev: Event): void => {
     const img = ev.target as HTMLImageElement;
     if (img.classList.contains("noart")) return;
-    // Home Assistant's copy failed, say offline before it was stored: ask Brickset.
+    // Home Assistant's copy failed. An expired address is renewed for the next
+    // draw; meanwhile, or if it was never stored and HA is offline, ask Brickset.
+    if (img.src.includes(LOCAL_PICTURE)) picturesExpired();
     const fallback = img.dataset.fallback;
     if (fallback && img.src !== fallback) {
       img.removeAttribute("srcset");

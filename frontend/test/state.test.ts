@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import {
+  INVALIDATED,
+  PICTURE_RETRY_MS,
+  picturesExpired,
+  reloadOnReconnect,
+} from "../src/api";
 import { pictureSources, pictureUrl } from "../src/format";
 import {
   chipLayout,
@@ -10,7 +16,7 @@ import {
   meterFill,
   pressMyThemes,
 } from "../src/state";
-import type { Quota } from "../src/types";
+import type { Hass, Quota } from "../src/types";
 
 describe("marking a set owned", () => {
   it("ticks a set that was not owned, as one copy", () => {
@@ -166,5 +172,37 @@ describe("set pictures", () => {
       srcset: null,
       fallback: null,
     });
+  });
+});
+
+describe("renewing picture addresses", () => {
+  // The tests run without a page; the reload signal only needs something to fire on.
+  (globalThis as { window?: EventTarget }).window ??= new EventTarget();
+
+  it("asks for new ones at most once a minute, however many pictures fail", () => {
+    let reloads = 0;
+    const count = () => reloads++;
+    window.addEventListener(INVALIDATED, count);
+    try {
+      const start = 1_000_000_000;
+      expect(picturesExpired(start)).toBe(true);
+      expect(picturesExpired(start + 1_000)).toBe(false);
+      expect(picturesExpired(start + PICTURE_RETRY_MS)).toBe(true);
+      expect(reloads).toBe(2);
+    } finally {
+      window.removeEventListener(INVALIDATED, count);
+    }
+  });
+
+  it("reloads once when the connection comes back after a restart", () => {
+    const listeners: (() => void)[] = [];
+    const connection = {
+      addEventListener: (_event: "ready", listener: () => void) =>
+        listeners.push(listener),
+    };
+    const hass = { connection } as unknown as Hass;
+    reloadOnReconnect(hass);
+    reloadOnReconnect(hass);
+    expect(listeners).toHaveLength(1);
   });
 });

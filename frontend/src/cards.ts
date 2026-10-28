@@ -1,7 +1,12 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { property, state } from "lit/decorators.js";
 
-import { INVALIDATED, invalidate, loadDashboard } from "./api";
+import {
+  INVALIDATED,
+  invalidate,
+  loadDashboard,
+  reloadOnReconnect,
+} from "./api";
 import { ROW_META, define } from "./base";
 import {
   ROW_SPANS,
@@ -145,6 +150,7 @@ abstract class LegoCard extends LitElement {
 
   protected override updated(): void {
     const key = this.config?.account ?? "";
+    if (this.hass) reloadOnReconnect(this.hass);
     if (this.hass && this.config && this.loadedFor !== key) {
       this.loadedFor = key;
       loadDashboard(this.hass, key)

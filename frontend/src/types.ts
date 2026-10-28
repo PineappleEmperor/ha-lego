@@ -7,6 +7,10 @@ export type Hass = {
   ): Promise<unknown>;
   locale?: { language: string };
   themes?: { darkMode?: boolean };
+  /** The websocket, which says "ready" again after Home Assistant restarts. */
+  connection?: {
+    addEventListener(event: "ready", listener: () => void): void;
+  };
 };
 
 export interface LegoSet {

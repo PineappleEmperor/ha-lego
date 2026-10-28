@@ -307,7 +307,7 @@ export function webUrl(url: string | null | undefined): string | null {
 }
 
 /** Home Assistant's own copy of a picture, which arrives as a path on this site. */
-const LOCAL_PICTURE = "/api/lego/image/";
+export const LOCAL_PICTURE = "/api/lego/image/";
 
 /** A picture address: Home Assistant's copy, or a web address from Brickset. */
 export function pictureUrl(url: string | null | undefined): string | null {

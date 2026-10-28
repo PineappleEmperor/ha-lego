@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { property, state } from "lit/decorators.js";
 
-import { invalidate } from "./api";
+import { INVALIDATED, invalidate, reloadOnReconnect } from "./api";
 import { ROW_META, define, type LegoRow } from "./base";
 import "./cards";
 import {
@@ -61,17 +61,23 @@ export class LegoPanel extends LitElement {
   public override connectedCallback(): void {
     super.connectedCallback();
     window.addEventListener("click", this.onOutside);
+    window.addEventListener(INVALIDATED, this.onInvalidated);
     void this.load();
   }
 
   public override disconnectedCallback(): void {
     super.disconnectedCallback();
     window.removeEventListener("click", this.onOutside);
+    window.removeEventListener(INVALIDATED, this.onInvalidated);
   }
 
   protected override willUpdate(): void {
     this.dark = !!this.hass?.themes?.darkMode;
+    if (this.hass) reloadOnReconnect(this.hass);
   }
+
+  /** After a restart or an expired picture address, fetch the page again. */
+  private onInvalidated = (): void => void this.load();
 
   private async load(): Promise<void> {
     try {
@@ -186,10 +192,8 @@ export class LegoPanel extends LitElement {
     );
   }
 
-  private onChanged = (): void => {
-    invalidate();
-    void this.load();
-  };
+  // Reloads this page too, through the same event the cards listen for.
+  private onChanged = (): void => invalidate();
 
   /**
    * A finger on a row's handle. Browsers fire no drag events for touch, so the
