@@ -1,5 +1,7 @@
 """Tests for the LEGO actions."""
 
+from datetime import date
+
 import aiohttp
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import (
@@ -21,6 +23,7 @@ from custom_components.lego.const import (
     SERVICE_SEARCH_SETS,
     SERVICE_SET_COLLECTION,
 )
+from custom_components.lego.coordinator import FeedsData
 
 from .conftest import (
     SETS_CSV_URL,
@@ -148,6 +151,9 @@ async def test_set_collection(
     assert brickset.set_collection_calls == [
         {"setID": "1", "params": {"own": 1, "qtyOwned": 3, "rating": 5}}
     ]
+    kept = mock_config_entry.runtime_data.collection.data.all_sets["10497-1"]
+    assert (kept.collection.qty_owned, kept.collection.rating) == (3, 5)
+    assert mock_config_entry.runtime_data.collection.data.summary.sets_owned == 5
 
 
 async def test_set_collection_reuses_a_harvested_id(
@@ -170,6 +176,36 @@ async def test_set_collection_reuses_a_harvested_id(
 
     assert brickset.set_collection_calls[0]["setID"] == "5"
     assert _lookups(brickset, before) == []
+    # The feed's own record is what the collection keeps, picture and all.
+    kept = mock_config_entry.runtime_data.collection.data.all_sets["42200-1"]
+    assert kept.theme == "Technic"
+    assert kept.image_url
+    assert kept.collection.wanted is True
+
+
+async def test_set_collection_fills_a_set_known_only_to_the_index(
+    hass: HomeAssistant, brickset: BricksetServer, mock_config_entry: MockConfigEntry
+) -> None:
+    """A set seen once but in no feed now keeps what the index holds, free."""
+    await setup_integration(hass, mock_config_entry)
+    mock_config_entry.runtime_data.feeds.async_set_updated_data(FeedsData())
+    before = len(brickset.get_sets_calls)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_COLLECTION,
+        {
+            "device_id": lego_device_id(hass, mock_config_entry),
+            "set_number": "42200-1",
+            "owned": True,
+        },
+        blocking=True,
+    )
+
+    assert _lookups(brickset, before) == []
+    kept = mock_config_entry.runtime_data.collection.data.all_sets["42200-1"]
+    assert (kept.name, kept.theme, kept.year) == ("New Technic Thing", "Technic", 2026)
+    assert kept.thumbnail_url == "https://images.brickset.com/sets/small/42200-1.jpg"
 
 
 async def test_set_collection_looks_up_an_unseen_set(
@@ -193,6 +229,13 @@ async def test_set_collection_looks_up_an_unseen_set(
 
     assert brickset.set_collection_calls[0]["setID"] == "7"
     assert _lookups(brickset, before) == ["21034-1"]
+    # The lookup's own record is what the wishlist keeps, picture and dates included.
+    data = mock_config_entry.runtime_data.collection.data
+    kept = data.wanted_by_number["21034-1"]
+    assert (kept.name, kept.theme) == ("London", "Architecture")
+    assert kept.thumbnail_url == "https://images.brickset.com/sets/small/21034-1.jpg"
+    assert kept.retirement_date("UK") == date(2099, 12, 31)
+    assert kept.collection.wanted is True
 
 
 @pytest.mark.usefixtures("brickset")
@@ -345,9 +388,11 @@ async def test_set_collection_folds_the_change_into_the_cache(
     assert len(brickset.get_sets_calls) == billed
     data = mock_config_entry.runtime_data.collection.data
     assert data is not None
-    owned = {lego_set.number for lego_set in data.owned}
-    assert "10294-1" in owned
+    owned = {lego_set.number: lego_set for lego_set in data.owned}
+    assert owned["10294-1"].collection.qty_owned == 1
     assert data.summary.sets_distinct == len(owned)
+    # Owning and wanting are separate on Brickset, so the wish stands until unticked.
+    assert "10294-1" in data.wanted_by_number
 
 
 async def test_unticking_owned_removes_the_set(
@@ -407,6 +452,7 @@ async def test_owning_a_wanted_set_keeps_its_full_record(
     collection = mock_config_entry.runtime_data.collection
     wanted = collection.data.wanted_by_number["10294-1"]
     pieces_before = collection.data.summary.pieces_owned
+    value_before = collection.data.summary.value
 
     await hass.services.async_call(
         DOMAIN,
@@ -422,8 +468,15 @@ async def test_owning_a_wanted_set_keeps_its_full_record(
     await hass.async_block_till_done()
 
     owned = {item.number: item for item in collection.data.owned}
-    assert owned["10294-1"].pieces == wanted.pieces
+    kept = owned["10294-1"]
+    assert kept.pieces == wanted.pieces
     assert collection.data.summary.pieces_owned == pieces_before + wanted.pieces
+    assert kept.thumbnail_url == wanted.thumbnail_url is not None
+    assert kept.price("UK") == wanted.price("UK") is not None
+    assert kept.retirement_date("UK") == wanted.retirement_date("UK") is not None
+    assert collection.data.summary.value == pytest.approx(
+        value_before + wanted.price("UK")
+    )
 
 
 async def test_set_collection_rejection_raises_a_repair_issue(
@@ -502,7 +555,13 @@ async def test_search_sets_returns_matches(
     )
 
     assert [item["set_number"] for item in response["sets"]] == ["10305-1"]
-    assert response["sets"][0]["name"] == "Lion Knights' Castle"
+    [found] = response["sets"]
+    assert found["name"] == "Lion Knights' Castle"
+    assert (found["theme"], found["year"]) == ("Icons", 2024)
+    assert (found["pieces"], found["minifigs"]) == (4514, 22)
+    assert (found["owned"], found["qty_owned"], found["wanted"]) == (True, 1, False)
+    assert found["image_url"] == "https://images.brickset.com/sets/images/10305-1.jpg"
+    assert found["brickset_url"] == "https://brickset.com/sets/10305-1"
 
 
 @pytest.mark.usefixtures("brickset")

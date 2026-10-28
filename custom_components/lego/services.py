@@ -34,6 +34,7 @@ from .const import (
     ATTR_THEME,
     ATTR_WANTED,
     ATTR_YEAR,
+    BRICKSET_THUMBNAIL_URL,
     CONF_CATALOGUE_RICH,
     DEFAULT_CATALOGUE_RICH,
     DOMAIN,
@@ -140,15 +141,33 @@ def _summarise(lego_set: LegoSet) -> dict[str, Any]:
 
 
 async def _async_resolve_set(entry: LegoConfigEntry, number: str) -> LegoSet:
-    """Find a set by number, falling back to a billed lookup."""
+    """Find a set's fullest record without a call, falling back to a billed lookup."""
+    # The record found here is the one the cached collection keeps until the next
+    # poll, so a set shows its picture and dates at once only if this one has them.
     known = entry.runtime_data.collection.data
     if known is not None and (lego_set := known.all_sets.get(number)) is not None:
         return lego_set
 
+    if (feeds := entry.runtime_data.feeds.data) is not None:
+        followed = (lego_set for sets in feeds.themes.values() for lego_set in sets)
+        for lego_set in [*(feeds.releases or []), *followed]:
+            if lego_set.number == number:
+                return lego_set
+
     catalogue = entry.runtime_data.catalogue
     if catalogue is not None and (set_id := catalogue.set_id(number)) is not None:
+        # Known by its id alone: the write costs nothing, the index supplies what it
+        # holds, and the dates and prices arrive with the next poll.
         listed = catalogue.entry(number)
-        return LegoSet(set_id=set_id, number=number, name=listed.name if listed else "")
+        return LegoSet(
+            set_id=set_id,
+            number=number,
+            name=listed.name if listed else "",
+            year=listed.year if listed else None,
+            theme=listed.theme if listed else "",
+            thumbnail_url=BRICKSET_THUMBNAIL_URL.format(number=number),
+            brickset_url=f"https://brickset.com/sets/{number}",
+        )
 
     try:
         matches = await entry.runtime_data.client.get_sets({"setNumber": number})

@@ -42,6 +42,7 @@ from .const import (
     CONF_PANEL,
     CONF_RELEASES,
     CONF_SHARED,
+    CONF_SHARP_PICTURES,
     CONF_THEMES,
     CONF_USER_HASH,
     CONF_USERS,
@@ -53,6 +54,7 @@ from .const import (
     DEFAULT_PANEL,
     DEFAULT_REGION,
     DEFAULT_RELEASES,
+    DEFAULT_SHARP_PICTURES,
     DOMAIN,
     MAX_CATALOGUE_INTERVAL_DAYS,
     MIN_CATALOGUE_INTERVAL_DAYS,
@@ -142,11 +144,12 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for LEGO."""
 
     VERSION = 2
-    MINOR_VERSION = 2
+    MINOR_VERSION = 3
 
     def __init__(self) -> None:
         """Initialise the flow."""
         self._entry_data: dict[str, Any] = {}
+        self._region = DEFAULT_REGION
 
     async def _async_try_credentials(
         self, user_input: dict[str, Any], errors: dict[str, str]
@@ -195,14 +198,18 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    def _create(self, region: str) -> ConfigFlowResult:
-        """Finish the flow with a pricing region."""
+    def _create(self, sharp_pictures: bool) -> ConfigFlowResult:
+        """Finish the flow with a pricing region and a picture size."""
         return self.async_create_entry(
             title=self._entry_data[CONF_USERNAME],
             data=self._entry_data,
             # New entries get the all-themes release rows; entries from before
             # they existed keep the default, so an upgrade spends no new calls.
-            options={CONF_REGION: region, CONF_RELEASES: True},
+            options={
+                CONF_REGION: self._region,
+                CONF_RELEASES: True,
+                CONF_SHARP_PICTURES: sharp_pictures,
+            },
         )
 
     async def async_step_region(
@@ -210,7 +217,8 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Choose the market to price against, seeded from the country."""
         if user_input is not None:
-            return self._create(user_input[CONF_REGION])
+            self._region = user_input[CONF_REGION]
+            return await self.async_step_pictures()
 
         country = self.hass.config.country or ""
         suggested = COUNTRY_TO_REGION.get(country)
@@ -226,6 +234,24 @@ class LegoConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="region",
             data_schema=probatio.Schema({key: selector}),
             description_placeholders={"country": country or "not set"},
+        )
+
+    async def async_step_pictures(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose the picture size, shown with what each costs to fetch and keep."""
+        if user_input is not None:
+            return self._create(user_input[CONF_SHARP_PICTURES])
+
+        return self.async_show_form(
+            step_id="pictures",
+            data_schema=probatio.Schema(
+                {
+                    probatio.Required(
+                        CONF_SHARP_PICTURES, default=DEFAULT_SHARP_PICTURES
+                    ): BooleanSelector()
+                }
+            ),
         )
 
     async def async_step_reauth(
@@ -328,6 +354,7 @@ class LegoOptionsFlow(OptionsFlowWithReload):
                 CONF_THEMES: user_input.get(CONF_THEMES, []),
                 CONF_DAILY_CALL_BUDGET: int(user_input[CONF_DAILY_CALL_BUDGET]),
                 CONF_PANEL: user_input[CONF_PANEL],
+                CONF_SHARP_PICTURES: user_input[CONF_SHARP_PICTURES],
                 CONF_RELEASES: user_input[CONF_RELEASES],
                 CONF_CATALOGUE: user_input[CONF_CATALOGUE],
                 CONF_CATALOGUE_RICH: user_input[CONF_CATALOGUE_RICH],
@@ -378,6 +405,10 @@ class LegoOptionsFlow(OptionsFlowWithReload):
                 ): BooleanSelector(),
                 probatio.Required(
                     CONF_PANEL, default=options.get(CONF_PANEL, DEFAULT_PANEL)
+                ): BooleanSelector(),
+                probatio.Required(
+                    CONF_SHARP_PICTURES,
+                    default=options.get(CONF_SHARP_PICTURES, DEFAULT_SHARP_PICTURES),
                 ): BooleanSelector(),
                 probatio.Required(
                     CONF_RELEASES,

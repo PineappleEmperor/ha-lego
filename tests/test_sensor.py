@@ -51,6 +51,12 @@ async def test_wishlist_sensor_carries_the_sets_unrecorded(
     assert sets[0]["retirement_date"] == "2099-12-31"
     assert sets[0]["retired"] is False
     assert sets[0]["priority"] == 1
+    assert (sets[0]["theme"], sets[0]["year"]) == ("Icons", 2024)
+    assert sets[0]["retail_price"] == 629.99
+    assert sets[0]["image_url"] == (
+        "https://images.brickset.com/sets/images/10294-1.jpg"
+    )
+    assert sets[0]["brickset_url"] == "https://brickset.com/sets/10294-1"
     # Lean on purpose: the 16-field payload would go to every browser each poll.
     assert set(sets[0]) == {
         "set_number",
@@ -248,7 +254,18 @@ async def test_latest_theme_sensor(
     state = hass.states.get(f"{PREFIX}_latest_technic_set")
     assert state.state == "42200-1"
     assert state.attributes["sets_this_year"] == 2
-    assert state.attributes["set_name"] == "New Technic Thing"
+    attributes = state.attributes
+    assert attributes["set_name"] == "New Technic Thing"
+    assert (attributes["theme"], attributes["year"]) == ("Technic", year)
+    assert (attributes["pieces"], attributes["minifigs"]) == (1000, 3)
+    assert attributes["retail_price"] == 99.99
+    assert attributes["release_date"] == "2024-01-01"
+    assert attributes["retirement_date"] == "2099-12-31"
+    assert (attributes["owned"], attributes["wanted"]) == (False, False)
+    assert attributes["image_url"] == (
+        "https://images.brickset.com/sets/images/42200-1.jpg"
+    )
+    assert attributes["brickset_url"] == "https://brickset.com/sets/42200-1"
 
 
 async def test_sensors_refresh_on_the_next_poll(

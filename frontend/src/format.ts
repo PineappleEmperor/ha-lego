@@ -2,6 +2,7 @@ import type {
   Dashboard,
   PanelSettings,
   LegoSet,
+  PictureSize,
   Point,
   ReleaseFilter,
   ReleaseRow,
@@ -306,6 +307,67 @@ export function webUrl(url: string | null | undefined): string | null {
   }
 }
 
+/** Home Assistant's own copy of a picture, which arrives as a path on this site. */
+export const LOCAL_PICTURE = "/api/lego/image/";
+
+/** A picture address: Home Assistant's copy, or a web address from Brickset. */
+export function pictureUrl(url: string | null | undefined): string | null {
+  if (url?.startsWith(LOCAL_PICTURE)) return url;
+  return webUrl(url);
+}
+
+export const PICTURE_SIZES: PictureSize[] = ["small", "medium", "large"];
+
+export const PICTURE_LABELS: Record<PictureSize, string> = {
+  small: "Small",
+  medium: "Medium",
+  large: "Large",
+};
+
+/** The width, in points, each picture size draws at inside a card. */
+export const PICTURE_WIDTH: Record<PictureSize, number> = {
+  small: 140,
+  medium: 280,
+  large: 420,
+};
+
+/** Brickset's two picture files, by their pixel width. */
+const STANDARD_PX = 240;
+const SHARP_PX = 690;
+
+export interface PictureSources {
+  /** The standard picture, drawn at once. */
+  src: string | null;
+  /** The sharper layer that fades in over it, when the account offers one. */
+  sharp: { srcset: string; sizes: string } | null;
+  /** Brickset's own address, tried when Home Assistant's copy fails. */
+  fallback: string | null;
+}
+
+/**
+ * The pictures a card draws: the standard one straight away, then whichever file
+ * the browser judges sharp enough for this size on this screen, laid over it.
+ */
+export function pictureSources(
+  item: Pick<LegoSet, "image" | "image_large" | "image_remote">,
+  size: PictureSize = "small",
+): PictureSources {
+  const src = pictureUrl(item.image);
+  const large = pictureUrl(item.image_large);
+  const remote = webUrl(item.image_remote);
+  return {
+    src,
+    sharp:
+      src && large
+        ? {
+            srcset: `${src} ${STANDARD_PX}w, ${large} ${SHARP_PX}w`,
+            sizes: `${PICTURE_WIDTH[size]}px`,
+          }
+        : null,
+    fallback: remote && remote !== src ? remote : null,
+  };
+}
+
 export function isNamed(item: Pick<LegoSet, "name">): boolean {
   const name = (item.name ?? "").trim();
   return name !== "" && name !== UNNAMED;
@@ -335,6 +397,13 @@ export const SPAN_HINTS: Partial<Record<Span, string>> = {
 /** A span's name on its pill: the year span is named by the year itself. */
 export function spanLabel(span: Span, today = new Date()): string {
   return span === "year" ? String(today.getFullYear()) : SPAN_LABELS[span];
+}
+
+/** Why a card cannot open a row on a span, or "" when it can. */
+export function spanProblem(row: ReleaseRow, span: Span | undefined): string {
+  if (!span || ROW_SPANS[row].includes(span)) return "";
+  const offered = ROW_SPANS[row].map((s) => spanLabel(s)).join(", ");
+  return `This row offers ${offered}, not ${spanLabel(span)}.`;
 }
 
 /**

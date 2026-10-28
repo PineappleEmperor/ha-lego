@@ -18,7 +18,10 @@ export class LegoWishlistRow extends LegoRow {
     if (!sets.length)
       return this.filler(`Nothing on your wishlist yet. ${HINT}`);
     return html`<div class="carousel">
-      ${sets.map((item) => this.card(item))} ${this.tail(HINT)}
+      ${sets.map((item) =>
+        this.card(item, "retirement", this.themeColour(item.theme)),
+      )}
+      ${this.tail(HINT)}
     </div>`;
   }
 }

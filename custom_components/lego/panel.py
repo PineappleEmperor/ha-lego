@@ -15,8 +15,10 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.hass_dict import HassKey
 
 from .const import (
+    BRICKSET_THUMBNAIL_URL,
     CONF_PANEL,
     DEFAULT_PANEL,
+    DEFAULT_PICTURE_SIZE,
     DOMAIN,
     PANEL_COMPONENT,
     PANEL_DEFAULT_COLLAPSED,
@@ -26,6 +28,7 @@ from .const import (
     PANEL_ROWS,
     PANEL_STORAGE_KEY,
     PANEL_URL_PATH,
+    PICTURE_SIZES,
     REGION_CURRENCY,
     RELEASE_MODES,
     RELEASE_ROWS,
@@ -57,6 +60,8 @@ class PanelStore:
         self._collapsed: dict[str, list[str]] = {}
         self._release_mode: dict[str, str] = {}
         self._release_filters: dict[str, dict[str, dict[str, Any]]] = {}
+        self._collection_prices: dict[str, bool] = {}
+        self._picture_size: dict[str, str] = {}
         self._accounts: dict[str, str] = {}
 
     async def async_load(self) -> None:
@@ -68,6 +73,14 @@ class PanelStore:
         self._release_mode = dict(stored.get("release_mode", {}))
         self._release_filters = {
             k: dict(v) for k, v in stored.get("release_filters", {}).items()
+        }
+        self._collection_prices = {
+            k: bool(v) for k, v in stored.get("collection_prices", {}).items()
+        }
+        self._picture_size = {
+            k: str(v)
+            for k, v in stored.get("picture_size", {}).items()
+            if v in PICTURE_SIZES
         }
         self._accounts = {k: str(v) for k, v in stored.get("accounts", {}).items()}
 
@@ -85,6 +98,8 @@ class PanelStore:
                 "collapsed": self._collapsed,
                 "release_mode": self._release_mode,
                 "release_filters": self._release_filters,
+                "collection_prices": self._collection_prices,
+                "picture_size": self._picture_size,
                 "accounts": self._accounts,
             }
         )
@@ -134,6 +149,8 @@ class PanelStore:
                 for row, value in self._release_filters.get(key, {}).items()
                 if row in RELEASE_ROWS
             },
+            "collection_prices": self._collection_prices.get(key, True),
+            "picture_size": self._picture_size.get(key, DEFAULT_PICTURE_SIZE),
         }
 
     async def async_update(
@@ -145,6 +162,8 @@ class PanelStore:
         collapsed: list[str] | None = None,
         release_mode: str | None = None,
         release_filters: dict[str, dict[str, Any]] | None = None,
+        collection_prices: bool | None = None,
+        picture_size: str | None = None,
     ) -> dict[str, Any]:
         """Save whichever settings were sent, ignoring rows this version lacks."""
         if rows is not None:
@@ -164,6 +183,10 @@ class PanelStore:
                     if row in RELEASE_ROWS
                 }
             )
+        if collection_prices is not None:
+            self._collection_prices[user_id] = collection_prices
+        if picture_size is not None:
+            self._picture_size[user_id] = picture_size
         await self._async_save()
         return self.settings(user_id)
 
@@ -264,8 +287,8 @@ def summarise(lego_set: Any, region: str) -> dict[str, Any]:
 
 def summarise_entry(entry: CatalogueEntry, owned: bool) -> dict[str, Any]:
     """Give a set known only to the local index the shape summarise() returns."""
-    # The index holds number, name, year and theme only, so a card shows those and
-    # links to the set's plain Brickset page for the rest.
+    # The index holds number, name, year and theme only, so a card shows those,
+    # Brickset's picture of the number, and the plain Brickset page for the rest.
     return {
         "set_number": entry.number,
         "name": entry.name,
@@ -273,7 +296,7 @@ def summarise_entry(entry: CatalogueEntry, owned: bool) -> dict[str, Any]:
         "theme": entry.theme,
         "pieces": None,
         "minifigs": None,
-        "image": None,
+        "image": BRICKSET_THUMBNAIL_URL.format(number=entry.number),
         "url": f"https://brickset.com/sets/{entry.number}",
         "owned": owned,
         "wanted": False,
@@ -485,6 +508,8 @@ def dashboard_payload(
         "collapsed": list(PANEL_DEFAULT_COLLAPSED),
         "release_mode": RELEASE_MODES[0],
         "release_filters": {},
+        "collection_prices": True,
+        "picture_size": DEFAULT_PICTURE_SIZE,
     }
     return {
         "entry_id": entry.entry_id,

@@ -1,10 +1,12 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { property, state } from "lit/decorators.js";
 
-import { invalidate } from "./api";
+import { INVALIDATED, invalidate, reloadOnReconnect } from "./api";
 import { ROW_META, define, type LegoRow } from "./base";
 import "./cards";
 import {
+  PICTURE_LABELS,
+  PICTURE_SIZES,
   ROW_SPANS,
   accountCall,
   budgetTitle,
@@ -21,6 +23,7 @@ import "./rows/collection";
 import "./rows/releases";
 import "./rows/value";
 import "./rows/wishlist";
+import { foldAll, meterFill } from "./state";
 import { CONTROLS, ROW, TOKENS } from "./styles";
 import { drawSvg } from "./svg";
 import type {
@@ -29,6 +32,7 @@ import type {
   Dashboard,
   Hass,
   PanelSettings,
+  Quota,
   ReleaseFilter,
   ReleaseRow,
   Span,
@@ -59,17 +63,23 @@ export class LegoPanel extends LitElement {
   public override connectedCallback(): void {
     super.connectedCallback();
     window.addEventListener("click", this.onOutside);
+    window.addEventListener(INVALIDATED, this.onInvalidated);
     void this.load();
   }
 
   public override disconnectedCallback(): void {
     super.disconnectedCallback();
     window.removeEventListener("click", this.onOutside);
+    window.removeEventListener(INVALIDATED, this.onInvalidated);
   }
 
   protected override willUpdate(): void {
     this.dark = !!this.hass?.themes?.darkMode;
+    if (this.hass) reloadOnReconnect(this.hass);
   }
+
+  /** After a restart or an expired picture address, fetch the page again. */
+  private onInvalidated = (): void => void this.load();
 
   private async load(): Promise<void> {
     try {
@@ -184,10 +194,8 @@ export class LegoPanel extends LitElement {
     );
   }
 
-  private onChanged = (): void => {
-    invalidate();
-    void this.load();
-  };
+  // Reloads this page too, through the same event the cards listen for.
+  private onChanged = (): void => invalidate();
 
   /**
    * A finger on a row's handle. Browsers fire no drag events for touch, so the
@@ -236,38 +244,35 @@ export class LegoPanel extends LitElement {
     return html`
       <div class="app">
         ${this.renderHeader()}
-        ${
-          this.switching
-            ? html`<p class="muted switching" role="status">
-                Loading ${this.switching}…
-              </p>`
-            : nothing
-        }
-        <div
-          class=${this.switching ? "busy" : ""}
-          aria-busy=${!!this.switching}
-        >
+        <div class="page">
           ${
-            this.error
-              ? html`<div class="error" role="alert">
-                  <p>${this.error}</p>
-                  <button class="link" @click=${() => void this.load()}>
-                    Try again
-                  </button>
-                </div>`
-              : this.renderHome()
+            this.switching
+              ? html`<p class="muted switching" role="status">
+                  Loading ${this.switching}…
+                </p>`
+              : nothing
           }
+          <div
+            class=${this.switching ? "busy" : ""}
+            aria-busy=${!!this.switching}
+          >
+            ${
+              this.error
+                ? html`<div class="error" role="alert">
+                    <p>${this.error}</p>
+                    <button class="link" @click=${() => void this.load()}>
+                      Try again
+                    </button>
+                  </div>`
+                : this.renderHome()
+            }
+          </div>
         </div>
       </div>
     `;
   }
 
   private renderHeader(): TemplateResult {
-    const quota = this.dash?.quota;
-    const share = quota
-      ? Math.min(quota.calls_today / (quota.budget || 1), 1)
-      : 0;
-    const tight = !!quota && quota.remaining < quota.refresh_cost * 3;
     return html`<header class=${this.narrow ? "narrow" : ""}>
       <div class="title">
         ${
@@ -279,48 +284,41 @@ export class LegoPanel extends LitElement {
             : nothing
         }
         <span class="logo">${drawSvg(LOGO)}</span>
-        <span class="heading">
-          <h1>LEGO</h1>
-          ${
-            // A phone has no room for the meter beside the account, so the
-            // count sits under the title instead.
-            this.narrow && quota
-              ? html`<span class=${tight ? "calls tight" : "calls"}
-                  >${quota.calls_today} of ${quota.budget} calls</span
-                >`
-              : nothing
-          }
-        </span>
+        <h1>LEGO</h1>
       </div>
-      ${
-        quota && !this.narrow
-          ? html`<div
-              class=${tight ? "meter tight" : "meter"}
-              title=${budgetTitle(
-                quota.calls_today,
-                quota.budget,
-                new Date(quota.resets_at).toLocaleTimeString(
-                  this.hass?.locale?.language,
-                  { hour: "2-digit", minute: "2-digit" },
-                ),
-              )}
-            >
-              <span class="meter-label">Brickset calls</span>
-              <span
-                class="meter-bar"
-                role="meter"
-                aria-label="Brickset calls used today"
-                aria-valuemin="0"
-                aria-valuemax=${quota.budget}
-                aria-valuenow=${quota.calls_today}
-                ><span style="width:${share * 100}%"></span
-              ></span>
-              <span>${quota.calls_today} of ${quota.budget} today</span>
-            </div>`
-          : nothing
-      }
       ${this.accounts.length > 1 ? this.accountPicker() : nothing}
     </header>`;
+  }
+
+  /** Today's Brickset calls, in the bar above the rows at every width. */
+  private renderMeter(quota: Quota): TemplateResult {
+    const { share, tight } = meterFill(quota);
+    return html`<div
+      class=${tight ? "meter tight" : "meter"}
+      title=${budgetTitle(
+        quota.calls_today,
+        quota.budget,
+        new Date(quota.resets_at).toLocaleTimeString(
+          this.hass?.locale?.language,
+          { hour: "2-digit", minute: "2-digit" },
+        ),
+      )}
+    >
+      <span class="meter-label">Brickset calls</span>
+      <span
+        class="meter-bar"
+        role="meter"
+        aria-label="Brickset calls used today"
+        aria-valuemin="0"
+        aria-valuemax=${quota.budget}
+        aria-valuenow=${quota.calls_today}
+        ><span style="width:${share * 100}%"></span
+      ></span>
+      <span class="meter-count"
+        >${quota.calls_today} of ${quota.budget}<span class="when"> today</span
+        ><span class="unit"> calls</span></span
+      >
+    </div>`;
   }
 
   /**
@@ -416,7 +414,7 @@ export class LegoPanel extends LitElement {
     const dash = this.dash;
     if (!dash) return html`<p class="muted pad">Loading your collection…</p>`;
     const visible = this.visible();
-    const anyOpen = visible.some((row) => !this.folded[row]);
+    const { anyOpen, next } = foldAll(visible, this.folded);
     return html`<div
       class="rows"
       @lego-toggle=${this.onToggle}
@@ -425,13 +423,8 @@ export class LegoPanel extends LitElement {
       @lego-changed=${this.onChanged}
     >
       <div class="homebar">
-        <button
-          class="link"
-          @click=${() =>
-            (this.folded = Object.fromEntries(
-              visible.map((row) => [row, anyOpen]),
-            ))}
-        >
+        ${this.renderMeter(dash.quota)}
+        <button class="link" @click=${() => (this.folded = next)}>
           ${anyOpen ? "Collapse all" : "Expand all"}
         </button>
         <button
@@ -542,6 +535,21 @@ export class LegoPanel extends LitElement {
                 @click=${() => void this.save({ release_mode: mode })}
               >
                 ${mode === "combined" ? "Combined" : "Separate"}
+              </button>`,
+          )}
+        </div>
+      </div>
+      <div class="setting">
+        <span>Pictures</span>
+        <div class="pills" role="group" aria-label="Picture size">
+          ${PICTURE_SIZES.map(
+            (size) =>
+              html`<button
+                class=${dash.picture_size === size ? "pill on" : "pill"}
+                aria-pressed=${dash.picture_size === size}
+                @click=${() => void this.save({ picture_size: size })}
+              >
+                ${PICTURE_LABELS[size]}
               </button>`,
           )}
         </div>
@@ -727,12 +735,15 @@ export class LegoPanel extends LitElement {
         min-height: 100vh;
       }
       .app {
-        margin: 0 auto;
-        max-width: 1400px;
         padding: 0 0 var(--ha-space-8, 32px);
       }
-      /* One toolbar row at Home Assistant's own header height; on a phone the
-         meter takes a row of its own below it. */
+      /* The toolbar spans the window like Home Assistant's own; only the rows
+         below it are capped, so a wide screen does not stretch the cards. */
+      .page {
+        margin: 0 auto;
+        max-width: 1400px;
+      }
+      /* One toolbar row at Home Assistant's own header height. */
       header {
         align-items: center;
         background: var(--lego-surface);
@@ -776,10 +787,12 @@ export class LegoPanel extends LitElement {
         align-items: center;
         color: var(--lego-text-2);
         display: flex;
+        flex: 1 1 auto;
         font-size: var(--ha-font-size-s, 12px);
         gap: var(--ha-space-2, 8px);
-        margin-left: auto;
         min-height: 48px;
+        min-width: 0;
+        white-space: nowrap;
       }
       .meter-label {
         color: var(--lego-text);
@@ -790,9 +803,16 @@ export class LegoPanel extends LitElement {
         border: var(--lego-line) solid var(--lego-outline);
         border-radius: var(--ha-border-radius-pill, 9999px);
         display: block;
+        flex: 0 1 120px;
         height: 8px;
+        min-width: 48px;
         overflow: hidden;
-        width: 120px;
+      }
+      .meter .unit {
+        display: none;
+      }
+      .meter.tight .meter-count {
+        color: var(--lego-want);
       }
       .meter-bar span {
         background: var(--lego-primary);
@@ -802,19 +822,6 @@ export class LegoPanel extends LitElement {
       .meter.tight .meter-bar span {
         background: var(--lego-want);
       }
-      .heading {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-      }
-      .calls {
-        color: var(--lego-text-2);
-        font-size: var(--ha-font-size-s, 12px);
-        white-space: nowrap;
-      }
-      .calls.tight {
-        color: var(--lego-want);
-      }
       /* A phone keeps the header to one line, the account on the right. */
       header.narrow {
         column-gap: var(--ha-space-2, 8px);
@@ -822,6 +829,7 @@ export class LegoPanel extends LitElement {
         padding-right: var(--ha-space-2, 8px);
       }
       .accountpick {
+        margin-left: auto;
         max-width: 50%;
         position: relative;
       }
@@ -941,10 +949,24 @@ export class LegoPanel extends LitElement {
         gap: var(--ha-space-4, 16px);
         padding: var(--ha-space-2, 8px) var(--ha-space-4, 16px) 0;
       }
+      /* The calls meter on the left, the page's own controls on the right. On a
+         phone the label goes and the count names its unit instead. */
       .homebar {
+        align-items: center;
+        column-gap: var(--ha-space-2, 8px);
+        container-type: inline-size;
         display: flex;
-        justify-content: flex-end;
+        flex-wrap: wrap;
         margin-bottom: calc(-1 * var(--ha-space-2, 8px));
+      }
+      @container (max-width: 520px) {
+        .meter-label,
+        .meter .when {
+          display: none;
+        }
+        .meter .unit {
+          display: inline;
+        }
       }
       .slot.dragging {
         opacity: 0.5;

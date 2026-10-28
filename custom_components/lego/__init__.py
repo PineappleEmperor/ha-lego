@@ -31,6 +31,7 @@ from .const import (
     DEFAULT_CATALOGUE_RICH,
     DEFAULT_DAILY_CALL_BUDGET,
     DOMAIN,
+    PREVIOUS_CATALOGUE_INTERVAL_DAYS,
     STORAGE_KEY,
     STORAGE_VERSION,
 )
@@ -41,6 +42,7 @@ from .coordinator import (
     LegoRuntimeData,
     paging_issue_id,
 )
+from .images import IMAGE_CACHE, async_setup_images
 from .panel import (
     PANEL_STORE,
     PanelStore,
@@ -69,6 +71,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Register the integration's actions, websocket commands and panel bundle."""
     async_setup_services(hass)
     async_setup_websocket(hass)
+    async_setup_images(hass)
     store = PanelStore(hass)
     await store.async_load()
     hass.data[PANEL_STORE] = store
@@ -169,6 +172,13 @@ async def async_migrate_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bo
         hass.config_entries.async_update_entry(
             entry, options={**entry.options, CONF_SHARED: True}, minor_version=2
         )
+    if entry.minor_version < 3:
+        # The options form saved the old weekly default as if it were chosen; a
+        # value someone actually picked is left alone.
+        options = dict(entry.options)
+        if options.get(CONF_CATALOGUE_INTERVAL) == PREVIOUS_CATALOGUE_INTERVAL_DAYS:
+            options[CONF_CATALOGUE_INTERVAL] = DEFAULT_CATALOGUE_INTERVAL_DAYS
+        hass.config_entries.async_update_entry(entry, options=options, minor_version=3)
     return True
 
 
@@ -210,6 +220,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> Non
         # last one goes, so removing the integration leaves nothing behind.
         await Store[dict[str, Any]](hass, STORAGE_VERSION, STORAGE_KEY).async_remove()
         await hass.data[PANEL_STORE].async_remove()
+        await hass.data[IMAGE_CACHE].async_clear()
     await async_refresh_panel(hass)
 
 

@@ -16,6 +16,7 @@ from custom_components.lego.const import (
     CONF_DAILY_CALL_BUDGET,
     CONF_RELEASES,
     CONF_SHARED,
+    CONF_SHARP_PICTURES,
     CONF_THEMES,
     CONF_USER_HASH,
     CONF_USERS,
@@ -49,6 +50,11 @@ async def test_user_flow(hass: HomeAssistant) -> None:
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_REGION: "UK"}
     )
+
+    # The picture size is asked, defaulting to the small one.
+    assert result["step_id"] == "pictures"
+    assert result["data_schema"]({})[CONF_SHARP_PICTURES] is False
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -62,6 +68,29 @@ async def test_user_flow(hass: HomeAssistant) -> None:
     assert result["options"][CONF_REGION] == "UK"
     # New entries start with the all-themes release rows switched on.
     assert result["options"][CONF_RELEASES] is True
+    assert result["options"][CONF_SHARP_PICTURES] is False
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_sharper_pictures_can_be_chosen_at_setup(hass: HomeAssistant) -> None:
+    """The larger pictures are a choice made knowingly, at setup or later."""
+    hass.config.country = "GB"
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_REGION: "UK"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SHARP_PICTURES: True}
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["options"][CONF_SHARP_PICTURES] is True
 
 
 @pytest.mark.usefixtures("brickset")
@@ -85,6 +114,7 @@ async def test_user_flow_asks_for_region_when_country_is_unmapped(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_REGION: "DE"}
     )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -121,6 +151,7 @@ async def test_region_can_be_overridden_at_setup(hass: HomeAssistant) -> None:
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_REGION: "US"}
     )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -364,6 +395,7 @@ async def test_options_flow(
             "catalogue": True,
             "catalogue_rich": True,
             "catalogue_interval": 14,
+            CONF_SHARP_PICTURES: True,
         },
     )
     await hass.async_block_till_done()
@@ -371,6 +403,7 @@ async def test_options_flow(
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert mock_config_entry.options[CONF_REGION] == "US"
     assert mock_config_entry.options["catalogue_interval"] == 14
+    assert mock_config_entry.options[CONF_SHARP_PICTURES] is True
     assert mock_config_entry.options[CONF_THEMES] == ["Technic", "Icons"]
     # A smaller budget stretches the collection interval on the reload.
     collection = mock_config_entry.runtime_data.collection

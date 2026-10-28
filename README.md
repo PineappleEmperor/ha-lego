@@ -15,10 +15,11 @@
 
 # LEGO for Home Assistant
 
-Track your LEGO collection in Home Assistant, using [Brickset](https://brickset.com) as
-the data source. Collection totals, a value estimate, new-release feeds for the themes
-you care about, retirement countdowns, calendars for releases and retirements, and an
-optional sidebar panel for browsing it all.
+Keep up with LEGO from Home Assistant. Your [Brickset](https://brickset.com) wishlist
+warns you before a set leaves sale, new sets show up the day Brickset lists them in the
+themes you follow, and releases and retirements land on Home Assistant's calendar. Your
+collection's totals and its value at LEGO.com prices come with it, and a sidebar panel
+and dashboard cards show the lot.
 
 > [!IMPORTANT]
 > This project is **not affiliated with, authorised by, or endorsed by the LEGO Group**.
@@ -29,28 +30,38 @@ optional sidebar panel for browsing it all.
 > affiliated with this project or involved in it. No affiliate or referral links are used
 > anywhere in this integration.
 
-## Where the data comes from
-
-Brickset is the main service and store of your LEGO collection data. Changes you make
-here in this integration are reflected in your
-[Brickset](https://brickset.com/tools/webservices/v3) account.
-
-Set lookups come from a local copy of the
-[Rebrickable dataset](https://rebrickable.com/downloads/) instead; a free weekly download
-listing every LEGO set. We could use the Brickset API but this is capped at 100 API calls
-a day. If a set isn't found in the local database then an API call is made, hopefully
-massively reducing the number of API calls.
-
 ## What you can do with it
 
-- Keep a dashboard of your collection: totals, piece and minifigure counts, and what it
-  cost at RRP in your chosen market.
-- Hear about a new set the day Brickset lists it in a theme you follow.
 - Get a reminder before a set on your wishlist leaves sale, or when its price changes.
+- Hear about a new set the day Brickset lists it in a theme you follow, and add it to
+  your wishlist from the panel or an automation.
 - See releases, retirements and the birthdays of your own sets on Home Assistant's
   calendar.
-- Mark a set owned or wanted from an automation, a script or the sidebar panel, without
-  opening Brickset.
+- Mark a set owned or wanted from the panel, an automation or a script, without opening
+  Brickset.
+- Keep an eye on the collection itself: sets, pieces and minifigures, and what it all
+  cost at LEGO.com prices.
+
+## Where the data comes from
+
+Everything about your collection comes from [Brickset](https://brickset.com): the sets
+you own and want, every set's details, pictures, release and retirement dates, and
+LEGO.com prices. Brickset is also where your changes go, so marking a set owned here
+marks it owned on your Brickset account.
+
+Set pictures are plain image files on Brickset's site and cost no API calls. Home
+Assistant downloads each one the first time a card shows it and keeps it in its cache
+folder, which backups leave out, so a dashboard on a network without internet still
+draws every set it has shown before. A picture not yet kept is fetched from Brickset
+directly, and a set Brickset has no picture of shows the integration's icon.
+
+Brickset allows each API key 100 requests for set data a day, the integration's own
+polls included, which searching from a dashboard would soon use up. So the integration also keeps a local list of every LEGO set from
+[Rebrickable](https://rebrickable.com/downloads/), which updates it about daily; the
+integration checks for a new copy once a month by default, and Brickset's own polls
+bring the sets announced in between. Searching the panel reads that list
+and costs nothing. Marking a set owned or wanted costs nothing either once the
+integration has seen the set; a set it has never seen costs one Brickset lookup.
 
 ## Installation
 
@@ -67,10 +78,11 @@ Install **LEGO** from HACS, then restart Home Assistant.
    [![Add the LEGO integration to Home Assistant.][add-badge]][add-url]
 
 3. Enter your API key, Brickset username and Brickset password.
-4. Choose the pricing region. It is preselected from Home Assistant's country
-   when that country is one LEGO.com prices separately (`GB`, `US`, `CA`, `DE`),
-   but you can pick any of the four. Tracking a store you actually buy from
-   matters more than where you live. Changeable later under **Configure**.
+4. Choose the pricing region: the LEGO.com store whose prices and dates you see. Brickset
+   records LEGO.com for four stores only, the UK, the US, Canada and Germany, so those
+   are the four on offer. It is preselected from Home Assistant's country when that is
+   one of them; otherwise pick the store you buy from. Changeable later under
+   **Configure**.
 
 Once setup finishes, the local set index downloads from Rebrickable in the background.
 It needs no account or key, and it costs none of your Brickset allowance. Turn it off
@@ -80,9 +92,9 @@ under **Configure** if you would rather not keep it.
 
 | Parameter | Required | Notes |
 |-----------|----------|-------|
-| Brickset API key | Yes | Issued from your Brickset account under Tools → Web services. |
+| Brickset API key | Yes | Issued from your Brickset account under Tools → Web services. It lets the integration use Brickset's API, but says nothing about whose collection to read. |
 | Brickset username | Yes | The account whose owned and wanted sets are tracked. Also the entry's unique ID. |
-| Brickset password | Yes | Used once to obtain a long-lived token. The password is never stored; only the token is written to the config entry. |
+| Brickset password | Yes | Brickset gives out the token that reads and changes your collection only in exchange for your username and password. The password is used for that once and never stored; only the token is written to the config entry. |
 
 ### Options
 
@@ -94,12 +106,13 @@ Reachable via **Configure** on the integration entry.
 | Themes to watch | none | Which themes to follow for new releases, also changeable from the panel. However many you pick, they ride in one call per refresh, until together they hold more than 500 sets in a year. |
 | Daily call budget | 80 | The most calls Home Assistant spends a day. The refresh intervals are set from it (see [Data updates](#data-updates)), and polling pauses until midnight UTC once it is spent. |
 | People who use this account | none | The Home Assistant users this Brickset account belongs to. See [Sharing accounts](#sharing-accounts). |
-| Shared with all users | off for new setups | Lets every Home Assistant user see and change this account. On for entries set up before it existed, so upgrading takes no one's account away. |
+| Shared with all users | off | Lets every Home Assistant user see and change this account. |
 | Show the LEGO panel in the sidebar | on | Whether to add the sidebar page for browsing your collection, your wishlist and new releases. |
-| Follow releases across all themes | on for new setups | Lets the panel's **New releases** row show **Everything**, every set whatever its theme, and fills the **Out recently** and **Coming soon** rows. It reads every set of the year once a day, about 3 calls, and your watched themes then come from the same read rather than costing calls of their own. Off for entries set up before it existed, so upgrading spends nothing new until you turn it on. |
+| Sharper pictures on high-resolution screens | off | Also asked during setup. Off, each set keeps one picture of about 16 KB, about 3 MB for 200 sets, which looks soft at the Medium and Large picture sizes. On, phones, tablets and other high-resolution screens get a copy of about 90 KB instead, up to about 21 MB kept for 200 sets. Each screen loads the smaller picture first and fades the sharper one in. Pictures sit in Home Assistant's cache folder, which backups leave out. |
+| Follow releases across all themes | on | Lets the panel's **New releases** row show **Everything**, every set whatever its theme, and fills the **Out recently** and **Coming soon** rows. It reads every set of the year once a day, about 3 calls, and your watched themes then come from the same read rather than costing calls of their own. |
 | Keep a local set index | on | Whether to keep a local copy of Rebrickable's set list, so looking a set up costs no Brickset calls. |
 | Include set names in the index | on | Whether that index stores names as well as numbers, which is what searching by name needs. Takes roughly 1.8 MB on disk instead of 450 KB. |
-| Set index refresh interval | 7 days | How often the local list is re-downloaded, from 1 to 90 days. Costs no Brickset calls, and a set missing from it still works at the price of one lookup. |
+| Set index refresh interval | 30 days | How often the local list is checked for a new copy, from 1 to 90 days. Costs no Brickset calls, and a set missing from it still works at the price of one lookup. |
 
 ### Sharing accounts
 
@@ -125,7 +138,8 @@ of rows, each with an icon, a title and a fold arrow:
 - **My collection** shows your totals, with an **Update** button that polls Brickset
   at once and says what that costs ("Update · 2 calls"). It greys out once the refresh
   would go over the daily budget. **Sets** below it unfolds the full grid, and its
-  search box covers both your own sets and the whole catalogue.
+  search box covers both your own sets and the whole catalogue. Untick **Show prices**
+  there to hide each set's price; the choice is saved to your user.
 - **New releases** shows new sets as cards with their prices, above a timeline from
   January to next March with a dot per set. It opens on **My themes**; pressing it
   again shows or hides a chip for each theme you follow, so you can narrow it to
@@ -133,9 +147,12 @@ of rows, each with an icon, a title and a fold arrow:
   all themes** in options, which reads the whole year at about 3 calls a day. The
   span is **Past 3 months**, **Now** (three months either side of today, where it
   opens), the current year, or **Unreleased**: every set announced and not yet out,
-  dated or not. Whatever you pick is where the row opens next time. **Follow a theme** adds one
-  from a list of Brickset's themes and shows what it costs first: one call, or nothing
-  when every theme is read anyway. A theme's × stops following it. Hovering a stack of
+  dated or not. Whatever you pick is where the row opens next time. With your themes
+  unfolded, **Edit themes** (**Follow a theme** until you follow one) adds a theme from
+  a list of Brickset's and shows what it costs first: one call, or nothing when every
+  theme is read anyway. To stop following one, press and hold any theme chip until
+  they wiggle, then tap the × on it; **Done** or Escape stops the wiggle. Edit themes
+  lists them with an × too, for a keyboard. Hovering a stack of
   dots on the timeline, or tabbing to it, spreads them out and names their sets; on a
   phone, tap the stack, and the timeline shows only the span, scrolling when it is
   long.
@@ -144,14 +161,15 @@ of rows, each with an icon, a title and a fold arrow:
   lists the sets behind it, and **Trend over a year** unfolds a line from Home
   Assistant's recorded statistics, which fills in week by week after you install.
 
-**Customise** chooses which rows show, whether each one starts open or folded, and the
+**Customise** chooses which rows show, whether each one starts open or folded, how large
+the set pictures are (**Small**, **Medium**, the default, or **Large**), and the
 filters each release row opens on. It can also split New releases into the older
 **Out recently**, **Coming soon** and **New in my themes** rows. Drag a row's handle,
 with a mouse or a finger, or use its arrow keys, to reorder. All of it is remembered per
 Home Assistant user, so it follows you to every device.
 
-The header shows how many Brickset calls today has used against your budget, as a bar
-on a wide screen and as a line under the title on a phone, and the logo takes your
+The bar above the rows shows how many Brickset calls today has used against your
+budget, beside **Collapse all** and **Customise**, and the logo in the header takes your
 theme's primary colour. One sidebar entry serves every Brickset account
 you may use: a menu appears in the header when there is more than one. Picking an
 account shows it; pressing its brick makes it the one your panel opens on. Until you
@@ -165,19 +183,28 @@ ownership toggle and **Update** spend any.
 ### Dashboard cards
 
 Each row is also a card for your own dashboards, listed in the card picker as **LEGO
-collection**, **LEGO releases**, **LEGO wishlist** and **LEGO collection value**. They
-come with the integration, with nothing else to install, and cost no Brickset calls of
-their own.
+collection**, **LEGO releases**, **LEGO wishlist** and **LEGO collection value**, each
+with a live preview. They come with the integration, with nothing else to install, and
+cost no Brickset calls of their own. Every option is in the card's visual editor:
+
+| Option | Cards | Notes |
+|--------|-------|-------|
+| `account` | all | The Brickset account to show. Leave it out for the one you opened last in the panel. |
+| `collapsed` | all | `true` to show only the card's header until it is opened. |
+| `picture_size` | collection, releases, wishlist | `small`, `medium` or `large`: the set pictures at one, two or three times the size. Your panel setting if left out. Medium and large look sharp only with **Sharper pictures** on. |
+| `row` | releases | `releases` (New releases), `recent` (Out recently), `upcoming` (Coming soon) or `themes` (New in my themes). |
+| `scope` | releases | `mine` for your themes or `all` for every theme, which needs **Follow releases across all themes**. |
+| `themes` | releases | Narrows `mine` to some of the themes you follow. |
+| `span` | releases | `past3`, `around` (Now), `year` or `coming` (Unreleased) on New releases and New in my themes; Out recently and Coming soon have one span each. The row's own default if left out. |
+| `measure` | collection value | `value` or `pieces`. |
 
 ```yaml
 type: custom:lego-releases-card
-row: upcoming        # releases, recent, upcoming or themes
-span: next3          # optional; the row's own default otherwise
+row: releases
+scope: mine
+span: around
+collapsed: false
 ```
-
-`lego-value-card` takes `measure: pieces` for the pieces chart. Every card takes
-`account:` with a config entry id when you have more than one Brickset account; without
-it a card shows the account you last picked in the panel.
 
 ## Entities
 
@@ -206,8 +233,7 @@ it a card shows the account you last picked in the panel.
 remembers the Brickset ID of everything already seen.
 
 Every action targets an account by its **Brickset device** (`device_id`, required),
-picked from a device list in the action editor. Automations written for 0.4.0 or
-1.0.0rc1 passed `config_entry_id` instead and need that field swapped for the device.
+picked from a device list in the action editor.
 
 `lego.set_collection` takes the set and at least one change, and returns nothing:
 
@@ -253,6 +279,41 @@ a response when an automation asks for one:
 Replace `brickset_yourname` with your own entity prefix (it is `brickset_` plus your
 Brickset username) and `notify.mobile_app_your_phone` with your own notifier.
 
+A wishlist set retires within a month:
+
+```yaml
+automation:
+  - alias: "LEGO: wishlist set retiring soon"
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.brickset_yourname_next_wishlist_retirement
+        below: 30
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          message: >-
+            {{ state_attr('sensor.brickset_yourname_next_wishlist_retirement',
+            'set_name') }} leaves sale in {{ trigger.to_state.state }} days.
+```
+
+A price change on your wishlist:
+
+```yaml
+automation:
+  - alias: "LEGO: wishlist price changed"
+    triggers:
+      - trigger: event
+        event_type: lego_wanted_set_changed
+    conditions:
+      - condition: template
+        value_template: "{{ 'price' in trigger.event.data }}"
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          message: >-
+            {{ trigger.event.data.name }} is now {{ trigger.event.data.price }}.
+```
+
 New set in a theme you follow:
 
 ```yaml
@@ -287,41 +348,6 @@ automation:
           device_id: "{{ trigger.event.data.device_id }}"
           set_number: "{{ trigger.event.data.set_number }}"
           wanted: true
-```
-
-A wishlist set retires within a month:
-
-```yaml
-automation:
-  - alias: "LEGO: wishlist set retiring soon"
-    triggers:
-      - trigger: numeric_state
-        entity_id: sensor.brickset_yourname_next_wishlist_retirement
-        below: 30
-    actions:
-      - action: notify.mobile_app_your_phone
-        data:
-          message: >-
-            {{ state_attr('sensor.brickset_yourname_next_wishlist_retirement',
-            'set_name') }} leaves sale in {{ trigger.to_state.state }} days.
-```
-
-A price change on your wishlist:
-
-```yaml
-automation:
-  - alias: "LEGO: wishlist price changed"
-    triggers:
-      - trigger: event
-        event_type: lego_wanted_set_changed
-    conditions:
-      - condition: template
-        value_template: "{{ 'price' in trigger.event.data }}"
-    actions:
-      - action: notify.mobile_app_your_phone
-        data:
-          message: >-
-            {{ trigger.event.data.name }} is now {{ trigger.event.data.price }}.
 ```
 
 Show how old the data is on a dashboard:
@@ -374,11 +400,12 @@ integration polls on two schedules, which it sets itself from the daily call bud
   minutes to reconcile the local tally with Brickset's own count, which also catches
   calls made by other tools sharing the key.
 
-The local set index refreshes every 7 days by default from Rebrickable's public CSV,
+The local set index refreshes every 30 days by default from Rebrickable's public CSV,
 which is not a Brickset endpoint and costs nothing from the daily allowance. It seeds in
-the background after setup, so a first start does not wait on the download. The interval
-is configurable; Rebrickable publishes whole snapshots rather than deltas, so a refresh
-is always a full 511 KB download.
+the background after setup, so a first start does not wait on the download. Each refresh
+first asks whether the file has changed and downloads nothing if not; Rebrickable
+publishes whole snapshots rather than changes, so a changed file is a full download of
+about 510 KB.
 
 The options dialog shows the estimated calls/day for your current settings. When the
 budget is spent, polling pauses until Brickset's day resets at midnight UTC and the
@@ -466,11 +493,11 @@ endorsed by the Open Home Foundation.
 
 ## Development
 
-Brickset publishes no schema for its responses, so a small set of contract tests
-run against the real API on demand, checking the assumptions this integration
-makes about the payload shape. They are marked `live`, excluded from the default
-`pytest` run, and gated behind an environment that needs manual approval, so the
-credentials stay out of reach of every other workflow.
+Brickset publishes no description of what its API returns, so a few tests call the
+real API, on demand, to check the shapes this integration relies on are still the ones
+Brickset sends. They are marked `live` and left out of the normal `pytest` run, and
+the workflow that runs them waits for a manual approval before it can read the
+credentials.
 
 > [!NOTE]
 > **AI assistance:** I'm a programmer; this project is built with AI (Claude, via Claude

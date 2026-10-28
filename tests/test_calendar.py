@@ -49,6 +49,10 @@ async def test_retirement_events(
     # The 1990 set has no exit date, so it produces no event.
     assert not any("Alienator" in summary for summary in summaries)
     assert events[0]["start"] == "2099-12-31"
+    by_summary = {event["summary"]: event for event in events}
+    titanic = by_summary["10294-1 Titanic retires"]
+    assert (titanic["start"], titanic["end"]) == ("2099-12-31", "2100-01-01")
+    assert titanic["description"] == "https://brickset.com/sets/10294-1"
 
 
 @pytest.mark.usefixtures("brickset")
@@ -66,6 +70,9 @@ async def test_release_events_cover_wanted_and_watched_themes(
     summaries = {event["summary"] for event in events}
     assert "10294-1 Titanic released" in summaries
     assert "42200-1 New Technic Thing released" in summaries
+    technic = next(e for e in events if e["summary"].startswith("42200-1"))
+    assert technic["start"] == "2024-01-01"
+    assert technic["description"] == "https://brickset.com/sets/42200-1"
 
 
 async def test_release_calendar_follows_feed_updates(

@@ -153,11 +153,14 @@ async def test_refresh_is_skipped_while_fresh(
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:
-    """A weekly index does not re-download on every restart."""
+    """A monthly index does not re-download on every restart, or every week."""
     catalogue = await _seed(hass, mock_config_entry)
     assert catalogue.stale is False
 
     freezer.tick(timedelta(days=8))
+    assert catalogue.stale is False
+
+    freezer.tick(timedelta(days=23))
     assert catalogue.stale is True
 
 
@@ -172,7 +175,7 @@ async def test_the_index_refreshes_without_a_restart(
     catalogue = await _seed(hass, mock_config_entry)
     downloads = _csv_requests(aioclient_mock)
 
-    freezer.tick(timedelta(days=8))
+    freezer.tick(timedelta(days=31))
     async_fire_time_changed(hass)
     await hass.async_block_till_done(wait_background_tasks=True)
 

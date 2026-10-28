@@ -9,6 +9,7 @@ import {
   releaseFilter,
   rowsForMode,
   spanLabel,
+  spanProblem,
   stackOffsets,
   stackTimeline,
   timelineView,
@@ -77,6 +78,14 @@ describe("release filters", () => {
       String(new Date().getFullYear()),
       "Unreleased",
     ]);
+  });
+
+  it("refuses a card a span its row does not offer", () => {
+    expect(spanProblem("releases", "around")).toBe("");
+    expect(spanProblem("upcoming", undefined)).toBe("");
+    expect(spanProblem("recent", "coming")).toBe(
+      "This row offers Past 3 months, not Unreleased.",
+    );
   });
 
   it("opens on the span picked last time", () => {

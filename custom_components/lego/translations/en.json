@@ -11,6 +11,16 @@
       "unknown": "Unexpected error talking to Brickset."
     },
     "step": {
+      "pictures": {
+        "data": {
+          "sharp_pictures": "Sharper pictures on high-resolution screens"
+        },
+        "data_description": {
+          "sharp_pictures": "Off: one picture of about 16 KB per set, which looks soft at the panel's default Medium size. On: phones, tablets and other high-resolution screens get a copy of about 90 KB per set instead."
+        },
+        "description": "Home Assistant downloads each set's picture from Brickset the first time a card shows it, then keeps it, so dashboards still draw without internet. Pictures cost no Brickset calls, and they are kept in Home Assistant's cache folder, which backups leave out.\n\nFor a collection of 200 sets, standard pictures take about 3 MB to download and keep. Sharper pictures take up to about 21 MB, and each phone or tablet away from home downloads about five times as much the first time it shows them.\n\nYou can change this later in the integration's options.",
+        "title": "Set pictures"
+      },
       "reauth_confirm": {
         "data": {
           "api_key": "Brickset API key",
@@ -162,18 +172,20 @@
           "region": "Pricing region",
           "releases": "Follow releases across all themes",
           "shared": "Shared with all users",
+          "sharp_pictures": "Sharper pictures on high-resolution screens",
           "themes": "Themes to watch for new releases",
           "users": "People who use this account"
         },
         "data_description": {
           "catalogue": "Downloads the public LEGO set list so searching and checking a set number costs no Brickset calls. Uses no part of your daily allowance.",
-          "catalogue_interval": "How often the public LEGO set list is re-downloaded. The source is rebuilt nightly and gains roughly five sets a day; a set the index has not heard of still works, it just costs one Brickset call to look up.",
+          "catalogue_interval": "How often to check the public LEGO set list for a new copy; an unchanged list is not downloaded again. Monthly is plenty, since Brickset's own polls bring new releases in between, and a set the index has not heard of still works at the cost of one Brickset call.",
           "catalogue_rich": "Names make the index searchable, at roughly 1.8 MB instead of 450 KB. Turn off on a storage-constrained machine, and search falls back to set numbers only.",
           "daily_call_budget": "The most calls Home Assistant spends a day. Refresh intervals are set from it, and polling pauses until midnight UTC once it is spent.",
           "panel": "Adds a page for browsing your collection, your wishlist and new releases in the themes you follow. Turning it off removes the sidebar entry.",
           "region": "Which LEGO.com market supplies recommended retail prices and retirement dates.",
           "releases": "Fills the panel's Out recently and Coming soon rows with every set out in the last four weeks or due in the next four, whatever its theme. Checks once a day, reading the whole year at about 3 calls, and your watched themes then come from the same read instead of costing calls of their own.",
           "shared": "Lets every Home Assistant user see and change this account, as well as the people chosen above. Read-only users can look but not change anything.",
+          "sharp_pictures": "Off: one picture of about 16 KB per set, about 3 MB for 200 sets, which looks soft at the Medium and Large picture sizes. On: phones, tablets and other high-resolution screens get a copy of about 90 KB per set instead, up to about 21 MB kept for 200 sets. Pictures are kept in Home Assistant's cache folder, which backups leave out.",
           "themes": "However many themes you pick, they are fetched together in one API call per refresh.",
           "users": "Home Assistant users who see this account in the LEGO panel and can change it. Admins can always use every account. This scopes the panel and the actions only: the integration's sensors and calendars stay visible to every user, as all entities are."
         },

@@ -26,6 +26,7 @@ from pytest_homeassistant_custom_component.common import (
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
 from custom_components.lego.const import (
+    CONF_CATALOGUE_INTERVAL,
     CONF_SHARED,
     CONF_THEMES,
     CONF_USER_HASH,
@@ -90,8 +91,36 @@ async def test_migrate_shares_an_account_made_before_users(
     await setup_integration(hass, entry)
 
     assert entry.state is ConfigEntryState.LOADED
-    assert entry.minor_version == 2
+    assert entry.minor_version == 3
     assert entry.options[CONF_SHARED] is True
+
+
+@pytest.mark.parametrize(("saved", "kept"), [(7, 30), (14, 14), (None, None)])
+@pytest.mark.usefixtures("brickset")
+async def test_migrate_moves_the_old_weekly_index_refresh_to_monthly(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    saved: int | None,
+    kept: int | None,
+) -> None:
+    """The weekly default saved by the old form goes monthly; a real choice stays."""
+    options = dict(mock_config_entry.options)
+    if saved is not None:
+        options[CONF_CATALOGUE_INTERVAL] = saved
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=USERNAME,
+        unique_id=USERNAME,
+        version=2,
+        minor_version=2,
+        data=dict(mock_config_entry.data),
+        options=options,
+    )
+
+    await setup_integration(hass, entry)
+
+    assert entry.minor_version == 3
+    assert entry.options.get(CONF_CATALOGUE_INTERVAL) == kept
 
 
 async def test_migrate_refuses_an_entry_from_a_newer_version(

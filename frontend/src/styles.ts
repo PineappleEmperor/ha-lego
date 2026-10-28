@@ -317,6 +317,23 @@ export const CONTROLS = css`
 
 /** Set cards, the carousel and the grid. */
 export const CARDS = css`
+  /* Medium and large draw the picture two and three times the size; the card
+     widens with it, and never past the row on a narrow screen. */
+  :host {
+    --lego-card-w: 156px;
+    --lego-pic-h: 104px;
+    --lego-stamp: 10px;
+  }
+  :host([picture-size="medium"]) {
+    --lego-card-w: 296px;
+    --lego-pic-h: 208px;
+    --lego-stamp: 13px;
+  }
+  :host([picture-size="large"]) {
+    --lego-card-w: 436px;
+    --lego-pic-h: 312px;
+    --lego-stamp: 16px;
+  }
   .carousel {
     align-items: center;
     display: flex;
@@ -332,13 +349,16 @@ export const CARDS = css`
     }
   }
   .carousel .card {
-    flex: 0 0 156px;
+    flex: 0 0 min(var(--lego-card-w), 85%);
     scroll-snap-align: start;
   }
   .grid {
     display: grid;
     gap: var(--ha-space-3, 12px);
-    grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+    grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(var(--lego-card-w), 100%), 1fr)
+    );
   }
   .card {
     background: var(--lego-surface);
@@ -349,20 +369,72 @@ export const CARDS = css`
     flex-direction: column;
     min-height: 236px;
     overflow: hidden;
+    position: relative;
+  }
+  /* A rubber stamp pressed onto the picture's corner: a double rule, spaced capitals,
+     a tilt, and ink that missed in places. */
+  .stamp {
+    /* Ink on paper in either theme: the photo behind is white, or the dark edge
+       of the picture box, and only a paper backing reads on both. */
+    --lego-stamp-ink: #9d3800;
+    --lego-stamp-paper: #fffaf3;
+    background: color-mix(in srgb, var(--lego-stamp-paper) 92%, transparent);
+    border: 0.18em solid currentColor;
+    border-radius: 0.35em;
+    color: var(--lego-stamp-ink);
+    font-size: var(--lego-stamp);
+    font-weight: var(--ha-font-weight-bold, 700);
+    letter-spacing: 0.16em;
+    line-height: 1;
+    -webkit-mask-image: var(--lego-ink);
+    mask-image: var(--lego-ink);
+    mask-size: 9em 3em;
+    outline: 0.08em solid currentColor;
+    outline-offset: 0.18em;
+    padding: 0.35em 0.45em 0.3em 0.6em;
+    pointer-events: none;
+    position: absolute;
+    left: calc(var(--ha-space-2, 8px) + 0.9em);
+    text-transform: uppercase;
+    top: calc(var(--ha-space-2, 8px) + 1.1em);
+    transform: rotate(-9deg);
+    /* A light speckle: enough to read as ink, never enough to break a letter. */
+    --lego-ink: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='90' height='30'><filter id='i'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.5 2.4'/></filter><rect width='90' height='30' filter='url(%23i)'/></svg>");
   }
   /* Set photos come on white; inset and rounded they read as photos rather
      than as gaps in a dark card. */
-  .card img {
+  .pic {
     background: var(--lego-ground);
     border-radius: var(--ha-border-radius-md, 8px);
-    box-sizing: border-box;
-    height: 104px;
+    display: block;
+    height: var(--lego-pic-h);
     margin: var(--ha-space-2, 8px) var(--ha-space-2, 8px) 0;
+    overflow: hidden;
+    position: relative;
+  }
+  .pic img {
+    box-sizing: border-box;
+    height: 100%;
+    inset: 0;
     object-fit: contain;
-    width: calc(100% - 2 * var(--ha-space-2, 8px));
+    position: absolute;
+    width: 100%;
+  }
+  /* The sharper copy fades in over the standard one once it has loaded. */
+  .pic img.sharp {
+    opacity: 0;
+    transition: opacity 240ms ease-out;
+  }
+  .pic img.sharp.ready {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pic img.sharp {
+      transition: none;
+    }
   }
   /* Stand-in art, so it must read as absent rather than as the set. */
-  .card img.noart {
+  .pic img.noart {
     opacity: 0.35;
     padding: var(--ha-space-6, 24px);
   }
@@ -434,9 +506,6 @@ export const CARDS = css`
   }
   .state.own {
     color: var(--lego-own);
-  }
-  .state.want {
-    color: var(--lego-want);
   }
   /* A 48px target drawing a 32px circle, so the card does not look crowded. */
   .act {

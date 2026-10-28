@@ -420,11 +420,19 @@ async def test_dashboard_returns_the_home_view(
     assert result["stats"]["sets_owned"] == 4
     assert result["stats"]["sets_distinct"] == 3
     assert result["stats"]["pieces_owned"] == 7122
+    # Two Galaxy Explorers at 90.00 and the castle at 344.99; the Alienator has
+    # no LEGO.com price, so it is counted as missing rather than as nothing.
+    assert result["stats"]["value"] == 524.99
+    assert result["stats"]["sets_missing_price"] == 1
+    assert result["stats"]["minifigs_owned"] == 31
+    assert result["stats"]["sets_wanted"] == 1
     assert [item["set_number"] for item in result["wishlist"]] == ["10294-1"]
     assert result["followed"] == ["Technic"]
     # Collection value starts folded; the release rows start combined.
     assert result["collapsed"] == ["value", "pieces"]
     assert result["release_mode"] == "combined"
+    assert result["collection_prices"] is True
+    assert result["picture_size"] == "medium"
     assert result["release_status"] == {"all": None, "mine": "ready"}
     # Cards show LEGO.com RRP, so the panel needs the region's currency.
     assert result["currency"] == "GBP"
@@ -457,10 +465,26 @@ async def test_dashboard_carries_dates_for_the_wishlist(
     await client.send_json_auto_id({"type": "lego/dashboard"})
     wanted = (await client.receive_json())["result"]["wishlist"][0]
 
-    assert wanted["name"] == "Titanic"
-    assert wanted["retail_price"] == 629.99
-    assert "available_from" in wanted
-    assert "available_until" in wanted
+    # Drawn from Home Assistant's copy, with Brickset's own as the fallback.
+    assert wanted.pop("image").startswith("/api/lego/image/small/10294-1.jpg?authSig=")
+    assert wanted == {
+        "set_number": "10294-1",
+        "name": "Titanic",
+        "year": 2024,
+        "theme": "Icons",
+        "pieces": 9090,
+        "minifigs": 0,
+        "image_remote": "https://images.brickset.com/sets/small/10294-1.jpg",
+        "image_large": None,
+        "url": "https://brickset.com/sets/10294-1",
+        "owned": False,
+        "wanted": True,
+        "qty_owned": 0,
+        "retail_price": 629.99,
+        "released": True,
+        "available_from": "2024-01-01",
+        "available_until": "2099-12-31",
+    }
 
 
 @pytest.mark.usefixtures("brickset")
@@ -478,6 +502,21 @@ async def test_collection_filters_and_sorts(
 
     assert all(item["owned"] for item in owned)
     assert owned == sorted(owned, key=lambda item: (item["theme"], item["name"]))
+    # Each card arrives drawn from the set's record, not just its number.
+    castle = next(item for item in owned if item["set_number"] == "10305-1")
+    assert castle["name"] == "Lion Knights' Castle"
+    assert castle["image"].startswith("/api/lego/image/small/10305-1.jpg?authSig=")
+    assert castle["image_remote"] == (
+        "https://images.brickset.com/sets/small/10305-1.jpg"
+    )
+    assert (castle["retail_price"], castle["qty_owned"]) == (344.99, 1)
+    assert castle["available_until"] == "2099-12-31"
+
+    await client.send_json_auto_id({"type": "lego/collection", "filter": "all"})
+    every = {
+        item["set_number"] for item in (await client.receive_json())["result"]["sets"]
+    }
+    assert every == {item["set_number"] for item in owned} | {"10294-1"}
 
 
 @pytest.mark.usefixtures("brickset")
@@ -760,6 +799,60 @@ async def test_release_and_collapse_settings_are_saved(
     await restarted.async_load()
     assert restarted.settings(hass_admin_user.id)["release_mode"] == "separate"
     assert restarted.collapsed(hass_admin_user.id) == ["wishlist"]
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_hiding_collection_prices_is_saved(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    hass_admin_user: MockUser,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Hiding prices on the owned sets survives a restart and reaches the dashboard."""
+    await setup_integration(hass, mock_config_entry)
+    client = await hass_ws_client(hass)
+
+    await client.send_json_auto_id(
+        {"type": "lego/panel_config/set", "collection_prices": False}
+    )
+    saved = await client.receive_json()
+    assert saved["success"], saved
+    assert saved["result"]["collection_prices"] is False
+
+    await client.send_json_auto_id({"type": "lego/dashboard"})
+    assert (await client.receive_json())["result"]["collection_prices"] is False
+
+    restarted = PanelStore(hass)
+    await restarted.async_load()
+    assert restarted.settings(hass_admin_user.id)["collection_prices"] is False
+    assert restarted.settings("someone-else")["collection_prices"] is True
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_picture_size_is_saved_for_each_user(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    hass_admin_user: MockUser,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A user's picture size survives a restart; a size the panel lacks is refused."""
+    await setup_integration(hass, mock_config_entry)
+    client = await hass_ws_client(hass)
+
+    await client.send_json_auto_id(
+        {"type": "lego/panel_config/set", "picture_size": "large"}
+    )
+    assert (await client.receive_json())["result"]["picture_size"] == "large"
+
+    await client.send_json_auto_id(
+        {"type": "lego/panel_config/set", "picture_size": "huge"}
+    )
+    assert not (await client.receive_json())["success"]
+
+    restarted = PanelStore(hass)
+    await restarted.async_load()
+    assert restarted.settings(hass_admin_user.id)["picture_size"] == "large"
+    assert restarted.settings("someone-else")["picture_size"] == "medium"
 
 
 @pytest.mark.usefixtures("brickset")

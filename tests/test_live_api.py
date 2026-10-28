@@ -41,6 +41,7 @@ import pytest_socket
 
 from custom_components.lego.api import API_BASE, BricksetClient
 from custom_components.lego.const import (
+    BRICKSET_THUMBNAIL_URL,
     PAGE_SIZE,
     REGIONS,
     RELEASES_PAGES_ESTIMATE,
@@ -122,17 +123,37 @@ def _assert_shape(records: list[dict[str, Any]], source: str) -> list[str]:
     the test reports them rather than failing on them.
     """
     undated: list[str] = []
+    pictured = 0
     for record in records:
         number = f"{record.get('number')}-{record.get('numberVariant')}"
         where = f"{source} {number}"
 
         for key in ("setID", "number", "numberVariant", "name", "year", "theme"):
             assert key in record, f"{where} has no {key}"
+        assert str(record.get("bricksetURL", "")).startswith("https://"), (
+            f"{where} has no bricksetURL"
+        )
+        # A set with no picture is real, so the keys are checked where any is sent.
+        image = record.get("image") or {}
+        assert isinstance(image, dict), f"{where} has an image that is not a dict"
+        if image:
+            assert {"thumbnailURL", "imageURL"} & image.keys(), (
+                f"{where} names its pictures {sorted(image)}"
+            )
+            pictured += 1
+        for region, pricing in (record.get("LEGOCom") or {}).items():
+            assert isinstance(pricing, dict), f"{where} LEGOCom {region} is not a dict"
+            assert not pricing or pricing.keys() & {
+                "retailPrice",
+                "dateFirstAvailable",
+                "dateLastAvailable",
+            }, f"{where} LEGOCom {region} carries {sorted(pricing)}"
 
         if not _has_exit_date(record):
             undated.append(
                 f"{number} ({record.get('year')}, {record.get('availability')})"
             )
+    assert pictured or not records, f"{source} sent no set with a picture"
     print(f"\n{source} without an exit date: {undated or 'none'}")  # noqa: T201
     return undated
 
@@ -192,6 +213,26 @@ async def test_a_random_slice_of_the_catalogue_keeps_its_shape() -> None:
     # only a total miss means the query itself stopped working.
     assert records, f"Brickset returned nothing for any of {chosen}"
     _assert_shape(records, "catalogue")
+
+
+async def test_pictures_are_found_by_set_number_alone() -> None:
+    """A set known only to the index is drawn from a URL built from its number."""
+    # Long-lived sets Brickset certainly pictures, so a miss means the pattern moved
+    # rather than that one set lacks a photo; the lettered one is in Rebrickable's
+    # lower case, as the index holds it. Image requests are not billed.
+    numbers = ("75192-1", "10497-1", "6876-1", "comcon001-1")
+    async with aiohttp.ClientSession() as session:
+        for number in numbers:
+            url = BRICKSET_THUMBNAIL_URL.format(number=number)
+            async with session.get(url) as response:
+                assert response.status == 200, f"{url} answered {response.status}"
+                assert response.content_type.startswith("image/"), (
+                    f"{url} sent {response.content_type}"
+                )
+        # An unknown number must fail outright, so the panel falls back to its icon.
+        url = BRICKSET_THUMBNAIL_URL.format(number="99999-9")
+        async with session.get(url) as response:
+            assert response.status == 404, f"{url} answered {response.status}"
 
 
 async def test_theme_still_accepts_a_comma_separated_list() -> None:

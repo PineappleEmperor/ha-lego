@@ -7,22 +7,27 @@ import {
   type TemplateResult,
 } from "lit";
 import { property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 
+import { picturesExpired } from "./api";
 import "./bricks";
 import {
+  LOCAL_PICTURE,
   displayName,
   errorText,
   formatPrice,
   isNamed,
   ownershipCall,
+  pictureSources,
   webUrl,
   whenLabel,
   whenTone,
   type DateFocus,
 } from "./format";
-import { SERIES_COLOURS } from "./palette";
+import { SERIES_COLOURS, slotColour, themeSlots } from "./palette";
+import { markedOwned } from "./state";
 import { CARDS, CONTROLS, ROW, TOKENS } from "./styles";
-import type { Dashboard, Hass, LegoSet } from "./types";
+import type { Dashboard, Hass, LegoSet, PictureSize } from "./types";
 
 // The integration's own icon, served from custom_components/lego/brand/: the
 // picture on a card Brickset has no art for.
@@ -74,6 +79,8 @@ export abstract class LegoRow extends LitElement {
   @property({ type: Boolean, reflect: true }) public bare = false;
   /** Picks the palette's dark steps; set from Home Assistant's theme. */
   @property({ type: Boolean, reflect: true }) public dark = false;
+  /** A dashboard card's own picture size; the panel's setting applies otherwise. */
+  @property({ attribute: false }) public pictureSize?: PictureSize;
 
   @state() protected pending = new Set<string>();
   @state() protected writeError = "";
@@ -99,6 +106,8 @@ export abstract class LegoRow extends LitElement {
 
   protected override willUpdate(changed: PropertyValues): void {
     if (changed.has("hass")) this.dark = !!this.hass?.themes?.darkMode;
+    // The cards' CSS scales from this attribute.
+    this.setAttribute("picture-size", this.size());
   }
 
   protected override render(): TemplateResult {
@@ -221,6 +230,9 @@ export abstract class LegoRow extends LitElement {
     } finally {
       this.setPending(item.set_number, false);
     }
+    // Ticked at once; the reload the event starts then brings Brickset's record.
+    Object.assign(item, markedOwned(item));
+    this.requestUpdate();
     this.dispatchEvent(
       new CustomEvent(CHANGED, { bubbles: true, composed: true }),
     );
@@ -255,32 +267,109 @@ export abstract class LegoRow extends LitElement {
     >`;
   }
 
+  /**
+   * The colour a set's theme wears on every card: its slot if followed, else
+   * "Other"'s grey, so one theme keeps one colour from row to row.
+   */
+  protected themeColour(theme: string): string {
+    const followed = this.dash?.followed ?? [];
+    const match = followed.find((t) => t.toLowerCase() === theme.toLowerCase());
+    return slotColour(match ? themeSlots(followed).get(match) : "other");
+  }
+
+  /** The picture size this row draws: a card's own option, else the panel's. */
+  protected size(): PictureSize {
+    return this.pictureSize ?? this.dash?.picture_size ?? "medium";
+  }
+
+  /** The sharper layer fades in once loaded, over the standard picture. */
+  private reveal = (ev: Event): void => {
+    (ev.target as HTMLImageElement).classList.add("ready");
+  };
+
+  /** Without its sharper layer the card keeps the standard picture. */
+  private dropSharp = (ev: Event): void => {
+    (ev.target as HTMLImageElement).remove();
+  };
+
+  /** A picture URL built from a set number can miss; the brand icon stands in. */
+  private noArt = (ev: Event): void => {
+    const img = ev.target as HTMLImageElement;
+    if (img.classList.contains("noart")) return;
+    // Home Assistant's copy failed. An expired address is renewed for the next
+    // draw; meanwhile, or if it was never stored and HA is offline, ask Brickset.
+    if (img.src.includes(LOCAL_PICTURE)) picturesExpired();
+    const fallback = img.dataset.fallback;
+    if (fallback && img.src !== fallback) {
+      img.removeAttribute("srcset");
+      img.src = fallback;
+      return;
+    }
+    img.classList.add("noart");
+    img.removeAttribute("srcset");
+    img.src = BRAND_ICON;
+  };
+
   protected card(
     item: LegoSet,
     focus: DateFocus = "retirement",
     themeColour?: string,
+    showPrice = true,
   ): TemplateResult {
     const now = new Date();
-    const image = webUrl(item.image);
-    const price = formatPrice(
-      item.retail_price,
-      this.dash?.currency ?? null,
-      this.hass?.locale?.language,
-    );
+    const picture = pictureSources(item, this.size());
+    const image = picture.src ?? picture.fallback;
+    const price = showPrice
+      ? formatPrice(
+          item.retail_price,
+          this.dash?.currency ?? null,
+          this.hass?.locale?.language,
+        )
+      : "";
     return html`
       <article class="card">
         ${this.linked(
           item,
-          image
-            ? html`<img src=${image} alt="" loading="lazy" />`
-            : html`<img
-                class="noart"
-                src=${BRAND_ICON}
-                alt=""
-                loading="lazy"
-              />`,
+          // Keyed by set, so a reused card never shows the last set's picture.
+          html`${keyed(
+            item.set_number,
+            html`<span class="pic"
+              >${
+                image
+                  ? html`<img
+                      src=${image}
+                      data-fallback=${picture.fallback ?? nothing}
+                      alt=""
+                      loading="lazy"
+                      @error=${this.noArt}
+                    />`
+                  : html`<img
+                      class="noart"
+                      src=${BRAND_ICON}
+                      alt=""
+                      loading="lazy"
+                    />`
+              }${
+                picture.sharp
+                  ? html`<img
+                      class="sharp"
+                      srcset=${picture.sharp.srcset}
+                      sizes=${picture.sharp.sizes}
+                      alt=""
+                      loading="lazy"
+                      @load=${this.reveal}
+                      @error=${this.dropSharp}
+                    />`
+                  : nothing
+              }</span
+            >`,
+          )}`,
           true,
         )}
+        ${
+          // Pressed onto the picture, outside its link so it is still read out.
+          item.wanted ? html`<span class="stamp">Wanted</span>` : nothing
+        }
         <div class="meta">
           ${this.linked(
             item,
@@ -309,18 +398,13 @@ export abstract class LegoRow extends LitElement {
             >${whenLabel(item, now, (iso) => this.date(iso), focus)}</span
           >
           <div class="foot">
-            <span
-              class=${
-                item.owned ? "state own" : item.wanted ? "state want" : "state"
-              }
+            <span class=${item.owned ? "state own" : "state"}
               >${
                 item.owned
                   ? item.qty_owned > 1
                     ? `Owned ×${item.qty_owned}`
                     : "Owned"
-                  : item.wanted
-                    ? "Wanted"
-                    : ""
+                  : ""
               }</span
             >
             <button

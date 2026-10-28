@@ -70,6 +70,14 @@ DEFAULT_DAILY_CALL_BUDGET: Final = 80
 PAGE_SIZE: Final = 500
 
 SETS_CSV_URL: Final = "https://cdn.rebrickable.com/media/downloads/sets.csv.gz"
+# Brickset's own pictures of a set, which its server finds by number alone, so a set
+# the index knows draws without a call. A number Brickset lacks answers 404. Measured
+# 2026-10-28: the small one runs about 16 KB, the large one about 90 KB.
+BRICKSET_THUMBNAIL_URL: Final = "https://images.brickset.com/sets/small/{number}.jpg"
+BRICKSET_IMAGE_URL: Final = "https://images.brickset.com/sets/images/{number}.jpg"
+# Whether a high-resolution screen is offered the large picture as well.
+CONF_SHARP_PICTURES: Final = "sharp_pictures"
+DEFAULT_SHARP_PICTURES: Final = False
 THEMES_CSV_URL: Final = "https://cdn.rebrickable.com/media/downloads/themes.csv.gz"
 
 # Rebrickable files keyrings, lunchboxes and storybooks under these, numbered
@@ -78,7 +86,11 @@ EXCLUDED_ROOT_THEMES: Final = frozenset({"Gear", "Books"})
 
 DEFAULT_CATALOGUE: Final = True
 DEFAULT_CATALOGUE_RICH: Final = True
-DEFAULT_CATALOGUE_INTERVAL_DAYS: Final = 7
+# Monthly, out of respect for Rebrickable's servers; Brickset's polls fill in the
+# sets announced since, so the index only needs to catch up on the long tail.
+DEFAULT_CATALOGUE_INTERVAL_DAYS: Final = 30
+# The default before 1.0.0, which an upgrade moves to the monthly one.
+PREVIOUS_CATALOGUE_INTERVAL_DAYS: Final = 7
 MIN_CATALOGUE_INTERVAL_DAYS: Final = 1
 MAX_CATALOGUE_INTERVAL_DAYS: Final = 90
 
@@ -111,6 +123,9 @@ PANEL_DEFAULT_COLLAPSED: Final = ("value", "pieces")
 RELEASE_MODES: Final = ("combined", "separate")
 RELEASE_ROWS: Final = ("releases", "recent", "upcoming", "themes")
 RELEASE_SCOPES: Final = ("all", "mine")
+# How large the panel draws each set's picture: once, twice or three times the card.
+PICTURE_SIZES: Final = ("small", "medium", "large")
+DEFAULT_PICTURE_SIZE: Final = "medium"
 RELEASE_SPANS: Final = (
     "around",
     "year",

@@ -7,6 +7,10 @@ export type Hass = {
   ): Promise<unknown>;
   locale?: { language: string };
   themes?: { darkMode?: boolean };
+  /** The websocket, which says "ready" again after Home Assistant restarts. */
+  connection?: {
+    addEventListener(event: "ready", listener: () => void): void;
+  };
 };
 
 export interface LegoSet {
@@ -17,6 +21,10 @@ export interface LegoSet {
   pieces: number | null;
   minifigs: number | null;
   image: string | null;
+  /** Brickset's address for the picture, tried when Home Assistant's copy fails. */
+  image_remote?: string | null;
+  /** The large copy, offered to high-resolution screens when sharp pictures are on. */
+  image_large?: string | null;
   url: string | null;
   owned: boolean;
   wanted: boolean;
@@ -102,7 +110,14 @@ export interface PanelSettings {
   collapsed: string[];
   release_mode: "combined" | "separate";
   release_filters: Partial<Record<ReleaseRow, ReleaseFilter>>;
+  /** Whether My collection's set grid shows each set's price. */
+  collection_prices: boolean;
+  /** How large the panel draws each set's picture. */
+  picture_size: PictureSize;
 }
+
+/** Once, twice or three times the card's own picture box. */
+export type PictureSize = "small" | "medium" | "large";
 
 export interface Dashboard extends PanelSettings {
   entry_id: string;

@@ -26,6 +26,36 @@ export function invalidate(): void {
   window.dispatchEvent(new Event(INVALIDATED));
 }
 
+const watched = new WeakSet<object>();
+
+/**
+ * Reload everything once Home Assistant is back after a restart. A restart voids
+ * every signed picture address, so an open dashboard needs new ones to keep drawing
+ * from Home Assistant's copies rather than going to Brickset.
+ */
+export function reloadOnReconnect(hass: Hass): void {
+  const connection = hass.connection;
+  if (!connection || watched.has(connection)) return;
+  watched.add(connection);
+  connection.addEventListener("ready", invalidate);
+}
+
+/** At most this often, a refused picture asks for new addresses. */
+export const PICTURE_RETRY_MS = 60_000;
+let picturesRetried = Number.NEGATIVE_INFINITY;
+
+/**
+ * A picture address Home Assistant refused has outlived its signature, as in a tab
+ * left open past a day. Ask once a minute at most for new ones, however many
+ * pictures failed together.
+ */
+export function picturesExpired(now = Date.now()): boolean {
+  if (now - picturesRetried < PICTURE_RETRY_MS) return false;
+  picturesRetried = now;
+  invalidate();
+  return true;
+}
+
 export function loadReleases(
   hass: Hass,
   entryId: string,

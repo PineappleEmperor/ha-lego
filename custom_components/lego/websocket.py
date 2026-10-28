@@ -12,12 +12,14 @@ from .access import can_change, can_view, is_linked
 from .const import (
     CONF_THEMES,
     DOMAIN,
+    PICTURE_SIZES,
     RELEASE_MODES,
     RELEASE_ROWS,
     RELEASE_SCOPES,
     RELEASE_SPANS,
 )
 from .exceptions import BricksetError
+from .images import with_pictures
 from .panel import (
     PANEL_STORE,
     dashboard_payload,
@@ -80,17 +82,13 @@ def websocket_search(
     # anywhere else in the panel; the rest carry what the local index knows.
     region = entry.runtime_data.collection.region
     known = _known_sets(entry)
-    connection.send_result(
-        msg["id"],
-        {
-            "sets": [
-                summarise(known[found.number], region)
-                if found.number in known
-                else summarise_entry(found, _owned(entry, found.number))
-                for found in catalogue.search(msg["query"], msg["limit"])
-            ]
-        },
-    )
+    cards = [
+        summarise(known[found.number], region)
+        if found.number in known
+        else summarise_entry(found, _owned(entry, found.number))
+        for found in catalogue.search(msg["query"], msg["limit"])
+    ]
+    connection.send_result(msg["id"], {"sets": with_pictures(hass, entry, cards)})
 
 
 @callback
@@ -113,6 +111,7 @@ def websocket_dashboard(
     store = hass.data[PANEL_STORE]
     user_id = connection.user.id if connection.user else None
     payload = dashboard_payload(entry, store.settings(user_id))
+    with_pictures(hass, entry, payload["wishlist"])
     # So the panel offers only the changes this user may make.
     payload["can_change"] = can_change(entry, connection.user)
     connection.send_result(msg["id"], payload)
@@ -138,10 +137,9 @@ def websocket_releases(
     if entry is None:
         return
 
-    connection.send_result(
-        msg["id"],
-        releases_payload(entry, msg["scope"], msg["themes"], msg["span"]),
-    )
+    payload = releases_payload(entry, msg["scope"], msg["themes"], msg["span"])
+    with_pictures(hass, entry, payload["sets"])
+    connection.send_result(msg["id"], payload)
 
 
 @callback
@@ -173,10 +171,8 @@ def websocket_collection(
     elif wanted == "wanted":
         sets = [item for item in sets if item.collection.wanted]
 
-    connection.send_result(
-        msg["id"],
-        {"sets": [summarise(item, region) for item in _by_name(sets)]},
-    )
+    cards = [summarise(item, region) for item in _by_name(sets)]
+    connection.send_result(msg["id"], {"sets": with_pictures(hass, entry, cards)})
 
 
 RELEASE_FILTER = probatio.Schema(
@@ -198,6 +194,8 @@ RELEASE_FILTER = probatio.Schema(
         probatio.Optional("release_filters"): {
             probatio.In(RELEASE_ROWS): RELEASE_FILTER
         },
+        probatio.Optional("collection_prices"): bool,
+        probatio.Optional("picture_size"): probatio.In(PICTURE_SIZES),
     }
 )
 @websocket_api.async_response
@@ -222,6 +220,8 @@ async def websocket_set_rows(
         collapsed=msg.get("collapsed"),
         release_mode=msg.get("release_mode"),
         release_filters=msg.get("release_filters"),
+        collection_prices=msg.get("collection_prices"),
+        picture_size=msg.get("picture_size"),
     )
     connection.send_result(msg["id"], settings)
 
