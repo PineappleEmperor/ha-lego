@@ -403,9 +403,34 @@ export class LegoReleasesRow extends LegoRow {
       .timeline .today {
         --mdc-icon-size: 20px;
         color: var(--lego-primary);
+        display: flex;
         position: absolute;
         top: calc(var(--mid) - 15px);
         transform: translateX(-50%);
+      }
+      /* Today's date, over the arrow while it is hovered. */
+      .timeline .todaytip {
+        background: var(--lego-surface);
+        border: var(--lego-line) solid var(--lego-outline);
+        border-radius: var(--ha-border-radius-sm, 4px);
+        bottom: 100%;
+        color: var(--lego-text);
+        font-size: var(--ha-font-size-s, 12px);
+        left: 50%;
+        opacity: 0;
+        padding: var(--ha-space-1, 4px) var(--ha-space-2, 8px);
+        pointer-events: none;
+        position: absolute;
+        transform: translateX(-50%);
+        transition: opacity var(--ha-animation-duration-fast, 150ms);
+        white-space: nowrap;
+        z-index: 31;
+      }
+      .timeline .today:hover {
+        z-index: 32;
+      }
+      .timeline .today:hover .todaytip {
+        opacity: 1;
       }
       .timeline .month {
         color: var(--lego-text-2);
@@ -988,16 +1013,22 @@ export class LegoReleasesRow extends LegoRow {
             class="window"
             style="left:${pct(from)};width:${pct(view.from + Math.max(to - from, 0))}"
           ></div>
-          ${stacks.map((stack) => this.stack(stack, pos, from, to))}
           ${
+            // Drawn first, so a stack on today's date sits over it.
             shown(today)
-              ? html`<ha-icon
-                  class="today"
-                  icon="mdi:chevron-down"
-                  style="left:${pct(today)}"
-                ></ha-icon>`
+              ? html`<span class="today" style="left:${pct(today)}"
+                  ><ha-icon icon="mdi:chevron-down"></ha-icon
+                  ><span class="todaytip"
+                    >Today,
+                    ${now.toLocaleDateString(language, {
+                      day: "numeric",
+                      month: "long",
+                    })}</span
+                  ></span
+                >`
               : nothing
           }
+          ${stacks.map((stack) => this.stack(stack, pos, from, to))}
           ${Array.from({ length: TIMELINE_MONTHS }, (_, i) => i)
             .filter((i) => i + 1 > view.from && i < view.to)
             .map((i) => {
