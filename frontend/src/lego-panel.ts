@@ -21,6 +21,7 @@ import "./rows/collection";
 import "./rows/releases";
 import "./rows/value";
 import "./rows/wishlist";
+import { foldAll, meterFill } from "./state";
 import { CONTROLS, ROW, TOKENS } from "./styles";
 import { drawSvg } from "./svg";
 import type {
@@ -285,8 +286,7 @@ export class LegoPanel extends LitElement {
 
   /** Today's Brickset calls, in the bar above the rows at every width. */
   private renderMeter(quota: Quota): TemplateResult {
-    const share = Math.min(quota.calls_today / (quota.budget || 1), 1);
-    const tight = quota.remaining < quota.refresh_cost * 3;
+    const { share, tight } = meterFill(quota);
     return html`<div
       class=${tight ? "meter tight" : "meter"}
       title=${budgetTitle(
@@ -408,7 +408,7 @@ export class LegoPanel extends LitElement {
     const dash = this.dash;
     if (!dash) return html`<p class="muted pad">Loading your collection…</p>`;
     const visible = this.visible();
-    const anyOpen = visible.some((row) => !this.folded[row]);
+    const { anyOpen, next } = foldAll(visible, this.folded);
     return html`<div
       class="rows"
       @lego-toggle=${this.onToggle}
@@ -418,13 +418,7 @@ export class LegoPanel extends LitElement {
     >
       <div class="homebar">
         ${this.renderMeter(dash.quota)}
-        <button
-          class="link"
-          @click=${() =>
-            (this.folded = Object.fromEntries(
-              visible.map((row) => [row, anyOpen]),
-            ))}
-        >
+        <button class="link" @click=${() => (this.folded = next)}>
           ${anyOpen ? "Collapse all" : "Expand all"}
         </button>
         <button

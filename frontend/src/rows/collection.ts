@@ -15,6 +15,7 @@ import {
   refreshCall,
   syncedAgo,
 } from "../format";
+import { isSearch } from "../state";
 import type { LegoSet } from "../types";
 
 /** Stats, the update button, and every owned set behind a fold of their own. */
@@ -129,7 +130,7 @@ export class LegoCollectionRow extends LegoRow {
       this.owned = undefined;
       // An open search re-asks, so a set just marked owned shows its tick and the
       // record Brickset now holds for it.
-      if (this.query.trim().length >= 2) void this.search(this.query);
+      if (isSearch(this.query)) void this.search(this.query);
     }
   }
 
@@ -159,7 +160,7 @@ export class LegoCollectionRow extends LegoRow {
 
   private async search(query: string): Promise<void> {
     this.query = query;
-    if (query.trim().length < 2) {
+    if (!isSearch(query)) {
       this.results = [];
       return;
     }
@@ -304,7 +305,7 @@ export class LegoCollectionRow extends LegoRow {
   }
 
   private sets(): TemplateResult {
-    const searching = this.query.trim().length >= 2;
+    const searching = isSearch(this.query);
     const showing = searching ? this.results : (this.owned ?? []);
     return html`
       <div class="searchbox">

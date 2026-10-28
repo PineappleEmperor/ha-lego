@@ -21,6 +21,7 @@ import {
   type DateFocus,
 } from "./format";
 import { SERIES_COLOURS, slotColour, themeSlots } from "./palette";
+import { markedOwned } from "./state";
 import { CARDS, CONTROLS, ROW, TOKENS } from "./styles";
 import type { Dashboard, Hass, LegoSet } from "./types";
 
@@ -222,8 +223,7 @@ export abstract class LegoRow extends LitElement {
       this.setPending(item.set_number, false);
     }
     // Ticked at once; the reload the event starts then brings Brickset's record.
-    item.owned = !item.owned;
-    item.qty_owned = item.owned ? Math.max(item.qty_owned, 1) : 0;
+    Object.assign(item, markedOwned(item));
     this.requestUpdate();
     this.dispatchEvent(
       new CustomEvent(CHANGED, { bubbles: true, composed: true }),

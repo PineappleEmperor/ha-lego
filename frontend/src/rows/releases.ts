@@ -28,6 +28,7 @@ import {
   type Stack,
 } from "../format";
 import { slotColour, themeSlots } from "../palette";
+import { chipLayout, chipPress, pressMyThemes } from "../state";
 import type {
   FollowResult,
   ReleaseRow,
@@ -543,13 +544,9 @@ export class LegoReleasesRow extends LegoRow {
       aria-expanded=${mine && this.themesOpen}
       @click=${() => {
         this.wiggling = false;
-        if (mine) {
-          this.themesOpen = !this.themesOpen;
-        } else {
-          // Picked folded, so the row stays short; pressing again opens it.
-          this.themesOpen = false;
-          this.pick({ scope: "mine", themes: [] });
-        }
+        const press = pressMyThemes(mine, this.themesOpen);
+        this.themesOpen = press.open;
+        if (press.pick) this.pick({ scope: "mine", themes: [] });
       }}
     >
       ${this.kind === "themes" ? "All my themes" : "My themes"}
@@ -559,7 +556,13 @@ export class LegoReleasesRow extends LegoRow {
         icon=${mine && this.themesOpen ? "mdi:chevron-up" : "mdi:chevron-down"}
       ></ha-icon>
     </button>`;
-    const showThemes = mine && this.themesOpen;
+    const layout = chipLayout({
+      mine,
+      open: this.themesOpen,
+      wiggling: this.wiggling,
+      followed: dash.followed.length,
+    });
+    const showThemes = layout.themes;
     return html`<div class="chips">
         ${this.kind === "releases" ? everything : nothing}
         ${dash.followed.length ? myThemes : nothing}
@@ -582,12 +585,9 @@ export class LegoReleasesRow extends LegoRow {
               @pointercancel=${this.holdEnd}
               @contextmenu=${(ev: Event) => ev.preventDefault()}
               @click=${() => {
-                // The press that started the wiggle is not also a pick.
-                if (this.held) {
-                  this.held = false;
-                  return;
-                }
-                if (this.wiggling) return;
+                const press = chipPress(this.held, this.wiggling);
+                this.held = false;
+                if (press !== "pick") return;
                 this.pick({
                   scope: "mine",
                   themes: toggleTheme(
@@ -619,14 +619,14 @@ export class LegoReleasesRow extends LegoRow {
           </span>`;
         })}
         ${
-          this.wiggling
+          layout.trailing === "done"
             ? html`<button
                 class="chip on"
                 @click=${() => (this.wiggling = false)}
               >
                 Done
               </button>`
-            : showThemes || !dash.followed.length
+            : layout.trailing === "edit"
               ? this.followChip()
               : nothing
         }
