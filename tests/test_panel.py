@@ -7,6 +7,7 @@ from typing import Any
 from homeassistant.components import frontend
 from homeassistant.const import CONF_API_KEY, CONF_REGION, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
@@ -450,6 +451,9 @@ async def test_dashboard_returns_the_home_view(
     assert result["entry_id"] == mock_config_entry.entry_id
     assert result["quota"]["refresh_cost"] == 2
     assert result["quota"]["budget"] >= result["quota"]["calls_today"]
+    # The installed version, which a window still running an older bundle compares
+    # with its own, to ask for a reload.
+    assert result["version"] == str((await async_get_integration(hass, DOMAIN)).version)
 
 
 @pytest.mark.usefixtures("brickset")

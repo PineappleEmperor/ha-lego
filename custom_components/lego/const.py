@@ -75,6 +75,15 @@ SETS_CSV_URL: Final = "https://cdn.rebrickable.com/media/downloads/sets.csv.gz"
 # 2026-10-28: the small one runs about 16 KB, the large one about 90 KB.
 BRICKSET_THUMBNAIL_URL: Final = "https://images.brickset.com/sets/small/{number}.jpg"
 BRICKSET_IMAGE_URL: Final = "https://images.brickset.com/sets/images/{number}.jpg"
+# Rebrickable's, for the sets Brickset has no picture of. Its thumbnailer makes the
+# sizes nearest Brickset's on request: 230 px (about 13 KB) and 690 px (about 90 KB),
+# square with white margins. Its terms allow set images to be used and linked to.
+REBRICKABLE_THUMBNAIL_URL: Final = (
+    "https://cdn.rebrickable.com/media/thumbs/sets/{number}.jpg/230x230p.jpg"
+)
+REBRICKABLE_IMAGE_URL: Final = (
+    "https://cdn.rebrickable.com/media/thumbs/sets/{number}.jpg/690x690p.jpg"
+)
 # Whether a high-resolution screen is offered the large picture as well.
 CONF_SHARP_PICTURES: Final = "sharp_pictures"
 DEFAULT_SHARP_PICTURES: Final = False
@@ -83,6 +92,10 @@ THEMES_CSV_URL: Final = "https://cdn.rebrickable.com/media/downloads/themes.csv.
 # Rebrickable files keyrings, lunchboxes and storybooks under these, numbered
 # exactly like sets; Brickset does not carry most of them.
 EXCLUDED_ROOT_THEMES: Final = frozenset({"Gear", "Books"})
+# Bags of spare parts and boxes of bricks, at any depth: real products a collector
+# may own, so kept, but they would bury the models in a search by a colour or word.
+# Measured 2026-10-28: 1,383 of the 20,533 sets left once gear and books are out.
+PARTS_PACK_THEMES: Final = frozenset({"Service Packs", "Supplemental", "Bulk Bricks"})
 
 DEFAULT_CATALOGUE: Final = True
 DEFAULT_CATALOGUE_RICH: Final = True

@@ -1,6 +1,7 @@
 """Tests for the local set catalogue."""
 
 from datetime import timedelta
+import gzip
 
 import aiohttp
 from freezegun.api import FrozenDateTimeFactory
@@ -13,6 +14,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
+from custom_components.lego.catalogue import _parse
 from custom_components.lego.const import (
     CONF_CATALOGUE,
     CONF_CATALOGUE_INTERVAL,
@@ -202,3 +204,60 @@ async def test_refresh_interval_is_configurable(
 
     freezer.tick(timedelta(days=1))
     assert catalogue.stale is True
+
+
+PARTS_THEMES_CSV = (
+    "id,name,parent_id\n"
+    "1,System,\n2,Supplemental,1\n3,Bulk Bricks,\n4,Racers,\n5,Promotional,\n"
+)
+PARTS_SETS_CSV = (
+    "set_num,name,year,theme_id,num_parts,img_url\n"
+    "10003-1,1 x 2 Sand Red Bricks,2001,3,100,x\n"
+    "6129-1,Red Bricks,1990,2,40,x\n"
+    "8650-1,Red Racer,2005,4,30,x\n"
+    "8195-1,Red Turbo Racer,2010,4,300,x\n"
+    "REDSOX-1,Red Sox Minifigure,2012,5,40,x\n"
+)
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_parts_packs_answer_to_their_number_only(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """A colour finds the models, newest first; a pack's number still finds it."""
+    catalogue = await _seed(hass, mock_config_entry)
+    catalogue._sets = _parse(
+        gzip.compress(PARTS_SETS_CSV.encode()),
+        gzip.compress(PARTS_THEMES_CSV.encode()),
+        rich=True,
+    )
+
+    # Supplemental sits under System, so the whole theme chain is checked.
+    assert catalogue.entry("6129-1").parts is True
+    assert catalogue.entry("10003-1").parts is True
+    assert catalogue.entry("8650-1").parts is False
+
+    # "red" is a word, so REDSOX-1 is found by its name, among the others by year.
+    assert [s.number for s in catalogue.search("red")] == [
+        "REDSOX-1",
+        "8195-1",
+        "8650-1",
+    ]
+    assert [s.number for s in catalogue.search("10003")] == ["10003-1"]
+    assert [s.number for s in catalogue.search("1000")] == ["10003-1"]
+    assert [s.number for s in catalogue.search("redsox")] == ["REDSOX-1"]
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_an_index_stored_before_parts_packs_is_fetched_again(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """The old three-field rows have no parts flag, so the next check refreshes."""
+    catalogue = await _seed(hass, mock_config_entry)
+    catalogue._sets = {"6129-1": ["Red Bricks", 1990, "System"]}
+    await catalogue.async_save()
+
+    await catalogue.async_load(rich=True)
+
+    assert catalogue.stale is True
+    assert catalogue.entry("6129-1").name == "Red Bricks"

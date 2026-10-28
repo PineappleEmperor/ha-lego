@@ -41,8 +41,11 @@ import pytest_socket
 
 from custom_components.lego.api import API_BASE, BricksetClient
 from custom_components.lego.const import (
+    BRICKSET_IMAGE_URL,
     BRICKSET_THUMBNAIL_URL,
     PAGE_SIZE,
+    REBRICKABLE_IMAGE_URL,
+    REBRICKABLE_THUMBNAIL_URL,
     REGIONS,
     RELEASES_PAGES_ESTIMATE,
     SETS_CSV_URL,
@@ -222,8 +225,10 @@ async def test_pictures_are_found_by_set_number_alone() -> None:
     # lower case, as the index holds it. Image requests are not billed.
     numbers = ("75192-1", "10497-1", "6876-1", "comcon001-1")
     async with aiohttp.ClientSession() as session:
-        for number in numbers:
-            url = BRICKSET_THUMBNAIL_URL.format(number=number)
+        # The standard size for each, and the large one sharp pictures ask for.
+        urls = [BRICKSET_THUMBNAIL_URL.format(number=number) for number in numbers]
+        urls.append(BRICKSET_IMAGE_URL.format(number=numbers[0]))
+        for url in urls:
             async with session.get(url) as response:
                 assert response.status == 200, f"{url} answered {response.status}"
                 assert response.content_type.startswith("image/"), (
@@ -233,6 +238,14 @@ async def test_pictures_are_found_by_set_number_alone() -> None:
         url = BRICKSET_THUMBNAIL_URL.format(number="99999-9")
         async with session.get(url) as response:
             assert response.status == 404, f"{url} answered {response.status}"
+        # The backup for sets Brickset has no picture of, at both sizes asked for.
+        for template in (REBRICKABLE_THUMBNAIL_URL, REBRICKABLE_IMAGE_URL):
+            url = template.format(number="redsox2016-1")
+            async with session.get(url) as response:
+                assert response.status == 200, f"{url} answered {response.status}"
+                assert response.content_type.startswith("image/"), (
+                    f"{url} sent {response.content_type}"
+                )
 
 
 async def test_theme_still_accepts_a_comma_separated_list() -> None:

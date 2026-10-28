@@ -23,6 +23,8 @@ from .const import (
     CONF_SHARP_PICTURES,
     DEFAULT_SHARP_PICTURES,
     DOMAIN,
+    REBRICKABLE_IMAGE_URL,
+    REBRICKABLE_THUMBNAIL_URL,
 )
 
 if TYPE_CHECKING:
@@ -31,7 +33,12 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 IMAGE_PATH = "/api/lego/image/{size}/{number}.jpg"
-SOURCES = {"small": BRICKSET_THUMBNAIL_URL, "large": BRICKSET_IMAGE_URL}
+# Brickset first; Rebrickable, at the nearest size, for the sets Brickset has no
+# picture of, which are mostly promotional ones. Each wants the number its own way.
+SOURCES: dict[str, list[tuple[str, bool]]] = {
+    "small": [(BRICKSET_THUMBNAIL_URL, False), (REBRICKABLE_THUMBNAIL_URL, True)],
+    "large": [(BRICKSET_IMAGE_URL, False), (REBRICKABLE_IMAGE_URL, True)],
+}
 # Core signs media it hands out for a day (CONTENT_AUTH_EXPIRY_TIME); re-signing at
 # half-life keeps one address per picture for half a day, so browsers can cache it.
 SIGNED_FOR = timedelta(hours=24)
@@ -70,6 +77,7 @@ class ImageCache:
         self.root = Path(hass.config.cache_path(DOMAIN, "images"))
         self._signed: dict[str, tuple[str, float]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        self._missing: set[str] = set()
 
     @callback
     def url(self, number: str, size: str) -> str | None:
@@ -94,8 +102,10 @@ class ImageCache:
         return self.root / size / f"{number.lower()}.jpg"
 
     async def async_get(self, number: str, size: str) -> bytes | None:
-        """Return a picture, fetching it first if absent; None if Brickset has none."""
+        """Return a picture, fetching it first if absent; None if no source has one."""
         path = self._file(number, size)
+        if str(path) in self._missing:
+            return None
         if (data := await self.hass.async_add_executor_job(_read, path)) is not None:
             return data
         lock = self._locks.setdefault(str(path), asyncio.Lock())
@@ -104,11 +114,32 @@ class ImageCache:
                 data := await self.hass.async_add_executor_job(_read, path)
             ) is not None:
                 return data
-            data = await self._async_fetch(SOURCES[size].format(number=number))
+            data = await self._async_fetch_first(number, size)
             if data is not None:
                 await self.hass.async_add_executor_job(_write, path, data)
+            else:
+                # Neither site has one; asking both again for every card drawn would
+                # only repeat the answer, so it holds until a restart.
+                self._missing.add(str(path))
         self._locks.pop(str(path), None)
         return data
+
+    async def _async_fetch_first(self, number: str, size: str) -> bytes | None:
+        """Ask each source in turn, raising only if none could be reached."""
+        unreachable = False
+        for template, lower in SOURCES[size]:
+            try:
+                data = await self._async_fetch(
+                    template.format(number=number.lower() if lower else number)
+                )
+            except ImageUnavailable:
+                unreachable = True
+                continue
+            if data is not None:
+                return data
+        if unreachable:
+            raise ImageUnavailable
+        return None
 
     async def _async_fetch(self, url: str) -> bytes | None:
         session = async_get_clientsession(self.hass)

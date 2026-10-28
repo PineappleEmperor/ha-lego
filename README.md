@@ -25,8 +25,8 @@ and dashboard cards show the lot.
 > This project is **not affiliated with, authorised by, or endorsed by the LEGO Group**.
 > LEGO® is a trademark of the LEGO Group. Set data, prices and images come from
 > [Brickset.com](https://brickset.com) via their public API, and every set links back to
-> its Brickset page. The local set index comes from
-> [Rebrickable](https://rebrickable.com/downloads/). Neither Brickset nor Rebrickable is
+> its Brickset page. The local set index, and the pictures of the few sets Brickset has
+> none of, come from [Rebrickable](https://rebrickable.com/downloads/). Neither Brickset nor Rebrickable is
 > affiliated with this project or involved in it. No affiliate or referral links are used
 > anywhere in this integration.
 
@@ -52,8 +52,10 @@ marks it owned on your Brickset account.
 Set pictures are plain image files on Brickset's site and cost no API calls. Home
 Assistant downloads each one the first time a card shows it and keeps it in its cache
 folder, which backups leave out, so a dashboard on a network without internet still
-draws every set it has shown before. A picture not yet kept is fetched from Brickset
-directly, and a set Brickset has no picture of shows the integration's icon.
+draws every set it has shown before. For a set Brickset has no picture of, mostly
+promotional ones, Home Assistant keeps Rebrickable's picture instead, and a set neither
+has a picture of shows the integration's icon. A picture not yet kept is fetched from
+Brickset directly.
 
 Brickset allows each API key 100 requests for set data a day, the integration's own
 polls included, which searching from a dashboard would soon use up. So the integration also keeps a local list of every LEGO set from
@@ -135,11 +137,17 @@ can be read by anyone signed in.
 A **LEGO** entry appears in the sidebar unless you turn it off in options. It is one page
 of rows, each with an icon, a title and a fold arrow:
 
+![The LEGO panel: the calls bar, New releases with its timeline, and the wishlist](docs/screenshots/panel.png)
+
 - **My collection** shows your totals, with an **Update** button that polls Brickset
   at once and says what that costs ("Update · 2 calls"). It greys out once the refresh
   would go over the daily budget. **Sets** below it unfolds the full grid, and its
-  search box covers both your own sets and the whole catalogue. Untick **Show prices**
-  there to hide each set's price; the choice is saved to your user.
+  search box covers both your own sets and the whole catalogue, matching set numbers
+  first and then names, newest first. Spare-parts packs and boxes of loose bricks only
+  turn up when their number is typed. A set only the local index knows shows **Details
+  not loaded**: **Load details** asks Brickset about every such result at once for one
+  call, after which marking any of them costs nothing. Untick **Show prices** there to
+  hide each set's price; the choice is saved to your user.
 - **New releases** shows new sets as cards with their prices, above a timeline from
   January to next March with a dot per set. It opens on **My themes**; pressing it
   again shows or hides a chip for each theme you follow, so you can narrow it to
@@ -156,10 +164,14 @@ of rows, each with an icon, a title and a fold arrow:
   dots on the timeline, or tabbing to it, spreads them out and names their sets; on a
   phone, tap the stack, and the timeline shows only the span, scrolling when it is
   long.
-- **My wishlist** runs soonest to retire first.
+- **My wishlist** runs soonest to retire first, each set stamped **Wanted**.
 - **Collection value** and **Pieces** show a donut and a bar per theme. Hovering a theme
   lists the sets behind it, and **Trend over a year** unfolds a line from Home
   Assistant's recorded statistics, which fills in week by week after you install.
+
+![My collection: the totals, the Update button, and the owned sets with their search](docs/screenshots/collection.png)
+
+![Collection value and Pieces, each a donut and a bar per theme](docs/screenshots/value.png)
 
 **Customise** chooses which rows show, whether each one starts open or folded, how large
 the set pictures are (**Small**, **Medium**, the default, or **Large**), and the

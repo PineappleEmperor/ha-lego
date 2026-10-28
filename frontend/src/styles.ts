@@ -313,6 +313,18 @@ export const CONTROLS = css`
     min-height: 48px;
     padding: 0 var(--ha-space-2, 8px);
   }
+  /* Asks a window still running an older bundle to reload. */
+  .updated {
+    align-items: center;
+    background: var(--lego-pick);
+    border-radius: var(--ha-border-radius-md, 8px);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: var(--ha-font-size-m, 14px);
+    gap: 0 var(--ha-space-2, 8px);
+    justify-content: space-between;
+    padding: 0 var(--ha-space-2, 8px) 0 var(--ha-space-4, 16px);
+  }
 `;
 
 /** Set cards, the carousel and the grid. */
@@ -400,6 +412,10 @@ export const CARDS = css`
     transform: rotate(-9deg);
     /* A light speckle: enough to read as ink, never enough to break a letter. */
     --lego-ink: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='90' height='30'><filter id='i'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.5 2.4'/></filter><rect width='90' height='30' filter='url(%23i)'/></svg>");
+  }
+  /* Red ink against a dark page, where the orange reads as brown. */
+  :host([dark]) .stamp {
+    --lego-stamp-ink: #b3121b;
   }
   /* Set photos come on white; inset and rounded they read as photos rather
      than as gaps in a dark card. */

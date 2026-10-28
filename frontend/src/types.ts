@@ -25,6 +25,8 @@ export interface LegoSet {
   image_remote?: string | null;
   /** The large copy, offered to high-resolution screens when sharp pictures are on. */
   image_large?: string | null;
+  /** Known only to the local index, so its dates and price are not loaded yet. */
+  partial?: boolean;
   url: string | null;
   owned: boolean;
   wanted: boolean;
@@ -122,6 +124,8 @@ export type PictureSize = "small" | "medium" | "large";
 export interface Dashboard extends PanelSettings {
   entry_id: string;
   device_id: string | null;
+  /** The integration version installed, to spot a window running an older bundle. */
+  version?: string | null;
   /** Whether this user may change the account, not merely look at it. */
   can_change: boolean;
   region: string;

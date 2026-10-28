@@ -26,6 +26,28 @@ export function invalidate(): void {
   window.dispatchEvent(new Event(INVALIDATED));
 }
 
+/**
+ * The version this bundle was loaded as. Home Assistant serves it with the installed
+ * version in its address, and a browser keeps running whatever an open window
+ * loaded, through updates and restarts alike.
+ */
+export function bundleVersion(url: string = import.meta.url): string | null {
+  try {
+    return new URL(url).searchParams.get("v");
+  } catch {
+    return null;
+  }
+}
+
+/** Whether Home Assistant now runs a different version from this window's bundle. */
+export function bundleOutdated(
+  installed: string | null | undefined,
+  url: string = import.meta.url,
+): boolean {
+  const loaded = bundleVersion(url);
+  return !!installed && !!loaded && installed !== loaded;
+}
+
 const watched = new WeakSet<object>();
 
 /**

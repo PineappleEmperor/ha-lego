@@ -11,6 +11,13 @@ export function markedOwned(
   return { owned, qty_owned: owned ? Math.max(item.qty_owned, 1) : 0 };
 }
 
+/** The search results Brickset has not been asked about, which one call can fill. */
+export function partialNumbers(
+  items: Pick<LegoSet, "set_number" | "partial">[],
+): string[] {
+  return items.filter((item) => item.partial).map((item) => item.set_number);
+}
+
 /** Whether the search box holds a query rather than a stray letter. */
 export function isSearch(query: string): boolean {
   return query.trim().length >= 2;

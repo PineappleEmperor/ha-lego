@@ -154,6 +154,9 @@ async def _async_resolve_set(entry: LegoConfigEntry, number: str) -> LegoSet:
             if lego_set.number == number:
                 return lego_set
 
+    if (looked_up := entry.runtime_data.looked_up.get(number)) is not None:
+        return looked_up
+
     catalogue = entry.runtime_data.catalogue
     if catalogue is not None and (set_id := catalogue.set_id(number)) is not None:
         # Known by its id alone: the write costs nothing, the index supplies what it

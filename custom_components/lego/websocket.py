@@ -18,10 +18,11 @@ from .const import (
     RELEASE_SCOPES,
     RELEASE_SPANS,
 )
-from .exceptions import BricksetError
+from .exceptions import BricksetError, BricksetQuotaError
 from .images import with_pictures
 from .panel import (
     PANEL_STORE,
+    PANEL_VERSION,
     dashboard_payload,
     releases_payload,
     summarise,
@@ -48,6 +49,7 @@ def async_setup_websocket(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_set_account)
     websocket_api.async_register_command(hass, websocket_themes)
     websocket_api.async_register_command(hass, websocket_follow_theme)
+    websocket_api.async_register_command(hass, websocket_set_details)
 
 
 @callback
@@ -112,6 +114,7 @@ def websocket_dashboard(
     user_id = connection.user.id if connection.user else None
     payload = dashboard_payload(entry, store.settings(user_id))
     with_pictures(hass, entry, payload["wishlist"])
+    payload["version"] = hass.data.get(PANEL_VERSION)
     # So the panel offers only the changes this user may make.
     payload["can_change"] = can_change(entry, connection.user)
     connection.send_result(msg["id"], payload)
@@ -358,6 +361,64 @@ async def websocket_follow_theme(
     )
 
 
+@websocket_api.websocket_command(
+    {
+        probatio.Required("type"): "lego/set_details",
+        probatio.Optional("config_entry_id"): str,
+        probatio.Required("numbers"): probatio.All(
+            [probatio.All(str, probatio.Length(min=1, max=40))],
+            probatio.Length(min=1, max=50),
+        ),
+    }
+)
+@websocket_api.async_response
+async def websocket_set_details(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Fetch Brickset's records for search results the index alone describes."""
+    entry = _loaded_entry(hass, connection, msg)
+    if entry is None:
+        return
+    # A billed call comes out of the account's budget, which only its people spend.
+    if not can_change(entry, connection.user):
+        connection.send_error(
+            msg["id"], websocket_api.ERR_UNAUTHORIZED, "Not yours to change"
+        )
+        return
+
+    runtime = entry.runtime_data
+    known = _known_sets(entry)
+    wanted = [number for number in dict.fromkeys(msg["numbers"]) if number not in known]
+    if not wanted:
+        connection.send_result(msg["id"], {"found": 0, "cost": 0})
+        return
+    try:
+        # One call for the lot: getSets takes a comma-separated list of numbers.
+        found = await runtime.client.get_sets(
+            {
+                "setNumber": ",".join(wanted),
+                "extendedData": 1,
+                "pageSize": len(wanted),
+            }
+        )
+    except BricksetQuotaError:
+        connection.send_error(
+            msg["id"], "quota_spent", "Today's Brickset budget is spent"
+        )
+        return
+    except BricksetError as err:
+        connection.send_error(msg["id"], websocket_api.ERR_UNKNOWN_ERROR, str(err))
+        return
+
+    runtime.looked_up.update({lego_set.number: lego_set for lego_set in found})
+    if runtime.catalogue is not None:
+        runtime.catalogue.remember(found)
+        await runtime.catalogue.async_save_if_dirty()
+    connection.send_result(msg["id"], {"found": len(found), "cost": 1})
+
+
 def _visible_entries(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection
 ) -> list[LegoConfigEntry]:
@@ -441,8 +502,8 @@ def _owned(entry: Any, number: str) -> bool:
 
 
 def _known_sets(entry: LegoConfigEntry) -> dict[str, Any]:
-    """Every set with a Brickset record: the collection and the feeds."""
-    known: dict[str, Any] = {}
+    """Every set with a Brickset record: looked up, the feeds and the collection."""
+    known: dict[str, Any] = dict(entry.runtime_data.looked_up)
     if (feed := entry.runtime_data.feeds.data) is not None:
         for theme_sets in feed.themes.values():
             known.update({lego_set.number: lego_set for lego_set in theme_sets})

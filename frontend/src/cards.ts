@@ -7,7 +7,7 @@ import {
   loadDashboard,
   reloadOnReconnect,
 } from "./api";
-import { ROW_META, define } from "./base";
+import { ROW_META, define, updatedNotice } from "./base";
 import {
   PICTURE_LABELS,
   PICTURE_SIZES,
@@ -21,7 +21,7 @@ import "./rows/collection";
 import "./rows/releases";
 import "./rows/value";
 import "./rows/wishlist";
-import { TOKENS } from "./styles";
+import { CONTROLS, TOKENS } from "./styles";
 import type {
   Dashboard,
   Hass,
@@ -128,6 +128,7 @@ abstract class LegoCard extends LitElement {
 
   static override styles = [
     TOKENS,
+    CONTROLS,
     css`
       :host {
         display: block;
@@ -135,6 +136,9 @@ abstract class LegoCard extends LitElement {
       }
       ha-card {
         overflow: hidden;
+      }
+      .updated {
+        margin: var(--ha-space-2, 8px) var(--ha-space-2, 8px) 0;
       }
       .error {
         color: var(--ha-color-on-danger-normal, #b30532);
@@ -194,6 +198,7 @@ abstract class LegoCard extends LitElement {
       @lego-changed=${() => invalidate()}
       @lego-toggle=${(ev: Event) => ev.stopPropagation()}
     >
+      ${updatedNotice(this.dash)}
       ${
         this.error
           ? html`<div class="error">${this.error}</div>`

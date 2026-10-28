@@ -270,11 +270,16 @@ export function whenTone(
 
 /** What a card says about a set's dates, worded for whether they have passed. */
 export function whenLabel(
-  item: Pick<LegoSet, "available_from" | "available_until" | "name">,
+  item: Pick<
+    LegoSet,
+    "available_from" | "available_until" | "name" | "partial"
+  >,
   now: Date,
   format: (iso: string) => string,
   focus: DateFocus = "retirement",
 ): string {
+  // Known only to the local index: Brickset has the dates, it has not been asked.
+  if (item.partial) return "Details not loaded";
   if (focus === "release" && item.available_from) {
     const coming = new Date(item.available_from) > now;
     return `${coming ? "Due" : "Out"} ${format(item.available_from)}`;

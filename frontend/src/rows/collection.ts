@@ -15,7 +15,7 @@ import {
   refreshCall,
   syncedAgo,
 } from "../format";
-import { isSearch } from "../state";
+import { isSearch, partialNumbers } from "../state";
 import type { LegoSet } from "../types";
 
 /** Stats, the update button, and every owned set behind a fold of their own. */
@@ -29,6 +29,8 @@ export class LegoCollectionRow extends LegoRow {
   @state() private ownedError = "";
   @state() private query = "";
   @state() private results: LegoSet[] = [];
+  @state() private loadingDetails = false;
+  @state() private detailsError = "";
   /** A tick not yet back from the server; the dashboard's copy wins once it is. */
   @state() private pricesPick?: boolean;
 
@@ -93,6 +95,14 @@ export class LegoCollectionRow extends LegoRow {
         right: 0;
         top: 0;
         width: 48px;
+      }
+      .details {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--ha-space-2, 8px) var(--ha-space-4, 16px);
+        justify-content: space-between;
+        margin-bottom: var(--ha-space-3, 12px);
       }
       .count {
         align-items: center;
@@ -178,6 +188,53 @@ export class LegoCollectionRow extends LegoRow {
 
   private showPrices(): boolean {
     return this.pricesPick ?? this.dash?.collection_prices ?? true;
+  }
+
+  /** Offers one call for the details of every result only the index knows. */
+  private detailsBar(): TemplateResult | typeof nothing {
+    const missing = partialNumbers(this.results);
+    if (!missing.length && !this.detailsError) return nothing;
+    const quota = this.dash?.quota;
+    const canLoad = !!this.dash?.can_change && !!quota && quota.remaining > 0;
+    return html`<div class="details" role="status">
+      <span class="muted">
+        ${
+          this.detailsError ||
+          `Dates and prices for ${missing.length} of these aren't loaded from Brickset yet.`
+        }
+      </span>
+      ${
+        canLoad && missing.length
+          ? html`<button
+              class="update"
+              ?disabled=${this.loadingDetails}
+              title="Ask Brickset about all of them at once, using 1 of the ${quota?.remaining} calls left today"
+              @click=${() => void this.loadDetails(missing)}
+            >
+              <ha-icon icon="mdi:cloud-download-outline"></ha-icon>
+              ${this.loadingDetails ? "Loading…" : "Load details"}
+              <span class="sep" aria-hidden="true"></span>
+              <span class="cost">1 call</span>
+            </button>`
+          : nothing
+      }
+    </div>`;
+  }
+
+  private async loadDetails(numbers: string[]): Promise<void> {
+    this.loadingDetails = true;
+    this.detailsError = "";
+    try {
+      await this.hass.callWS({
+        ...accountCall("lego/set_details", this.dash?.entry_id ?? ""),
+        numbers,
+      });
+      await this.search(this.query);
+    } catch (err) {
+      this.detailsError = errorText(err);
+    } finally {
+      this.loadingDetails = false;
+    }
   }
 
   private setPrices(show: boolean): void {
@@ -353,6 +410,7 @@ export class LegoCollectionRow extends LegoRow {
                     Show prices
                   </label>
                 </div>
+                ${searching ? this.detailsBar() : nothing}
                 <div class="grid">
                   ${showing.map((item) =>
                     this.card(
