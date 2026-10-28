@@ -29,6 +29,7 @@ import type {
   Dashboard,
   Hass,
   PanelSettings,
+  Quota,
   ReleaseFilter,
   ReleaseRow,
   Span,
@@ -265,11 +266,6 @@ export class LegoPanel extends LitElement {
   }
 
   private renderHeader(): TemplateResult {
-    const quota = this.dash?.quota;
-    const share = quota
-      ? Math.min(quota.calls_today / (quota.budget || 1), 1)
-      : 0;
-    const tight = !!quota && quota.remaining < quota.refresh_cost * 3;
     return html`<header class=${this.narrow ? "narrow" : ""}>
       <div class="title">
         ${
@@ -281,48 +277,42 @@ export class LegoPanel extends LitElement {
             : nothing
         }
         <span class="logo">${drawSvg(LOGO)}</span>
-        <span class="heading">
-          <h1>LEGO</h1>
-          ${
-            // A phone has no room for the meter beside the account, so the
-            // count sits under the title instead.
-            this.narrow && quota
-              ? html`<span class=${tight ? "calls tight" : "calls"}
-                  >${quota.calls_today} of ${quota.budget} calls</span
-                >`
-              : nothing
-          }
-        </span>
+        <h1>LEGO</h1>
       </div>
-      ${
-        quota && !this.narrow
-          ? html`<div
-              class=${tight ? "meter tight" : "meter"}
-              title=${budgetTitle(
-                quota.calls_today,
-                quota.budget,
-                new Date(quota.resets_at).toLocaleTimeString(
-                  this.hass?.locale?.language,
-                  { hour: "2-digit", minute: "2-digit" },
-                ),
-              )}
-            >
-              <span class="meter-label">Brickset calls</span>
-              <span
-                class="meter-bar"
-                role="meter"
-                aria-label="Brickset calls used today"
-                aria-valuemin="0"
-                aria-valuemax=${quota.budget}
-                aria-valuenow=${quota.calls_today}
-                ><span style="width:${share * 100}%"></span
-              ></span>
-              <span>${quota.calls_today} of ${quota.budget} today</span>
-            </div>`
-          : nothing
-      }
       ${this.accounts.length > 1 ? this.accountPicker() : nothing}
     </header>`;
+  }
+
+  /** Today's Brickset calls, in the bar above the rows at every width. */
+  private renderMeter(quota: Quota): TemplateResult {
+    const share = Math.min(quota.calls_today / (quota.budget || 1), 1);
+    const tight = quota.remaining < quota.refresh_cost * 3;
+    return html`<div
+      class=${tight ? "meter tight" : "meter"}
+      title=${budgetTitle(
+        quota.calls_today,
+        quota.budget,
+        new Date(quota.resets_at).toLocaleTimeString(
+          this.hass?.locale?.language,
+          { hour: "2-digit", minute: "2-digit" },
+        ),
+      )}
+    >
+      <span class="meter-label">Brickset calls</span>
+      <span
+        class="meter-bar"
+        role="meter"
+        aria-label="Brickset calls used today"
+        aria-valuemin="0"
+        aria-valuemax=${quota.budget}
+        aria-valuenow=${quota.calls_today}
+        ><span style="width:${share * 100}%"></span
+      ></span>
+      <span class="meter-count"
+        >${quota.calls_today} of ${quota.budget}<span class="when"> today</span
+        ><span class="unit"> calls</span></span
+      >
+    </div>`;
   }
 
   /**
@@ -427,6 +417,7 @@ export class LegoPanel extends LitElement {
       @lego-changed=${this.onChanged}
     >
       <div class="homebar">
+        ${this.renderMeter(dash.quota)}
         <button
           class="link"
           @click=${() =>
@@ -781,10 +772,12 @@ export class LegoPanel extends LitElement {
         align-items: center;
         color: var(--lego-text-2);
         display: flex;
+        flex: 1 1 auto;
         font-size: var(--ha-font-size-s, 12px);
         gap: var(--ha-space-2, 8px);
-        margin-left: auto;
         min-height: 48px;
+        min-width: 0;
+        white-space: nowrap;
       }
       .meter-label {
         color: var(--lego-text);
@@ -795,9 +788,16 @@ export class LegoPanel extends LitElement {
         border: var(--lego-line) solid var(--lego-outline);
         border-radius: var(--ha-border-radius-pill, 9999px);
         display: block;
+        flex: 0 1 120px;
         height: 8px;
+        min-width: 48px;
         overflow: hidden;
-        width: 120px;
+      }
+      .meter .unit {
+        display: none;
+      }
+      .meter.tight .meter-count {
+        color: var(--lego-want);
       }
       .meter-bar span {
         background: var(--lego-primary);
@@ -807,19 +807,6 @@ export class LegoPanel extends LitElement {
       .meter.tight .meter-bar span {
         background: var(--lego-want);
       }
-      .heading {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-      }
-      .calls {
-        color: var(--lego-text-2);
-        font-size: var(--ha-font-size-s, 12px);
-        white-space: nowrap;
-      }
-      .calls.tight {
-        color: var(--lego-want);
-      }
       /* A phone keeps the header to one line, the account on the right. */
       header.narrow {
         column-gap: var(--ha-space-2, 8px);
@@ -827,6 +814,7 @@ export class LegoPanel extends LitElement {
         padding-right: var(--ha-space-2, 8px);
       }
       .accountpick {
+        margin-left: auto;
         max-width: 50%;
         position: relative;
       }
@@ -946,10 +934,24 @@ export class LegoPanel extends LitElement {
         gap: var(--ha-space-4, 16px);
         padding: var(--ha-space-2, 8px) var(--ha-space-4, 16px) 0;
       }
+      /* The calls meter on the left, the page's own controls on the right. On a
+         phone the label goes and the count names its unit instead. */
       .homebar {
+        align-items: center;
+        column-gap: var(--ha-space-2, 8px);
+        container-type: inline-size;
         display: flex;
-        justify-content: flex-end;
+        flex-wrap: wrap;
         margin-bottom: calc(-1 * var(--ha-space-2, 8px));
+      }
+      @container (max-width: 520px) {
+        .meter-label,
+        .meter .when {
+          display: none;
+        }
+        .meter .unit {
+          display: inline;
+        }
       }
       .slot.dragging {
         opacity: 0.5;
