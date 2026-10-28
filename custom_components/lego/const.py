@@ -70,10 +70,9 @@ DEFAULT_DAILY_CALL_BUDGET: Final = 80
 PAGE_SIZE: Final = 500
 
 SETS_CSV_URL: Final = "https://cdn.rebrickable.com/media/downloads/sets.csv.gz"
-# Rebrickable's picture of a set, from its number alone, lower-cased.
-REBRICKABLE_THUMBNAIL_URL: Final = (
-    "https://cdn.rebrickable.com/media/thumbs/sets/{number}.jpg/230x230p.jpg"
-)
+# Brickset's own small picture of a set, which its server finds by number alone, so a
+# set the index knows draws without a call. A number Brickset lacks answers 404.
+BRICKSET_THUMBNAIL_URL: Final = "https://images.brickset.com/sets/small/{number}.jpg"
 THEMES_CSV_URL: Final = "https://cdn.rebrickable.com/media/downloads/themes.csv.gz"
 
 # Rebrickable files keyrings, lunchboxes and storybooks under these, numbered

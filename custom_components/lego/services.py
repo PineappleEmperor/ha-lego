@@ -34,10 +34,10 @@ from .const import (
     ATTR_THEME,
     ATTR_WANTED,
     ATTR_YEAR,
+    BRICKSET_THUMBNAIL_URL,
     CONF_CATALOGUE_RICH,
     DEFAULT_CATALOGUE_RICH,
     DOMAIN,
-    REBRICKABLE_THUMBNAIL_URL,
     SERVICE_REFRESH_CATALOGUE,
     SERVICE_REFRESH_COLLECTION,
     SERVICE_SEARCH_SETS,
@@ -165,7 +165,7 @@ async def _async_resolve_set(entry: LegoConfigEntry, number: str) -> LegoSet:
             name=listed.name if listed else "",
             year=listed.year if listed else None,
             theme=listed.theme if listed else "",
-            thumbnail_url=REBRICKABLE_THUMBNAIL_URL.format(number=number.lower()),
+            thumbnail_url=BRICKSET_THUMBNAIL_URL.format(number=number),
             brickset_url=f"https://brickset.com/sets/{number}",
         )
 

@@ -143,8 +143,6 @@ async def test_search_fills_in_a_set_known_only_to_the_index(
 
     assert hit["name"] == "New Technic Thing"
     assert hit["retail_price"] is None
-    assert hit["image"] == (
-        "https://cdn.rebrickable.com/media/thumbs/sets/42200-1.jpg/230x230p.jpg"
-    )
+    assert hit["image"] == "https://images.brickset.com/sets/small/42200-1.jpg"
     assert hit["url"] == "https://brickset.com/sets/42200-1"
     assert hit["owned"] is False

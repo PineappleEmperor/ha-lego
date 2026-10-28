@@ -15,6 +15,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.hass_dict import HassKey
 
 from .const import (
+    BRICKSET_THUMBNAIL_URL,
     CONF_PANEL,
     DEFAULT_PANEL,
     DOMAIN,
@@ -26,7 +27,6 @@ from .const import (
     PANEL_ROWS,
     PANEL_STORAGE_KEY,
     PANEL_URL_PATH,
-    REBRICKABLE_THUMBNAIL_URL,
     REGION_CURRENCY,
     RELEASE_MODES,
     RELEASE_ROWS,
@@ -275,7 +275,7 @@ def summarise(lego_set: Any, region: str) -> dict[str, Any]:
 def summarise_entry(entry: CatalogueEntry, owned: bool) -> dict[str, Any]:
     """Give a set known only to the local index the shape summarise() returns."""
     # The index holds number, name, year and theme only, so a card shows those,
-    # Rebrickable's picture of the number, and the plain Brickset page for the rest.
+    # Brickset's picture of the number, and the plain Brickset page for the rest.
     return {
         "set_number": entry.number,
         "name": entry.name,
@@ -283,7 +283,7 @@ def summarise_entry(entry: CatalogueEntry, owned: bool) -> dict[str, Any]:
         "theme": entry.theme,
         "pieces": None,
         "minifigs": None,
-        "image": REBRICKABLE_THUMBNAIL_URL.format(number=entry.number.lower()),
+        "image": BRICKSET_THUMBNAIL_URL.format(number=entry.number),
         "url": f"https://brickset.com/sets/{entry.number}",
         "owned": owned,
         "wanted": False,

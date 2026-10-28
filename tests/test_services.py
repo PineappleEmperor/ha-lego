@@ -205,9 +205,7 @@ async def test_set_collection_fills_a_set_known_only_to_the_index(
     assert _lookups(brickset, before) == []
     kept = mock_config_entry.runtime_data.collection.data.all_sets["42200-1"]
     assert (kept.name, kept.theme, kept.year) == ("New Technic Thing", "Technic", 2026)
-    assert kept.thumbnail_url == (
-        "https://cdn.rebrickable.com/media/thumbs/sets/42200-1.jpg/230x230p.jpg"
-    )
+    assert kept.thumbnail_url == "https://images.brickset.com/sets/small/42200-1.jpg"
 
 
 async def test_set_collection_looks_up_an_unseen_set(

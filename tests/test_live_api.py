@@ -41,8 +41,8 @@ import pytest_socket
 
 from custom_components.lego.api import API_BASE, BricksetClient
 from custom_components.lego.const import (
+    BRICKSET_THUMBNAIL_URL,
     PAGE_SIZE,
-    REBRICKABLE_THUMBNAIL_URL,
     REGIONS,
     RELEASES_PAGES_ESTIMATE,
     SETS_CSV_URL,
@@ -215,19 +215,24 @@ async def test_a_random_slice_of_the_catalogue_keeps_its_shape() -> None:
     _assert_shape(records, "catalogue")
 
 
-async def test_rebrickable_pictures_are_where_the_panel_looks() -> None:
+async def test_pictures_are_found_by_set_number_alone() -> None:
     """A set known only to the index is drawn from a URL built from its number."""
-    # Long-lived sets Rebrickable certainly pictures, so a miss means the pattern
-    # moved rather than that one set lacks a photo. No Brickset call is spent.
-    numbers = ("75192-1", "10497-1", "42115-1", "21318-1")
+    # Long-lived sets Brickset certainly pictures, so a miss means the pattern moved
+    # rather than that one set lacks a photo; the lettered one is in Rebrickable's
+    # lower case, as the index holds it. Image requests are not billed.
+    numbers = ("75192-1", "10497-1", "6876-1", "comcon001-1")
     async with aiohttp.ClientSession() as session:
         for number in numbers:
-            url = REBRICKABLE_THUMBNAIL_URL.format(number=number.lower())
+            url = BRICKSET_THUMBNAIL_URL.format(number=number)
             async with session.get(url) as response:
                 assert response.status == 200, f"{url} answered {response.status}"
                 assert response.content_type.startswith("image/"), (
                     f"{url} sent {response.content_type}"
                 )
+        # An unknown number must fail outright, so the panel falls back to its icon.
+        url = BRICKSET_THUMBNAIL_URL.format(number="99999-9")
+        async with session.get(url) as response:
+            assert response.status == 404, f"{url} answered {response.status}"
 
 
 async def test_theme_still_accepts_a_comma_separated_list() -> None:
