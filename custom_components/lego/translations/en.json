@@ -132,7 +132,7 @@
       "message": "Could not download the set list. Check Home Assistant's internet access and try again."
     },
     "device_not_found": {
-      "message": "{device_id} is not a Brickset device of the LEGO integration."
+      "message": "{device_id} is not an account of the LEGO integration."
     },
     "entry_not_loaded": {
       "message": "The LEGO entry {title} is not loaded."

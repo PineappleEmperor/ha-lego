@@ -162,6 +162,8 @@ class LegoAnniversaryCalendar(LegoCalendarBase):
     """Yearly anniversaries of the sets you own."""
 
     _attr_translation_key = "anniversaries"
+    # A curiosity rather than something to act on, unlike releases and retirements.
+    _attr_entity_registry_enabled_default = False
 
     def __init__(self, coordinator: LegoCollectionCoordinator) -> None:
         """Initialise the calendar."""

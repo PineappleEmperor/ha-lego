@@ -1,10 +1,11 @@
 """Fixtures for the integration's tests."""
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Generator
 from copy import deepcopy
 import gzip
 import json
 from typing import Any
+from unittest.mock import patch
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.auth.const import GROUP_ID_USER
@@ -33,6 +34,16 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Let Home Assistant load integrations from custom_components/ in every test."""
+
+
+@pytest.fixture
+def entity_registry_enabled_by_default() -> Generator[None]:
+    """Create entities that start disabled as enabled, as core's own fixture does."""
+    with patch(
+        "homeassistant.helpers.entity.Entity.entity_registry_enabled_default",
+        return_value=True,
+    ):
+        yield
 
 
 @pytest.fixture

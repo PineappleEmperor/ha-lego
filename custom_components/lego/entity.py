@@ -22,8 +22,10 @@ class LegoEntity[DataT](CoordinatorEntity[LegoBaseCoordinator[DataT]]):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             entry_type=DeviceEntryType.SERVICE,
+            # The device is the collection, so it is named for what it holds, and new
+            # entity IDs read lego_<user>_…; Brickset, the source, is its maker.
             manufacturer="Brickset",
-            name=f"Brickset ({username})",
+            name=f"LEGO ({username})",
             configuration_url=f"https://brickset.com/sets/ownedby-{username}",
         )
 

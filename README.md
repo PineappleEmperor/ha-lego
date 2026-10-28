@@ -230,7 +230,8 @@ collapsed: false
 | Last synced | Diagnostic timestamp of the last time Brickset answered a poll. Stays available, so a dashboard can show how old the data is. |
 | Next wishlist retirement | Days until the soonest set on your wishlist leaves sale, with that set's full record in attributes. Sets already gone are excluded. |
 | Latest *theme* set | One per watched theme: the most recently released set, or the soonest due if none is out yet, with details and this year's count in attributes. |
-| Set retirements / releases / anniversaries | Three calendar entities. |
+| Set retirements / Set releases | Calendars, shown on Home Assistant's **Calendar** page: when owned and wanted sets leave sale, and when sets in your watched themes come out. A calendar reads "on" only while one of its events is under way. |
+| Set anniversaries | A calendar of each owned set's yearly birthday, counted from its launch. Disabled at first; enable it from the entity's settings if you want it. |
 
 ## Actions
 
@@ -288,8 +289,8 @@ a response when an automation asks for one:
 
 ## Examples
 
-Replace `brickset_yourname` with your own entity prefix (it is `brickset_` plus your
-Brickset username) and `notify.mobile_app_your_phone` with your own notifier.
+Replace `lego_yourname` with your own entity prefix (it is `lego_` plus your Brickset
+username) and `notify.mobile_app_your_phone` with your own notifier.
 
 A wishlist set retires within a month:
 
@@ -298,13 +299,13 @@ automation:
   - alias: "LEGO: wishlist set retiring soon"
     triggers:
       - trigger: numeric_state
-        entity_id: sensor.brickset_yourname_next_wishlist_retirement
+        entity_id: sensor.lego_yourname_next_wishlist_retirement
         below: 30
     actions:
       - action: notify.mobile_app_your_phone
         data:
           message: >-
-            {{ state_attr('sensor.brickset_yourname_next_wishlist_retirement',
+            {{ state_attr('sensor.lego_yourname_next_wishlist_retirement',
             'set_name') }} leaves sale in {{ trigger.to_state.state }} days.
 ```
 
@@ -367,8 +368,8 @@ Show how old the data is on a dashboard:
 ```yaml
 type: entities
 entities:
-  - entity: sensor.brickset_yourname_sets_owned
-  - entity: sensor.brickset_yourname_last_synced
+  - entity: sensor.lego_yourname_sets_owned
+  - entity: sensor.lego_yourname_last_synced
     format: relative
 ```
 
@@ -422,9 +423,9 @@ about 510 KB.
 The options dialog shows the estimated calls/day for your current settings. When the
 budget is spent, polling pauses until Brickset's day resets at midnight UTC and the
 entities keep serving the last successful poll rather than going unavailable. To tell
-how old that data is, `sensor.brickset_*_last_synced` holds the time of the last sync,
+how old that data is, `sensor.lego_*_last_synced` holds the time of the last sync,
 and the panel shows it under **My collection** ("Updated 3 hours ago") along with when
-updates resume. `sensor.brickset_*_brickset_calls_today` shows usage, budget and
+updates resume. `sensor.lego_*_brickset_calls_today` shows usage, budget and
 remaining headroom.
 
 ## Known limitations

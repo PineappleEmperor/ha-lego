@@ -53,9 +53,7 @@ rules:
   entity-device-class: done
   devices: done
   entity-category: done
-  entity-disabled-by-default:
-    status: exempt
-    comment: Every entity is cheap and useful; none warrant being disabled by default.
+  entity-disabled-by-default: done
   discovery:
     status: exempt
     comment: A cloud account cannot be discovered on the network.

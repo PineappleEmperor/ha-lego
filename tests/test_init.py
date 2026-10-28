@@ -371,7 +371,7 @@ async def test_a_failed_poll_after_setup_makes_entities_unavailable(
     """A Brickset failure is not shown as current data; recovery brings it back."""
     await setup_integration(hass, mock_config_entry)
     collection = mock_config_entry.runtime_data.collection
-    owned = "sensor.brickset_brickfan_sets_owned"
+    owned = "sensor.lego_brickfan_sets_owned"
     assert hass.states.get(owned).state == "4"
 
     brickset.get_sets_error = "Something broke upstream"
