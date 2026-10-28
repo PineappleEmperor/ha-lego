@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { pictureSources, pictureUrl } from "../src/format";
 import {
   chipLayout,
   chipPress,
@@ -131,5 +132,39 @@ describe("theme chips", () => {
     expect(chipPress(true, true)).toBe("spent");
     expect(chipPress(false, true)).toBe("ignored");
     expect(chipPress(false, false)).toBe("pick");
+  });
+});
+
+describe("set pictures", () => {
+  const local = "/api/lego/image/small/10294-1.jpg?authSig=abc";
+  const large = "/api/lego/image/large/10294-1.jpg?authSig=def";
+  const remote = "https://images.brickset.com/sets/small/10294-1.jpg";
+
+  it("takes Home Assistant's copy, and refuses other paths and schemes", () => {
+    expect(pictureUrl(local)).toBe(local);
+    expect(pictureUrl("/api/states")).toBeNull();
+    expect(pictureUrl("javascript:alert(1)")).toBeNull();
+    expect(pictureUrl(remote)).toBe(remote);
+  });
+
+  it("falls back to Brickset's own copy", () => {
+    expect(
+      pictureSources({ image: local, image_large: null, image_remote: remote }),
+    ).toEqual({ src: local, srcset: null, fallback: remote });
+  });
+
+  it("offers the large copy only to a screen with the pixels for it", () => {
+    expect(
+      pictureSources({ image: local, image_large: large, image_remote: remote })
+        .srcset,
+    ).toBe(`${local} 1x, ${large} 2x`);
+  });
+
+  it("draws a card from an older reply with only Brickset's address", () => {
+    expect(pictureSources({ image: remote })).toEqual({
+      src: remote,
+      srcset: null,
+      fallback: null,
+    });
   });
 });

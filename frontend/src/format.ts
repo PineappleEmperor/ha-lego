@@ -306,6 +306,30 @@ export function webUrl(url: string | null | undefined): string | null {
   }
 }
 
+/** Home Assistant's own copy of a picture, which arrives as a path on this site. */
+const LOCAL_PICTURE = "/api/lego/image/";
+
+/** A picture address: Home Assistant's copy, or a web address from Brickset. */
+export function pictureUrl(url: string | null | undefined): string | null {
+  if (url?.startsWith(LOCAL_PICTURE)) return url;
+  return webUrl(url);
+}
+
+/** The pictures a card tries in turn: Home Assistant's, then Brickset's. */
+export function pictureSources(
+  item: Pick<LegoSet, "image" | "image_large" | "image_remote">,
+): { src: string | null; srcset: string | null; fallback: string | null } {
+  const src = pictureUrl(item.image);
+  const large = pictureUrl(item.image_large);
+  const remote = webUrl(item.image_remote);
+  return {
+    src,
+    // The large copy only where a screen has the pixels to show it.
+    srcset: src && large ? `${src} 1x, ${large} 2x` : null,
+    fallback: remote && remote !== src ? remote : null,
+  };
+}
+
 export function isNamed(item: Pick<LegoSet, "name">): boolean {
   const name = (item.name ?? "").trim();
   return name !== "" && name !== UNNAMED;

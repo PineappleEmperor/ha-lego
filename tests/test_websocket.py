@@ -34,6 +34,7 @@ async def test_search_returns_catalogue_hits(
     assert response["success"]
     # An owned set has a Brickset record, so it draws like any other card.
     [hit] = response["result"]["sets"]
+    assert hit.pop("image").startswith("/api/lego/image/small/10497-1.jpg?authSig=")
     assert hit == {
         "set_number": "10497-1",
         "name": "Galaxy Explorer",
@@ -41,7 +42,8 @@ async def test_search_returns_catalogue_hits(
         "theme": "Icons",
         "pieces": 1254,
         "minifigs": 4,
-        "image": "https://images.brickset.com/sets/small/10497-1.jpg",
+        "image_remote": "https://images.brickset.com/sets/small/10497-1.jpg",
+        "image_large": None,
         "url": "https://brickset.com/sets/10497-1",
         "owned": True,
         "wanted": False,
@@ -143,6 +145,7 @@ async def test_search_fills_in_a_set_known_only_to_the_index(
 
     assert hit["name"] == "New Technic Thing"
     assert hit["retail_price"] is None
-    assert hit["image"] == "https://images.brickset.com/sets/small/42200-1.jpg"
+    assert hit["image_remote"] == "https://images.brickset.com/sets/small/42200-1.jpg"
+    assert hit["image"].startswith("/api/lego/image/small/42200-1.jpg?authSig=")
     assert hit["url"] == "https://brickset.com/sets/42200-1"
     assert hit["owned"] is False

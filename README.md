@@ -49,6 +49,12 @@ you own and want, every set's details, pictures, release and retirement dates, a
 LEGO.com prices. Brickset is also where your changes go, so marking a set owned here
 marks it owned on your Brickset account.
 
+Set pictures are plain image files on Brickset's site and cost no API calls. Home
+Assistant downloads each one the first time a card shows it and keeps it in its cache
+folder, which backups leave out, so a dashboard on a network without internet still
+draws every set it has shown before. A picture not yet kept is fetched from Brickset
+directly, and a set Brickset has no picture of shows the integration's icon.
+
 Brickset allows each API key 100 requests for set data a day, the integration's own
 polls included, which searching from a dashboard would soon use up. So the integration also keeps a local list of every LEGO set from
 [Rebrickable](https://rebrickable.com/downloads/), which updates it about daily; the

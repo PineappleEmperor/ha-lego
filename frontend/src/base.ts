@@ -15,6 +15,7 @@ import {
   formatPrice,
   isNamed,
   ownershipCall,
+  pictureSources,
   webUrl,
   whenLabel,
   whenTone,
@@ -273,7 +274,15 @@ export abstract class LegoRow extends LitElement {
   private noArt = (ev: Event): void => {
     const img = ev.target as HTMLImageElement;
     if (img.classList.contains("noart")) return;
+    // Home Assistant's copy failed, say offline before it was stored: ask Brickset.
+    const fallback = img.dataset.fallback;
+    if (fallback && img.src !== fallback) {
+      img.removeAttribute("srcset");
+      img.src = fallback;
+      return;
+    }
     img.classList.add("noart");
+    img.removeAttribute("srcset");
     img.src = BRAND_ICON;
   };
 
@@ -284,7 +293,8 @@ export abstract class LegoRow extends LitElement {
     showPrice = true,
   ): TemplateResult {
     const now = new Date();
-    const image = webUrl(item.image);
+    const picture = pictureSources(item);
+    const image = picture.src ?? picture.fallback;
     const price = showPrice
       ? formatPrice(
           item.retail_price,
@@ -299,6 +309,8 @@ export abstract class LegoRow extends LitElement {
           image
             ? html`<img
                 src=${image}
+                srcset=${picture.srcset ?? nothing}
+                data-fallback=${picture.fallback ?? nothing}
                 alt=""
                 loading="lazy"
                 @error=${this.noArt}

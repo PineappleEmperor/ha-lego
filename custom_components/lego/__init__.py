@@ -42,6 +42,7 @@ from .coordinator import (
     LegoRuntimeData,
     paging_issue_id,
 )
+from .images import IMAGE_CACHE, async_setup_images
 from .panel import (
     PANEL_STORE,
     PanelStore,
@@ -70,6 +71,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Register the integration's actions, websocket commands and panel bundle."""
     async_setup_services(hass)
     async_setup_websocket(hass)
+    async_setup_images(hass)
     store = PanelStore(hass)
     await store.async_load()
     hass.data[PANEL_STORE] = store
@@ -218,6 +220,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> Non
         # last one goes, so removing the integration leaves nothing behind.
         await Store[dict[str, Any]](hass, STORAGE_VERSION, STORAGE_KEY).async_remove()
         await hass.data[PANEL_STORE].async_remove()
+        await hass.data[IMAGE_CACHE].async_clear()
     await async_refresh_panel(hass)
 
 

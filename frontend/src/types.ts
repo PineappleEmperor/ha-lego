@@ -17,6 +17,10 @@ export interface LegoSet {
   pieces: number | null;
   minifigs: number | null;
   image: string | null;
+  /** Brickset's address for the picture, tried when Home Assistant's copy fails. */
+  image_remote?: string | null;
+  /** The large copy, offered to high-resolution screens when sharp pictures are on. */
+  image_large?: string | null;
   url: string | null;
   owned: boolean;
   wanted: boolean;

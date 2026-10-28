@@ -18,6 +18,7 @@ from .const import (
     RELEASE_SPANS,
 )
 from .exceptions import BricksetError
+from .images import with_pictures
 from .panel import (
     PANEL_STORE,
     dashboard_payload,
@@ -80,17 +81,13 @@ def websocket_search(
     # anywhere else in the panel; the rest carry what the local index knows.
     region = entry.runtime_data.collection.region
     known = _known_sets(entry)
-    connection.send_result(
-        msg["id"],
-        {
-            "sets": [
-                summarise(known[found.number], region)
-                if found.number in known
-                else summarise_entry(found, _owned(entry, found.number))
-                for found in catalogue.search(msg["query"], msg["limit"])
-            ]
-        },
-    )
+    cards = [
+        summarise(known[found.number], region)
+        if found.number in known
+        else summarise_entry(found, _owned(entry, found.number))
+        for found in catalogue.search(msg["query"], msg["limit"])
+    ]
+    connection.send_result(msg["id"], {"sets": with_pictures(hass, entry, cards)})
 
 
 @callback
@@ -113,6 +110,7 @@ def websocket_dashboard(
     store = hass.data[PANEL_STORE]
     user_id = connection.user.id if connection.user else None
     payload = dashboard_payload(entry, store.settings(user_id))
+    with_pictures(hass, entry, payload["wishlist"])
     # So the panel offers only the changes this user may make.
     payload["can_change"] = can_change(entry, connection.user)
     connection.send_result(msg["id"], payload)
@@ -138,10 +136,9 @@ def websocket_releases(
     if entry is None:
         return
 
-    connection.send_result(
-        msg["id"],
-        releases_payload(entry, msg["scope"], msg["themes"], msg["span"]),
-    )
+    payload = releases_payload(entry, msg["scope"], msg["themes"], msg["span"])
+    with_pictures(hass, entry, payload["sets"])
+    connection.send_result(msg["id"], payload)
 
 
 @callback
@@ -173,10 +170,8 @@ def websocket_collection(
     elif wanted == "wanted":
         sets = [item for item in sets if item.collection.wanted]
 
-    connection.send_result(
-        msg["id"],
-        {"sets": [summarise(item, region) for item in _by_name(sets)]},
-    )
+    cards = [summarise(item, region) for item in _by_name(sets)]
+    connection.send_result(msg["id"], {"sets": with_pictures(hass, entry, cards)})
 
 
 RELEASE_FILTER = probatio.Schema(

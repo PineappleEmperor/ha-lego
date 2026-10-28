@@ -464,6 +464,8 @@ async def test_dashboard_carries_dates_for_the_wishlist(
     await client.send_json_auto_id({"type": "lego/dashboard"})
     wanted = (await client.receive_json())["result"]["wishlist"][0]
 
+    # Drawn from Home Assistant's copy, with Brickset's own as the fallback.
+    assert wanted.pop("image").startswith("/api/lego/image/small/10294-1.jpg?authSig=")
     assert wanted == {
         "set_number": "10294-1",
         "name": "Titanic",
@@ -471,7 +473,8 @@ async def test_dashboard_carries_dates_for_the_wishlist(
         "theme": "Icons",
         "pieces": 9090,
         "minifigs": 0,
-        "image": "https://images.brickset.com/sets/small/10294-1.jpg",
+        "image_remote": "https://images.brickset.com/sets/small/10294-1.jpg",
+        "image_large": None,
         "url": "https://brickset.com/sets/10294-1",
         "owned": False,
         "wanted": True,
@@ -501,7 +504,10 @@ async def test_collection_filters_and_sorts(
     # Each card arrives drawn from the set's record, not just its number.
     castle = next(item for item in owned if item["set_number"] == "10305-1")
     assert castle["name"] == "Lion Knights' Castle"
-    assert castle["image"] == "https://images.brickset.com/sets/small/10305-1.jpg"
+    assert castle["image"].startswith("/api/lego/image/small/10305-1.jpg?authSig=")
+    assert castle["image_remote"] == (
+        "https://images.brickset.com/sets/small/10305-1.jpg"
+    )
     assert (castle["retail_price"], castle["qty_owned"]) == (344.99, 1)
     assert castle["available_until"] == "2099-12-31"
 
