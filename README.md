@@ -99,9 +99,9 @@ Reachable via **Configure** on the integration entry.
 | Themes to watch | none | Which themes to follow for new releases, also changeable from the panel. However many you pick, they ride in one call per refresh, until together they hold more than 500 sets in a year. |
 | Daily call budget | 80 | The most calls Home Assistant spends a day. The refresh intervals are set from it (see [Data updates](#data-updates)), and polling pauses until midnight UTC once it is spent. |
 | People who use this account | none | The Home Assistant users this Brickset account belongs to. See [Sharing accounts](#sharing-accounts). |
-| Shared with all users | off for new setups | Lets every Home Assistant user see and change this account. On for entries set up before it existed, so upgrading takes no one's account away. |
+| Shared with all users | off | Lets every Home Assistant user see and change this account. |
 | Show the LEGO panel in the sidebar | on | Whether to add the sidebar page for browsing your collection, your wishlist and new releases. |
-| Follow releases across all themes | on for new setups | Lets the panel's **New releases** row show **Everything**, every set whatever its theme, and fills the **Out recently** and **Coming soon** rows. It reads every set of the year once a day, about 3 calls, and your watched themes then come from the same read rather than costing calls of their own. Off for entries set up before it existed, so upgrading spends nothing new until you turn it on. |
+| Follow releases across all themes | on | Lets the panel's **New releases** row show **Everything**, every set whatever its theme, and fills the **Out recently** and **Coming soon** rows. It reads every set of the year once a day, about 3 calls, and your watched themes then come from the same read rather than costing calls of their own. |
 | Keep a local set index | on | Whether to keep a local copy of Rebrickable's set list, so looking a set up costs no Brickset calls. |
 | Include set names in the index | on | Whether that index stores names as well as numbers, which is what searching by name needs. Takes roughly 1.8 MB on disk instead of 450 KB. |
 | Set index refresh interval | 7 days | How often the local list is re-downloaded, from 1 to 90 days. Costs no Brickset calls, and a set missing from it still works at the price of one lookup. |
@@ -223,8 +223,7 @@ collapsed: false
 remembers the Brickset ID of everything already seen.
 
 Every action targets an account by its **Brickset device** (`device_id`, required),
-picked from a device list in the action editor. Automations written for 0.4.0 or
-1.0.0rc1 passed `config_entry_id` instead and need that field swapped for the device.
+picked from a device list in the action editor.
 
 `lego.set_collection` takes the set and at least one change, and returns nothing:
 
