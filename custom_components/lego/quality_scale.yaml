@@ -39,7 +39,9 @@ rules:
     comment: >-
       A failed poll makes the entities unavailable. A spent daily call budget is a
       limit the integration sets itself, not a failure, so the last sync's data is
-      kept and the Last synced sensor and the panel show its age.
+      kept and the Last synced sensor and the panel show its age. After a restart the
+      polls saved before it are shown the same way until the next poll is due, since
+      Brickset was reachable and only the interval stands between them.
   action-exceptions: done
   reauthentication-flow: done
   parallel-updates: done
