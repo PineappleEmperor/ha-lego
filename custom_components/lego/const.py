@@ -83,6 +83,10 @@ THEMES_CSV_URL: Final = "https://cdn.rebrickable.com/media/downloads/themes.csv.
 # Rebrickable files keyrings, lunchboxes and storybooks under these, numbered
 # exactly like sets; Brickset does not carry most of them.
 EXCLUDED_ROOT_THEMES: Final = frozenset({"Gear", "Books"})
+# Bags of spare parts and boxes of bricks, at any depth: real products a collector
+# may own, so kept, but they would bury the models in a search by a colour or word.
+# Measured 2026-10-28: 1,383 of the 20,533 sets left once gear and books are out.
+PARTS_PACK_THEMES: Final = frozenset({"Service Packs", "Supplemental", "Bulk Bricks"})
 
 DEFAULT_CATALOGUE: Final = True
 DEFAULT_CATALOGUE_RICH: Final = True

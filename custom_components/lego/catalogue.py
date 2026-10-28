@@ -17,6 +17,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     DEFAULT_CATALOGUE_INTERVAL_DAYS,
     EXCLUDED_ROOT_THEMES,
+    PARTS_PACK_THEMES,
     SETS_CSV_URL,
     STORAGE_KEY,
     STORAGE_VERSION,
@@ -39,26 +40,43 @@ class CatalogueEntry:
     name: str = ""
     year: int | None = None
     theme: str = ""
+    # A bag of spare parts or bricks rather than a model: found by its number,
+    # left out of a search by name.
+    parts: bool = False
 
 
 def _entry(number: str, row: list[Any]) -> CatalogueEntry:
     """Build a catalogue entry from a stored row, which is empty when slim."""
     if not row:
         return CatalogueEntry(number=number)
-    return CatalogueEntry(number=number, name=row[0], year=row[1], theme=row[2])
+    return CatalogueEntry(
+        number=number,
+        name=row[0],
+        year=row[1],
+        theme=row[2],
+        parts=len(row) > 3 and bool(row[3]),
+    )
 
 
-def _root_theme(theme_id: str, themes: dict[str, dict[str, str]]) -> str:
-    """Walk a Rebrickable theme up to its top-level parent."""
+def _theme_chain(theme_id: str, themes: dict[str, dict[str, str]]) -> list[str]:
+    """Return a Rebrickable theme's name and its parents', top-level last."""
     theme = themes.get(theme_id)
+    names: list[str] = []
     seen: set[str] = set()
     while theme is not None:
+        names.append(theme["name"])
         parent = theme.get("parent_id") or ""
         if not parent or parent in seen:
             break
         seen.add(parent)
         theme = themes.get(parent)
-    return theme["name"] if theme else ""
+    return names
+
+
+def _root_theme(theme_id: str, themes: dict[str, dict[str, str]]) -> str:
+    """Walk a Rebrickable theme up to its top-level parent."""
+    chain = _theme_chain(theme_id, themes)
+    return chain[-1] if chain else ""
 
 
 def _parse(sets_csv: bytes, themes_csv: bytes, rich: bool) -> dict[str, list[Any]]:
@@ -71,7 +89,9 @@ def _parse(sets_csv: bytes, themes_csv: bytes, rich: bool) -> dict[str, list[Any
     }
     index: dict[str, list[Any]] = {}
     for row in csv.DictReader(io.StringIO(gzip.decompress(sets_csv).decode("utf-8"))):
-        if _root_theme(row["theme_id"], themes) in EXCLUDED_ROOT_THEMES:
+        chain = _theme_chain(row["theme_id"], themes)
+        root = chain[-1] if chain else ""
+        if root in EXCLUDED_ROOT_THEMES:
             continue
         number = row["set_num"]
         if not rich:
@@ -81,7 +101,8 @@ def _parse(sets_csv: bytes, themes_csv: bytes, rich: bool) -> dict[str, list[Any
         index[number] = [
             row["name"],
             int(year) if year.isdigit() else None,
-            _root_theme(row["theme_id"], themes),
+            root,
+            int(bool(PARTS_PACK_THEMES.intersection(chain))),
         ]
     return index
 
@@ -140,6 +161,11 @@ class SetCatalogue:
         self._etag = stored.get("etag")
         fetched = stored.get("fetched")
         self._fetched = date.fromisoformat(fetched) if fetched else None
+        if rich and any(len(row) == 3 for row in self._sets.values()):
+            # Stored before parts packs were marked: keep it for now, but fetch the
+            # whole list again at the next check rather than in a month.
+            self._etag = None
+            self._fetched = None
 
     async def async_save(self) -> None:
         """Persist the index and the learned IDs."""
@@ -206,20 +232,31 @@ class SetCatalogue:
         return None if row is None else _entry(number, row)
 
     def search(self, query: str, limit: int = 10) -> list[CatalogueEntry]:
-        """Find sets whose number starts with, or name contains, the query."""
+        """Find sets by number, then by name, newest first.
+
+        A number is matched whole (10305 finds 10305-1) or, when the query holds a
+        digit, by its start; a word like "red" would otherwise match REDSOX-1 by
+        number. Parts packs answer to their number but not to a name search.
+        """
         needle = query.strip().lower()
         if not needle:
             return []
+        by_number = any(char.isdigit() for char in needle)
+        exact: list[CatalogueEntry] = []
         starts: list[CatalogueEntry] = []
-        contains: list[CatalogueEntry] = []
+        named: list[CatalogueEntry] = []
         for number, row in self._sets.items():
-            if number.lower().startswith(needle):
+            lowered = number.lower()
+            if lowered in (needle, f"{needle}-1"):
+                exact.append(_entry(number, row))
+            elif by_number and lowered.startswith(needle):
                 starts.append(_entry(number, row))
             elif row and needle in str(row[0]).lower():
-                contains.append(_entry(number, row))
-            if len(starts) >= limit:
-                break
-        return (starts + contains)[:limit]
+                entry = _entry(number, row)
+                if not entry.parts:
+                    named.append(entry)
+        named.sort(key=lambda entry: (-(entry.year or 0), entry.name))
+        return (exact + starts + named)[:limit]
 
     def remember(self, sets: list[LegoSet]) -> None:
         """Learn Brickset IDs from records already fetched for another reason."""
