@@ -1065,7 +1065,7 @@ var Rr=Object.defineProperty;var zr=Object.getOwnPropertyDescriptor;var p=(i,t,e
                     <ha-icon class="drop" icon="mdi:close"></ha-icon>
                   </button>`)}
             </div>`:c}
-      ${this.followNote?n`<p class="caveat" role="status">${this.followNote}</p>`:c}`}async follow(e,r){let s=e.trim();if(!(!s||this.following)){this.following=!0,this.followNote="";try{let a=await this.hass.callWS({...R("lego/themes/follow",this.entryId||this.dash?.entry_id||""),theme:s,follow:r});r&&(this.draft=""),a.complete||(this.followNote=`Following ${s}. Its sets arrive with the next check, as today's budget is spent.`),await this.loadThemes()}catch(a){this.followNote=E(a);return}finally{this.following=!1}this.dispatchEvent(new CustomEvent(ge,{bubbles:!0,composed:!0}))}}stack(e,r,s,a){let o=x=>`${r(x)*100}%`,l=e.at>=s-.01&&e.at<=a+.01,d=this.wide?kr.wide:kr.normal,h=e.extra?1:0,u=e.themes.length+h,g=tt(u,d).map(Math.round),v=tt(u,d*2),b=this.hass?.locale?.language,k=x=>new Date(x).toLocaleDateString(b,{day:"numeric",month:"short"}),P=e.points.slice(0,ds),f=r(e.at)<.25?"tip start":r(e.at)>.75?"tip end":"tip";return n`<button
+      ${this.followNote?n`<p class="caveat" role="status">${this.followNote}</p>`:c}`}async follow(e,r){let s=e.trim();if(!(!s||this.following)){this.following=!0,this.followNote="";try{let a=await this.hass.callWS({...R("lego/themes/follow",this.entryId||this.dash?.entry_id||""),theme:s,follow:r});r&&(this.draft=""),a.complete||(this.followNote=`Following ${s}. Its sets arrive with the next check, as today's budget is spent.`),await this.loadThemes()}catch(a){this.followNote=E(a);return}finally{this.following=!1}this.dispatchEvent(new CustomEvent(ge,{bubbles:!0,composed:!0}))}}stack(e,r,s,a){let o=x=>`${r(x)*100}%`,l=e.at>=s-.01&&e.at<=a+.01,d=this.wide?kr.wide:kr.normal,h=e.extra?1:0,u=e.themes.length+h,g=tt(u,d-1).map(Math.round),v=tt(u,d*2),b=this.hass?.locale?.language,k=x=>new Date(x).toLocaleDateString(b,{day:"numeric",month:"short"}),P=e.points.slice(0,ds),f=r(e.at)<.25?"tip start":r(e.at)>.75?"tip end":"tip";return n`<button
       class=${l?"stack":"stack out"}
       style="left:${o(e.at)};left:round(nearest, ${o(e.at)}, 1px)"
       aria-label=${e.points.map(x=>`${I(x)}, ${k(x.date)}`).join("; ")}
@@ -1280,7 +1280,12 @@ var Rr=Object.defineProperty;var zr=Object.getOwnPropertyDescriptor;var p=(i,t,e
            bricks are (the edge in scripts/generate_brand.py), and as fine: their
            edge is a fortieth of a brick across, so half a point is the nearest. */
         --brick-edge: color-mix(in srgb, var(--brick) 42%, black);
-        background: var(--brick);
+        /* The underside in shade, lying over the top of the brick below. */
+        background: linear-gradient(
+          to top,
+          color-mix(in srgb, var(--brick) 70%, black) 1px,
+          var(--brick) 1px
+        );
         border-radius: 1px;
         box-shadow: 0 0 0 0.5px var(--brick-edge);
         height: var(--b-h);

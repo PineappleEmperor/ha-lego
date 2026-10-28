@@ -274,7 +274,12 @@ export class LegoReleasesRow extends LegoRow {
            bricks are (the edge in scripts/generate_brand.py), and as fine: their
            edge is a fortieth of a brick across, so half a point is the nearest. */
         --brick-edge: color-mix(in srgb, var(--brick) 42%, black);
-        background: var(--brick);
+        /* The underside in shade, lying over the top of the brick below. */
+        background: linear-gradient(
+          to top,
+          color-mix(in srgb, var(--brick) 70%, black) 1px,
+          var(--brick) 1px
+        );
         border-radius: 1px;
         box-shadow: 0 0 0 0.5px var(--brick-edge);
         height: var(--b-h);
@@ -896,12 +901,13 @@ export class LegoReleasesRow extends LegoRow {
   ): TemplateResult {
     const pct = (months: number) => `${pos(months) * 100}%`;
     const live = stack.at >= from - 0.01 && stack.at <= to + 0.01;
-    // Stacked bricks sit a body's height apart, studs hidden under the brick
-    // above; hovered, they lift apart. The count takes the top place.
+    // Each brick sits a pixel down over the one below, so its dark bottom edge
+    // overlaps the lower one's top, studs hidden; hovered, they lift apart. The
+    // count takes the top place.
     const body = this.wide ? BRICK.wide : BRICK.normal;
     const top = stack.extra ? 1 : 0;
     const places = stack.themes.length + top;
-    const rest = stackOffsets(places, body).map(Math.round);
+    const rest = stackOffsets(places, body - 1).map(Math.round);
     const fan = stackOffsets(places, body * 2);
     const language = this.hass?.locale?.language;
     const day = (iso: string) =>
