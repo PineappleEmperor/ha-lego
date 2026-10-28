@@ -431,9 +431,9 @@ var Ar=Object.defineProperty;var Cr=Object.getOwnPropertyDescriptor;var p=(i,t,e
   /* A rubber stamp pressed onto the picture's corner: a double rule, spaced capitals,
      a tilt, and ink that missed in places. */
   .stamp {
-    /* Ink on paper in either theme: the photo behind is white, or the dark edge
-       of the picture box, and only a paper backing reads on both. */
-    --lego-stamp-ink: #9d3800;
+    /* Red ink on paper in either theme: the photo behind is white, or the dark
+       edge of the picture box, and only a paper backing reads on both. */
+    --lego-stamp-ink: #b3121b;
     --lego-stamp-paper: #fffaf3;
     background: color-mix(in srgb, var(--lego-stamp-paper) 92%, transparent);
     border: 0.18em solid currentColor;
@@ -457,10 +457,6 @@ var Ar=Object.defineProperty;var Cr=Object.getOwnPropertyDescriptor;var p=(i,t,e
     transform: rotate(-9deg);
     /* A light speckle: enough to read as ink, never enough to break a letter. */
     --lego-ink: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='90' height='30'><filter id='i'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.5 2.4'/></filter><rect width='90' height='30' filter='url(%23i)'/></svg>");
-  }
-  /* Red ink against a dark page, where the orange reads as brown. */
-  :host([dark]) .stamp {
-    --lego-stamp-ink: #b3121b;
   }
   /* Set photos come on white; inset and rounded they read as photos rather
      than as gaps in a dark card. */
