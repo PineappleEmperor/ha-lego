@@ -1320,6 +1320,20 @@ var Ve=Object.defineProperty;var Ye=Object.getOwnPropertyDescriptor;var g=(i,s,t
       .bar-row.on {
         background: var(--lego-ground);
       }
+      /* A narrow row gives each theme's name a line of its own above its bar, so
+         the name is not cut short to make room for the bar. */
+      @container (max-width: 480px) {
+        .bar-row {
+          gap: var(--ha-space-1, 4px);
+          grid-template-columns: minmax(0, 1fr);
+          padding-block: var(--ha-space-1, 4px);
+        }
+        .tip {
+          left: 0;
+          max-width: none;
+          right: 0;
+        }
+      }
       .label {
         align-items: center;
         display: flex;
