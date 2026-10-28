@@ -232,12 +232,10 @@ class SetCatalogue:
         return None if row is None else _entry(number, row)
 
     def search(self, query: str, limit: int = 10) -> list[CatalogueEntry]:
-        """Find sets by number, then by name, newest first.
-
-        A number is matched whole (10305 finds 10305-1) or, when the query holds a
-        digit, by its start; a word like "red" would otherwise match REDSOX-1 by
-        number. Parts packs answer to their number but not to a name search.
-        """
+        """Find sets by number, then by name, newest first."""
+        # A number is matched whole (10305 finds 10305-1) or, when the query holds a
+        # digit, by its start; a word like "red" would otherwise match REDSOX-1 by
+        # number. Parts packs answer to their number but not to a name search.
         needle = query.strip().lower()
         if not needle:
             return []
