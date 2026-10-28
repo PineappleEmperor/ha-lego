@@ -366,6 +366,10 @@ export abstract class LegoRow extends LitElement {
           )}`,
           true,
         )}
+        ${
+          // Pressed onto the picture, outside its link so it is still read out.
+          item.wanted ? html`<span class="stamp">Wanted</span>` : nothing
+        }
         <div class="meta">
           ${this.linked(
             item,
@@ -394,18 +398,13 @@ export abstract class LegoRow extends LitElement {
             >${whenLabel(item, now, (iso) => this.date(iso), focus)}</span
           >
           <div class="foot">
-            <span
-              class=${
-                item.owned ? "state own" : item.wanted ? "state want" : "state"
-              }
+            <span class=${item.owned ? "state own" : "state"}
               >${
                 item.owned
                   ? item.qty_owned > 1
                     ? `Owned ×${item.qty_owned}`
                     : "Owned"
-                  : item.wanted
-                    ? "Wanted"
-                    : ""
+                  : ""
               }</span
             >
             <button
