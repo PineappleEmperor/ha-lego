@@ -451,16 +451,20 @@ export abstract class LegoRow extends LitElement {
   /** The bricks standing in for cards that are not there, and a line on why. */
   protected filler(hint: string): TemplateResult {
     return html`<div class="filler">
-      <lego-bricks></lego-bricks>
-      <span class="hint">${hint}</span>
+      <div class="fillcard">
+        <lego-bricks></lego-bricks>
+        <span class="hint">${hint}</span>
+      </div>
     </div>`;
   }
 
   /** The bricks after a short row of cards, in whatever room the cards leave. */
   protected tail(hint = ""): TemplateResult {
     return html`<div class="filler tail">
-      <lego-bricks></lego-bricks>
-      ${hint ? html`<span class="hint">${hint}</span>` : nothing}
+      <div class="fillcard">
+        <lego-bricks></lego-bricks>
+        ${hint ? html`<span class="hint">${hint}</span>` : nothing}
+      </div>
     </div>`;
   }
 }

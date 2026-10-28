@@ -622,19 +622,37 @@ var As=Object.defineProperty;var Cs=Object.getOwnPropertyDescriptor;var p=(i,t,e
      bricks take the whole width, which lego-bricks fills, and the hint sits below. */
   .filler {
     display: flex;
+    min-height: 236px;
+  }
+  /* The bricks sit in a card like the sets beside them, open at the right edge, as
+     if the row ran on past it. */
+  .fillcard {
+    background: var(--lego-surface);
+    border: var(--lego-line) solid var(--lego-outline);
+    border-radius: var(--lego-radius) 0 0 var(--lego-radius);
+    border-right: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex: 1;
     flex-direction: column;
     gap: var(--ha-space-4, 16px);
     justify-content: center;
-    min-height: 236px;
-    padding: 0 var(--ha-space-2, 8px);
+    min-width: 0;
+    padding: var(--ha-space-4, 16px) var(--ha-space-3, 12px);
   }
   /* After a short row of cards, the room the cards leave; none once they fill it. */
   .carousel .tail {
+    align-self: stretch;
     container-type: inline-size;
     flex: 1 1 0;
     min-height: auto;
     min-width: 0;
-    padding: 0 var(--ha-space-3, 12px);
+  }
+  /* Too little room for any bricks, so not even a sliver of empty card. */
+  @container (max-width: 56px) {
+    .tail .fillcard {
+      display: none;
+    }
   }
   @container (max-width: 240px) {
     .tail .hint {
@@ -750,11 +768,15 @@ var As=Object.defineProperty;var Cs=Object.getOwnPropertyDescriptor;var p=(i,t,e
         </div>
       </article>
     `}filler(e){return n`<div class="filler">
-      <lego-bricks></lego-bricks>
-      <span class="hint">${e}</span>
+      <div class="fillcard">
+        <lego-bricks></lego-bricks>
+        <span class="hint">${e}</span>
+      </div>
     </div>`}tail(e=""){return n`<div class="filler tail">
-      <lego-bricks></lego-bricks>
-      ${e?n`<span class="hint">${e}</span>`:c}
+      <div class="fillcard">
+        <lego-bricks></lego-bricks>
+        ${e?n`<span class="hint">${e}</span>`:c}
+      </div>
     </div>`}};b.styles=[ee,Me,Pe,te,ys],p([$({attribute:!1})],b.prototype,"hass",2),p([$({attribute:!1})],b.prototype,"dash",2),p([$({attribute:!1})],b.prototype,"entryId",2),p([$({type:Boolean,reflect:!0})],b.prototype,"collapsed",2),p([$({type:Boolean})],b.prototype,"handle",2),p([$({type:Boolean,reflect:!0})],b.prototype,"bare",2),p([$({type:Boolean,reflect:!0})],b.prototype,"dark",2),p([$({attribute:!1})],b.prototype,"pictureSize",2),p([m()],b.prototype,"pending",2),p([m()],b.prototype,"writeError",2);var T=class extends b{constructor(){super(...arguments);this.row="collection";this.refreshing=!1;this.refreshError="";this.setsOpen=!1;this.ownedError="";this.query="";this.results=[];this.loadingDetails=!1;this.detailsError=""}willUpdate(e){super.willUpdate(e),e.has("dash")&&(this.pricesPick=void 0),e.has("dash")&&this.dash!==this.ownedFor&&(ps(this.ownedFor,this.dash)||(this.owned=void 0),De(this.query)&&this.search(this.query))}updated(){this.setsOpen&&!this.collapsed&&this.dash!==this.ownedFor&&this.loadOwned()}async loadOwned(){let e=this.dash;if(!(!e||this.ownedFor===e)){this.ownedFor=e;try{let s=await this.hass.callWS({...R("lego/collection",e.entry_id),filter:"owned"});this.ownedFor===e&&(this.owned=s.sets,this.ownedError="")}catch(s){this.ownedFor===e&&(this.ownedError=E(s))}}}async search(e){if(this.query=e,!De(e)){this.results=[];return}try{let s=await this.hass.callWS({...R("lego/search",this.dash?.entry_id??""),query:e,limit:24});this.query===e&&(this.results=s.sets)}catch{this.results=[]}}showPrices(){return this.pricesPick??this.dash?.collection_prices??!0}detailsBar(){let e=hs(this.results);if(!e.length&&!this.detailsError)return c;let s=this.dash?.quota,r=!!this.dash?.can_change&&!!s&&s.remaining>0;return n`<div class="details" role="status">
       <span class="muted">
         ${this.detailsError||`Dates and prices for ${e.length} of these aren't loaded from Brickset yet.`}
