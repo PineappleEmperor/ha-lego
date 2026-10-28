@@ -56,33 +56,35 @@ describe("theme colours", () => {
 });
 
 describe("release filters", () => {
-  it("opens the combined row on Everything, three months either side", () => {
+  it("opens the combined row on your themes, three months either side", () => {
     expect(releaseFilter("releases", dash({}))).toEqual({
-      scope: "all",
+      scope: "mine",
       themes: [],
       span: "around",
     });
+  });
+
+  it("opens on Everything only when no theme is followed", () => {
+    expect(releaseFilter("releases", dash({ followed: [] })).scope).toBe("all");
   });
 
   it("names the year span by the year, and orders the spans past to future", () => {
     expect(spanLabel("year", new Date(2026, 9, 28))).toBe("2026");
     expect(spanLabel("year", new Date(2027, 0, 2))).toBe("2027");
     expect(ROW_SPANS.releases.map((span) => spanLabel(span))).toEqual([
-      "Past month",
       "Past 3 months",
       "Now",
       String(new Date().getFullYear()),
-      "Next 3 months",
-      "Upcoming",
+      "Unreleased",
     ]);
   });
 
   it("opens on the span picked last time", () => {
     const filter = releaseFilter(
       "releases",
-      dash({ release_filters: { releases: { span: "next3" } } }),
+      dash({ release_filters: { releases: { span: "coming" } } }),
     );
-    expect(filter.span).toBe("next3");
+    expect(filter.span).toBe("coming");
   });
 
   it("falls back to the followed themes when releases are not followed", () => {
@@ -116,9 +118,9 @@ describe("release filters", () => {
     expect(releaseFilter("upcoming", dash({}))).toEqual({
       scope: "all",
       themes: [],
-      span: "next1",
+      span: "coming",
     });
-    expect(releaseFilter("recent", dash({})).span).toBe("past1");
+    expect(releaseFilter("recent", dash({})).span).toBe("past3");
   });
 
   it("returns to every theme once all or none are picked", () => {

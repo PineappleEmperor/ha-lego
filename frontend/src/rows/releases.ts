@@ -380,7 +380,14 @@ export class LegoReleasesRow extends LegoRow {
   }
 
   protected override actions(): TemplateResult | typeof nothing {
-    if (!this.filter || this.status() === null) return nothing;
+    // A row with one span has nothing to pick.
+    if (
+      !this.filter ||
+      this.status() === null ||
+      ROW_SPANS[this.kind].length < 2
+    ) {
+      return nothing;
+    }
     return html`<div class="pills" role="group" aria-label="Time span">
       ${ROW_SPANS[this.kind].map(
         (span: Span) =>
@@ -453,7 +460,7 @@ export class LegoReleasesRow extends LegoRow {
       @click=${() => {
         if (!allOn) {
           this.followNote =
-            "Everything needs Follow releases across all themes, in the integration's options.";
+            "Everything needs Follow releases across all themes, in the integration's options. It reads every set of the year once a day, about 3 Brickset calls, where your own themes alone take fewer.";
           return;
         }
         this.pick({ scope: "all", themes: [] });
@@ -471,7 +478,8 @@ export class LegoReleasesRow extends LegoRow {
         if (mine) {
           this.themesOpen = !this.themesOpen;
         } else {
-          this.themesOpen = true;
+          // Picked folded, so the row stays short; pressing again opens it.
+          this.themesOpen = false;
           this.pick({ scope: "mine", themes: [] });
         }
       }}
@@ -825,8 +833,7 @@ export class LegoReleasesRow extends LegoRow {
     const sets = this.data?.sets;
     if (!sets) return html`<p class="muted">Loading…</p>`;
     if (!sets.length) {
-      const ahead =
-        this.filter && ["next1", "next3", "coming"].includes(this.filter.span);
+      const ahead = this.filter && this.filter.span === "coming";
       return this.filler(
         ahead
           ? "Nothing due in this span yet."

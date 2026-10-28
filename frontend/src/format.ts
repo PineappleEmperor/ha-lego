@@ -322,13 +322,14 @@ export const SPAN_LABELS: Record<Span, string> = {
   past1: "Past month",
   next1: "Next month",
   next3: "Next 3 months",
-  coming: "Upcoming",
+  coming: "Unreleased",
 };
 
 /** What a span covers, for the spans whose short name does not say. */
 export const SPAN_HINTS: Partial<Record<Span, string>> = {
   around: "Three months either side of today",
   year: "January to December",
+  coming: "Every set announced and not yet out, with a date or without",
 };
 
 /** A span's name on its pill: the year span is named by the year itself. */
@@ -336,12 +337,16 @@ export function spanLabel(span: Span, today = new Date()): string {
   return span === "year" ? String(today.getFullYear()) : SPAN_LABELS[span];
 }
 
-/** The spans each release row offers, in time order, the past first. */
+/**
+ * The spans each release row offers, in time order, the past first. Brickset
+ * dates little more than a few months ahead, so the future is one span, and the
+ * fixed rows have one span each.
+ */
 export const ROW_SPANS: Record<ReleaseRow, Span[]> = {
-  releases: ["past1", "past3", "around", "year", "next3", "coming"],
-  themes: ["past1", "past3", "around", "year", "next3", "coming"],
-  recent: ["past1", "past3"],
-  upcoming: ["next1", "next3", "coming"],
+  releases: ["past3", "around", "year", "coming"],
+  themes: ["past3", "around", "year", "coming"],
+  recent: ["past3"],
+  upcoming: ["coming"],
 };
 
 /** A release row's own scope: the fixed rows cover every theme or yours. */
@@ -370,7 +375,10 @@ export function releaseFilter(
   const saved: ReleaseFilter = dash.release_filters?.[row] ?? {};
   const allOn = dash.release_status.all !== null;
   const fixed = ROW_SCOPE[row];
-  let scope: Scope = fixed ?? saved.scope ?? (allOn ? "all" : "mine");
+  // Your own themes first: every theme costs a read of the whole year, so it is
+  // the one to pick, not the one to be given.
+  const fallback: Scope = dash.followed.length || !allOn ? "mine" : "all";
+  let scope: Scope = fixed ?? saved.scope ?? fallback;
   if (scope === "all" && !allOn) scope = "mine";
   const followed = new Set(dash.followed.map((t) => t.toLowerCase()));
   const themes =
@@ -382,9 +390,9 @@ export function releaseFilter(
     saved.span && spans.includes(saved.span)
       ? saved.span
       : row === "upcoming"
-        ? "next1"
+        ? "coming"
         : row === "recent"
-          ? "past1"
+          ? "past3"
           : "around";
   return { scope, themes, span };
 }

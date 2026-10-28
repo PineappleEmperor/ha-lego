@@ -127,12 +127,13 @@ of rows, each with an icon, a title and a fold arrow:
   would go over the daily budget. **Sets** below it unfolds the full grid, and its
   search box covers both your own sets and the whole catalogue.
 - **New releases** shows new sets as cards with their prices, above a timeline from
-  January to next March with a dot per set. Pick **Everything** or **My themes**;
-  pressing My themes again shows or hides a chip for each theme you follow, so you
-  can narrow it to some of them. Everything needs **Follow releases across all
-  themes** in options. The span runs from **Past month** to **Upcoming**, opening on
-  **Now**, three months either side of today, with the current year beside it.
-  Whatever you pick is where the row opens next time. **Follow a theme** adds one
+  January to next March with a dot per set. It opens on **My themes**; pressing it
+  again shows or hides a chip for each theme you follow, so you can narrow it to
+  some of them. **Everything** shows every theme, and needs **Follow releases across
+  all themes** in options, which reads the whole year at about 3 calls a day. The
+  span is **Past 3 months**, **Now** (three months either side of today, where it
+  opens), the current year, or **Unreleased**: every set announced and not yet out,
+  dated or not. Whatever you pick is where the row opens next time. **Follow a theme** adds one
   from a list of Brickset's themes and shows what it costs first: one call, or nothing
   when every theme is read anyway. A theme's × stops following it. Hovering a stack of
   dots on the timeline, or tabbing to it, spreads them out and names their sets; on a
