@@ -82,6 +82,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: LegoConfigEntry) -> bool:
     """Set up a Brickset account from a config entry."""
+    # Before anything can fail, so an account that cannot load still has the panel
+    # to say why.
+    await async_refresh_panel(hass)
     quota = QuotaManager(
         entry.options.get(CONF_DAILY_CALL_BUDGET, DEFAULT_DAILY_CALL_BUDGET)
     )

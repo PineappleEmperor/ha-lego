@@ -433,7 +433,8 @@ calls between the budget and Brickset's 100 are held back as a reserve, never sp
 the regular schedule. It lets an account with nothing saved start up, and while the
 budget is spent it refreshes your collection every 6 hours, which for most collections
 is 8 calls a day. Only once all 100 are spent can an account with nothing saved fail to
-start, and setup then retries. Raising the budget takes effect as soon as you save it. To tell
+start, and setup then retries. An account that failed to start stays in the panel's
+account menu, marked unavailable, and opening it shows the reason. Raising the budget takes effect as soon as you save it. To tell
 how old that data is, `sensor.lego_*_last_synced` holds the time of the last sync,
 and the panel shows it under **My collection** ("Updated 3 hours ago") along with when
 updates resume. `sensor.lego_*_brickset_calls_today` shows usage, budget and

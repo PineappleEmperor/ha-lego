@@ -356,6 +356,46 @@ async def test_panel_goes_when_the_last_account_unloads(
     assert PANEL_URL_PATH in hass.data[frontend.DATA_PANELS]
 
 
+async def test_an_account_that_failed_to_load_is_listed_with_why(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """The picker still offers it, so the panel can say what is wrong."""
+    await setup_integration(hass, mock_config_entry)
+    brickset.usage_today = 100
+    second = await _second_account(hass)
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "lego/accounts"})
+    accounts = (await client.receive_json())["result"]["accounts"]
+
+    assert [(item["name"], item["loaded"]) for item in accounts] == [
+        ("brickfan", True),
+        ("otherfan", False),
+    ]
+    assert accounts[0]["reason"] is None
+    assert "all 100 of today's are spent" in accounts[1]["reason"]
+    # And it can still be made the account the panel opens on.
+    await client.send_json_auto_id(
+        {"type": "lego/account/set", "config_entry_id": second.entry_id}
+    )
+    assert (await client.receive_json())["success"]
+
+
+async def test_the_panel_stays_for_a_lone_account_that_failed_to_load(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """With nothing else loaded, the sidebar entry is where the reason shows."""
+    brickset.usage_today = 100
+    await setup_integration(hass, mock_config_entry)
+
+    assert PANEL_URL_PATH in hass.data[frontend.DATA_PANELS]
+
+
 @pytest.mark.usefixtures("brickset")
 async def test_panel_stays_while_another_account_is_loaded(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry

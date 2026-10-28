@@ -1,10 +1,11 @@
 """Websocket commands, so a dashboard can search without spending quota."""
 
+from collections.abc import Sequence
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.components import websocket_api
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 import probatio
 
@@ -21,6 +22,7 @@ from .const import (
 from .exceptions import BricksetError, BricksetQuotaError
 from .images import with_pictures
 from .panel import (
+    LISTED_STATES,
     PANEL_STORE,
     PANEL_VERSION,
     dashboard_payload,
@@ -30,6 +32,14 @@ from .panel import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# What the panel says of an account that is not loaded when its setup left no reason.
+UNAVAILABLE_STATES = {
+    ConfigEntryState.SETUP_IN_PROGRESS: "Starting up.",
+    ConfigEntryState.SETUP_RETRY: "Could not start, and is trying again.",
+    ConfigEntryState.SETUP_ERROR: "Could not start. Check Settings, Devices & services.",
+    ConfigEntryState.MIGRATION_ERROR: "Needs a newer version of the integration.",
+}
 
 if TYPE_CHECKING:
     from homeassistant.auth.models import User
@@ -237,16 +247,32 @@ def websocket_accounts(
     msg: dict[str, Any],
 ) -> None:
     """List the accounts this user may see, and which one opens by default."""
-    visible = _visible_entries(hass, connection)
+    # An account that failed to load is listed with why, rather than vanishing.
+    listed = _listed_entries(hass, connection)
     connection.send_result(
         msg["id"],
         {
             "accounts": [
-                {"entry_id": entry.entry_id, "name": entry.title} for entry in visible
+                {
+                    "entry_id": entry.entry_id,
+                    "name": entry.title,
+                    "loaded": entry.state is ConfigEntryState.LOADED,
+                    "reason": _unavailable_reason(entry),
+                }
+                for entry in listed
             ],
-            "selected": _selected(hass, connection, visible),
+            "selected": _selected(hass, connection, listed),
         },
     )
+
+
+def _unavailable_reason(entry: ConfigEntry) -> str | None:
+    """Say why an account is not loaded, or None while it is."""
+    if entry.state is ConfigEntryState.LOADED:
+        return None
+    # Home Assistant keeps the message a failed setup raised; a state alone is all
+    # there is for the others.
+    return entry.reason or UNAVAILABLE_STATES.get(entry.state, entry.state.value)
 
 
 @websocket_api.websocket_command(
@@ -271,7 +297,7 @@ async def websocket_set_account(
         return
 
     entry_id = msg["config_entry_id"]
-    if entry_id not in {entry.entry_id for entry in _visible_entries(hass, connection)}:
+    if entry_id not in {entry.entry_id for entry in _listed_entries(hass, connection)}:
         connection.send_error(
             msg["id"], websocket_api.ERR_NOT_FOUND, "Unknown LEGO entry"
         )
@@ -430,10 +456,22 @@ def _visible_entries(
     ]
 
 
+def _listed_entries(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection
+) -> list[ConfigEntry]:
+    """Return every LEGO entry this user may see that is loaded or failed to load."""
+    # One unloaded or disabled on purpose is left out, as before.
+    return [
+        item
+        for item in hass.config_entries.async_entries(DOMAIN)
+        if item.state in LISTED_STATES and can_view(item, connection.user)
+    ]
+
+
 def _selected(
     hass: HomeAssistant,
     connection: websocket_api.ActiveConnection,
-    visible: list[LegoConfigEntry],
+    visible: Sequence[ConfigEntry],
 ) -> str | None:
     """Return the account to show: this user's default, else one of their own."""
     if not visible:

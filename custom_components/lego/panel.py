@@ -45,6 +45,17 @@ if TYPE_CHECKING:
 QUARTER_DAYS = 91
 
 REGISTERED: HassKey[bool] = HassKey(f"{DOMAIN}_panel_registered")
+# The accounts the panel lists: loaded, or failed to load and saying why. One
+# unloaded or disabled on purpose is not among them.
+LISTED_STATES = frozenset(
+    {
+        ConfigEntryState.LOADED,
+        ConfigEntryState.SETUP_IN_PROGRESS,
+        ConfigEntryState.SETUP_RETRY,
+        ConfigEntryState.SETUP_ERROR,
+        ConfigEntryState.MIGRATION_ERROR,
+    }
+)
 
 
 class PanelStore:
@@ -232,11 +243,12 @@ async def async_setup_panel_static(hass: HomeAssistant) -> None:
 def panel_wanted(hass: HomeAssistant) -> bool:
     """Whether any set-up config entry asks for the sidebar panel."""
     # An entry being unloaded or disabled still exists, so counting every entry
-    # left the panel in the sidebar with nothing behind it.
+    # left the panel in the sidebar with nothing behind it. One that failed to load
+    # keeps it, since the panel says why.
     return any(
         entry.options.get(CONF_PANEL, DEFAULT_PANEL)
         for entry in hass.config_entries.async_entries(DOMAIN)
-        if entry.state in (ConfigEntryState.LOADED, ConfigEntryState.SETUP_IN_PROGRESS)
+        if entry.state in LISTED_STATES
     )
 
 

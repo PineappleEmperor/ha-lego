@@ -72,6 +72,9 @@ export interface Quota {
 export interface Account {
   entry_id: string;
   name: string;
+  /** False when the account failed to load; `reason` then says why. */
+  loaded: boolean;
+  reason: string | null;
 }
 
 export interface AccountList {
