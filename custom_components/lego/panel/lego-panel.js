@@ -428,14 +428,15 @@ var Rr=Object.defineProperty;var zr=Object.getOwnPropertyDescriptor;var p=(i,t,e
     overflow: hidden;
     position: relative;
   }
-  /* A rubber stamp pressed onto the picture's corner: a double rule, spaced capitals,
-     a tilt, and ink that missed in places. */
+  /* A rubber stamp pressed onto the picture's corner: a ruled border, spaced
+     capitals and a tilt. */
   .stamp {
     /* Red ink on paper in either theme: the photo behind is white, or the dark
-       edge of the picture box, and only a paper backing reads on both. */
+       edge of the picture box, and only a paper backing reads on both. Paper and
+       ink are both solid, so nothing in the photo shows through either. */
     --lego-stamp-ink: #b3121b;
     --lego-stamp-paper: #fffaf3;
-    background: color-mix(in srgb, var(--lego-stamp-paper) 92%, transparent);
+    background: var(--lego-stamp-paper);
     border: 0.18em solid currentColor;
     border-radius: 0.35em;
     color: var(--lego-stamp-ink);
@@ -443,11 +444,6 @@ var Rr=Object.defineProperty;var zr=Object.getOwnPropertyDescriptor;var p=(i,t,e
     font-weight: var(--ha-font-weight-bold, 700);
     letter-spacing: 0.16em;
     line-height: 1;
-    -webkit-mask-image: var(--lego-ink);
-    mask-image: var(--lego-ink);
-    mask-size: 9em 3em;
-    outline: 0.08em solid currentColor;
-    outline-offset: 0.18em;
     padding: 0.35em 0.45em 0.3em 0.6em;
     pointer-events: none;
     position: absolute;
@@ -455,8 +451,6 @@ var Rr=Object.defineProperty;var zr=Object.getOwnPropertyDescriptor;var p=(i,t,e
     text-transform: uppercase;
     top: calc(var(--ha-space-2, 8px) + 1.1em);
     transform: rotate(-9deg);
-    /* A light speckle: enough to read as ink, never enough to break a letter. */
-    --lego-ink: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='90' height='30'><filter id='i'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.5 2.4'/></filter><rect width='90' height='30' filter='url(%23i)'/></svg>");
   }
   /* Set photos come on white; inset and rounded they read as photos rather
      than as gaps in a dark card. */
