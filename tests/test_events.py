@@ -62,6 +62,8 @@ async def test_new_set_event(
     assert data["retirement_date"] == "2099-12-31"
     assert data["retail_price"] == 99.99
     assert data["released"] is True
+    assert data["image_url"] == "https://images.brickset.com/sets/images/42222-1.jpg"
+    assert data["brickset_url"] == "https://brickset.com/sets/42222-1"
     assert data["region"] == "UK"
 
 
