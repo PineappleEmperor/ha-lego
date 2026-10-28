@@ -81,8 +81,8 @@ async def test_spent_budget_keeps_cached_data_with_its_age(
     """A spent budget keeps the last sync's data, and Last synced shows its age."""
     freezer.move_to("2026-08-05 10:00:00+00:00")
     await setup_integration(hass, mock_config_entry)
-    owned = "sensor.brickset_brickfan_sets_owned"
-    synced = "sensor.brickset_brickfan_last_synced"
+    owned = "sensor.lego_brickfan_sets_owned"
+    synced = "sensor.lego_brickfan_last_synced"
     assert hass.states.get(synced).state == "2026-08-05T10:00:00+00:00"
 
     # Pretend the key has been hammered by something else today.
@@ -125,7 +125,7 @@ async def test_unchanged_poll_still_moves_last_synced(
     await hass.async_block_till_done()
 
     assert len(brickset.get_sets_calls) > calls
-    state = hass.states.get("sensor.brickset_brickfan_last_synced")
+    state = hass.states.get("sensor.lego_brickfan_last_synced")
     assert state.state == "2026-08-05T11:00:00+00:00"
 
 

@@ -10,9 +10,9 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from .conftest import BricksetServer, make_set, setup_integration
 
-RETIREMENTS = "calendar.brickset_brickfan_set_retirements"
-RELEASES = "calendar.brickset_brickfan_set_releases"
-ANNIVERSARIES = "calendar.brickset_brickfan_set_anniversaries"
+RETIREMENTS = "calendar.lego_brickfan_set_retirements"
+RELEASES = "calendar.lego_brickfan_set_releases"
+ANNIVERSARIES = "calendar.lego_brickfan_set_anniversaries"
 
 
 async def _events(

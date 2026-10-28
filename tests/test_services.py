@@ -400,7 +400,7 @@ async def test_unticking_owned_removes_the_set(
 ) -> None:
     """The panel's toggle in the off direction: sent as own=0, and dropped locally."""
     await setup_integration(hass, mock_config_entry)
-    assert hass.states.get("sensor.brickset_brickfan_sets_owned").state == "4"
+    assert hass.states.get("sensor.lego_brickfan_sets_owned").state == "4"
 
     await hass.services.async_call(
         DOMAIN,
@@ -417,7 +417,7 @@ async def test_unticking_owned_removes_the_set(
     assert brickset.set_collection_calls == [{"setID": "2", "params": {"own": 0}}]
     data = mock_config_entry.runtime_data.collection.data
     assert "10305-1" not in {lego_set.number for lego_set in data.owned}
-    assert hass.states.get("sensor.brickset_brickfan_sets_owned").state == "3"
+    assert hass.states.get("sensor.lego_brickfan_sets_owned").state == "3"
 
 
 async def test_unticking_wanted_removes_the_set(
@@ -440,7 +440,7 @@ async def test_unticking_wanted_removes_the_set(
 
     assert brickset.set_collection_calls == [{"setID": "4", "params": {"want": 0}}]
     assert mock_config_entry.runtime_data.collection.data.wanted == []
-    assert hass.states.get("sensor.brickset_brickfan_sets_wanted").state == "0"
+    assert hass.states.get("sensor.lego_brickfan_sets_wanted").state == "0"
 
 
 @pytest.mark.usefixtures("brickset")

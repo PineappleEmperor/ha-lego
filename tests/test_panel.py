@@ -442,8 +442,8 @@ async def test_dashboard_returns_the_home_view(
     themes = [row["theme"] for row in result["by_theme"]]
     assert themes[0] == "Icons"
     assert sum(row["sets"] for row in result["by_theme"]) == 4
-    assert result["history"]["value"] == "sensor.brickset_brickfan_collection_value"
-    assert result["history"]["pieces"] == "sensor.brickset_brickfan_pieces_owned"
+    assert result["history"]["value"] == "sensor.lego_brickfan_collection_value"
+    assert result["history"]["pieces"] == "sensor.lego_brickfan_pieces_owned"
     assert result["wishlist"][0]["retail_price"] is not None
     assert len(brickset.get_sets_calls) == before
     # The panel writes through actions that require the entry id, so the payload

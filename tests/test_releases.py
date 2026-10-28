@@ -370,7 +370,7 @@ async def test_this_years_count_leaves_out_last_year_in_january(
         hass, _with_releases(mock_config_entry, **{CONF_THEMES: ["Technic"]})
     )
 
-    latest = hass.states.get("sensor.brickset_brickfan_latest_technic_set")
+    latest = hass.states.get("sensor.lego_brickfan_latest_technic_set")
     assert latest.attributes["sets_this_year"] == 1
 
 

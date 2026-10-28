@@ -15,7 +15,7 @@ from pytest_homeassistant_custom_component.common import (
 
 from .conftest import BricksetServer, make_set, setup_integration
 
-PREFIX = "sensor.brickset_brickfan"
+PREFIX = "sensor.lego_brickfan"
 
 
 @pytest.mark.usefixtures("brickset")

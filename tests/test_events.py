@@ -248,7 +248,7 @@ async def test_next_year_joins_once_brickset_files_a_set_under_it(
         "42199-1",
     ]
     assert [event.data["set_number"] for event in events] == ["42250-1"]
-    latest = hass.states.get("sensor.brickset_brickfan_latest_technic_set")
+    latest = hass.states.get("sensor.lego_brickfan_latest_technic_set")
     assert latest.attributes["set_number"] == "42250-1"
 
 
