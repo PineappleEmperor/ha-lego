@@ -3,7 +3,7 @@ import { html, type TemplateResult } from "lit";
 import { LegoRow, define } from "../base";
 import { count } from "../format";
 
-const HINT = "Mark sets as wanted on Brickset and they land here.";
+const HINT = "Hold + on any set to add it to your wishlist.";
 
 /** The wanted sets, soonest to retire first, with the bricks filling the rest. */
 export class LegoWishlistRow extends LegoRow {

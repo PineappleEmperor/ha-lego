@@ -590,6 +590,75 @@ export const CARDS = css`
     cursor: progress;
     opacity: 0.5;
   }
+  /* What a hold does, shown on hover: the native title tooltip is slow, and
+     some browsers never show one at all. */
+  .act::after {
+    background: var(--lego-surface);
+    border: var(--lego-line) solid var(--lego-outline);
+    border-radius: var(--ha-border-radius-sm, 4px);
+    bottom: calc(100% - var(--ha-space-1, 4px));
+    color: var(--lego-text);
+    content: attr(data-hint);
+    font-size: var(--ha-font-size-s, 12px);
+    max-width: calc(var(--lego-card-w) - var(--ha-space-6, 24px));
+    opacity: 0;
+    padding: var(--ha-space-1, 4px) var(--ha-space-2, 8px);
+    pointer-events: none;
+    position: absolute;
+    right: var(--ha-space-1, 4px);
+    text-align: end;
+    transition: opacity var(--ha-animation-duration-fast, 150ms);
+    width: max-content;
+  }
+  @media (hover: hover) {
+    .act:hover::after {
+      opacity: 1;
+      transition-delay: 400ms;
+    }
+  }
+  /* The picture and the name can be held too, so neither selects nor opens a
+     menu on a long press. */
+  .pic,
+  .name {
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+  /* Held, the ring inks in red over the half second that makes it a hold. */
+  .act.holding::before {
+    border-color: #b3121b;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .act.holding::before {
+      animation: inking 500ms linear forwards;
+    }
+  }
+  @keyframes inking {
+    from {
+      box-shadow: 0 0 0 0 #b3121b;
+    }
+    to {
+      box-shadow: 0 0 0 3px #b3121b;
+    }
+  }
+  /* A stamp a hold has just put there comes down onto the picture. */
+  @media (prefers-reduced-motion: no-preference) {
+    .stamp.landed {
+      animation: land var(--ha-animation-duration-slow, 350ms) ease-in;
+    }
+  }
+  @keyframes land {
+    from {
+      opacity: 0;
+      transform: rotate(-9deg) scale(1.6);
+    }
+    70% {
+      opacity: 1;
+      transform: rotate(-9deg) scale(0.94);
+    }
+    to {
+      transform: rotate(-9deg) scale(1);
+    }
+  }
   .act:focus-visible {
     outline-offset: calc(-1 * var(--ha-space-1, 4px));
   }

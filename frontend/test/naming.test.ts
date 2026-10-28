@@ -14,6 +14,7 @@ import {
   syncedAgo,
   whenLabel,
   whenTone,
+  wishlistCall,
 } from "../src/format";
 
 describe("set naming", () => {
@@ -40,6 +41,20 @@ describe("set naming", () => {
 
   it("keeps a name that merely contains braces", () => {
     expect(isNamed({ name: "Set {special}" })).toBe(true);
+  });
+});
+
+describe("wishlist call", () => {
+  it("flips wanted, leaving ownership alone", () => {
+    const on = wishlistCall("abc123", { set_number: "10328-1", wanted: false });
+    expect(on).toEqual({
+      device_id: "abc123",
+      set_number: "10328-1",
+      wanted: true,
+    });
+    expect(
+      wishlistCall("abc123", { set_number: "10328-1", wanted: true }).wanted,
+    ).toBe(false);
   });
 });
 

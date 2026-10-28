@@ -84,6 +84,18 @@ export function ownershipCall(
   };
 }
 
+/** The set_collection call that puts a set on the wishlist, or takes it off. */
+export function wishlistCall(
+  deviceId: string,
+  item: Pick<LegoSet, "set_number" | "wanted">,
+): Record<string, unknown> {
+  return {
+    device_id: deviceId,
+    set_number: item.set_number,
+    wanted: !item.wanted,
+  };
+}
+
 /** The data a refresh_collection call needs, exported for the same reason. */
 export function refreshCall(deviceId: string): Record<string, unknown> {
   return { device_id: deviceId };

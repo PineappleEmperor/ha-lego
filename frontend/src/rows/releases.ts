@@ -8,7 +8,7 @@ import {
 import { property, state } from "lit/decorators.js";
 
 import { loadReleases } from "../api";
-import { CHANGED, FILTER, LegoRow, define } from "../base";
+import { CHANGED, FILTER, HOLD_MS, LegoRow, define } from "../base";
 import {
   ROW_SPANS,
   accountCall,
@@ -42,8 +42,6 @@ import type {
 const FILTERED: ReleaseRow[] = ["releases", "themes"];
 /** Sets a timeline stack's card names before it counts the rest. */
 const TIP_SETS = 6;
-/** How long a press on a theme chip lasts before the chips start to wiggle. */
-const HOLD_MS = 500;
 /** The row width from which the timeline draws its bigger bricks. */
 const WIDE_ROW = 1100;
 /** A brick's body height, and how far apart stacks' centres sit, normal and wide. */
