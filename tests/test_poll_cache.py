@@ -116,10 +116,9 @@ async def test_a_restart_on_a_spent_budget_shows_the_saved_polls(
     assert hass.states.get("sensor.lego_brickfan_sets_owned").state != "unavailable"
 
 
-@pytest.mark.usefixtures("spring")
+@pytest.mark.usefixtures("spring", "brickset")
 async def test_a_write_from_the_panel_is_saved_too(
     hass: HomeAssistant,
-    brickset: BricksetServer,
     mock_config_entry: MockConfigEntry,
 ) -> None:
     """A set marked between polls is still marked after a restart."""
