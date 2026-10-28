@@ -331,6 +331,8 @@ export abstract class LegoRow extends LitElement {
     showPrice = true,
   ): TemplateResult {
     const now = new Date();
+    const until = item.available_until ? new Date(item.available_until) : null;
+    const retired = until && until < now ? until : null;
     const picture = pictureSources(item, this.size());
     const image = picture.src ?? picture.fallback;
     const price = showPrice
@@ -383,6 +385,15 @@ export abstract class LegoRow extends LitElement {
         ${
           // Pressed onto the picture, outside its link so it is still read out.
           item.wanted ? html`<span class="stamp">Wanted</span>` : nothing
+        }
+        ${
+          // A wanted set gone from sale is still wanted, so it says both.
+          item.wanted && retired
+            ? html`<span class="seal"
+                ><span>Retired</span
+                ><span class="year">${retired.getFullYear()}</span></span
+              >`
+            : nothing
         }
         <div class="meta">
           ${this.linked(

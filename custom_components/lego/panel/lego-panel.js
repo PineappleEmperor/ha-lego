@@ -430,12 +430,15 @@ var Rr=Object.defineProperty;var zr=Object.getOwnPropertyDescriptor;var p=(i,t,e
   }
   /* A rubber stamp pressed onto the picture's corner: a ruled border, spaced
      capitals and a tilt. */
-  .stamp {
-    /* Red ink on paper in either theme: the photo behind is white, or the dark
-       edge of the picture box, and only a paper backing reads on both. Paper and
-       ink are both solid, so nothing in the photo shows through either. */
+  .stamp,
+  .seal {
+    /* Ink on paper in either theme: the photo behind is white, or the dark edge
+       of the picture box, and only a paper backing reads on both. Paper and ink
+       are both solid, so nothing in the photo shows through either. */
     --lego-stamp-ink: #b3121b;
     --lego-stamp-paper: #fffaf3;
+  }
+  .stamp {
     background: var(--lego-stamp-paper);
     border: 0.18em solid currentColor;
     border-radius: 0.35em;
@@ -451,6 +454,43 @@ var Rr=Object.defineProperty;var zr=Object.getOwnPropertyDescriptor;var p=(i,t,e
     text-transform: uppercase;
     top: calc(var(--ha-space-2, 8px) + 1.1em);
     transform: rotate(-9deg);
+  }
+  /* A round date stamp in the opposite corner, in black, on a wanted set that
+     has left sale: a double ring, the word, and the year. */
+  .seal {
+    --lego-stamp-ink: #161616;
+    align-content: center;
+    background: var(--lego-stamp-paper);
+    border: 0.16em solid currentColor;
+    border-radius: 50%;
+    box-shadow:
+      inset 0 0 0 0.26em var(--lego-stamp-paper),
+      inset 0 0 0 0.38em currentColor;
+    box-sizing: border-box;
+    color: var(--lego-stamp-ink);
+    display: grid;
+    font-size: var(--lego-stamp);
+    font-weight: var(--ha-font-weight-bold, 700);
+    gap: 0.12em;
+    height: 5.6em;
+    justify-items: center;
+    line-height: 1;
+    pointer-events: none;
+    position: absolute;
+    right: calc(var(--ha-space-2, 8px) + 0.3em);
+    text-transform: uppercase;
+    top: calc(var(--ha-space-2, 8px) + var(--lego-pic-h) - 6em);
+    transform: rotate(12deg);
+    width: 5.6em;
+  }
+  .seal span:first-child {
+    font-size: 0.72em;
+    letter-spacing: 0.08em;
+  }
+  .seal .year {
+    font-size: 1.2em;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
   }
   /* Set photos come on white; inset and rounded they read as photos rather
      than as gaps in a dark card. */
@@ -700,12 +740,12 @@ var Rr=Object.defineProperty;var zr=Object.getOwnPropertyDescriptor;var p=(i,t,e
       tabindex=${s?"-1":c}
       aria-hidden=${s?"true":c}
       >${r}</a
-    >`:r}themeColour(e){let r=this.dash?.followed??[],s=r.find(a=>a.toLowerCase()===e.toLowerCase());return te(s?ee(r).get(s):"other")}size(){return this.pictureSize??this.dash?.picture_size??"medium"}card(e,r="retirement",s,a=!0){let o=new Date,l=Ht(e,this.size()),d=l.src??l.fallback,h=a?Ze(e.retail_price,this.dash?.currency??null,this.hass?.locale?.language):"";return n`
+    >`:r}themeColour(e){let r=this.dash?.followed??[],s=r.find(a=>a.toLowerCase()===e.toLowerCase());return te(s?ee(r).get(s):"other")}size(){return this.pictureSize??this.dash?.picture_size??"medium"}card(e,r="retirement",s,a=!0){let o=new Date,l=e.available_until?new Date(e.available_until):null,d=l&&l<o?l:null,h=Ht(e,this.size()),u=h.src??h.fallback,g=a?Ze(e.retail_price,this.dash?.currency??null,this.hass?.locale?.language):"";return n`
       <article class="card">
         ${this.linked(e,n`${sr(e.set_number,n`<span class="pic"
-              >${d?n`<img
-                      src=${d}
-                      data-fallback=${l.fallback??c}
+              >${u?n`<img
+                      src=${u}
+                      data-fallback=${h.fallback??c}
                       alt=""
                       loading="lazy"
                       @error=${this.noArt}
@@ -714,10 +754,10 @@ var Rr=Object.defineProperty;var zr=Object.getOwnPropertyDescriptor;var p=(i,t,e
                       src=${xr}
                       alt=""
                       loading="lazy"
-                    />`}${l.sharp?n`<img
+                    />`}${h.sharp?n`<img
                       class="sharp"
-                      srcset=${l.sharp.srcset}
-                      sizes=${l.sharp.sizes}
+                      srcset=${h.sharp.srcset}
+                      sizes=${h.sharp.sizes}
                       alt=""
                       loading="lazy"
                       @load=${this.reveal}
@@ -725,6 +765,10 @@ var Rr=Object.defineProperty;var zr=Object.getOwnPropertyDescriptor;var p=(i,t,e
                     />`:c}</span
             >`)}`,!0)}
         ${e.wanted?n`<span class="stamp">Wanted</span>`:c}
+        ${e.wanted&&d?n`<span class="seal"
+                ><span>Retired</span
+                ><span class="year">${d.getFullYear()}</span></span
+              >`:c}
         <div class="meta">
           ${this.linked(e,n`<span
               class=${pe(e)?"name":"name unnamed"}
@@ -736,10 +780,10 @@ var Rr=Object.defineProperty;var zr=Object.getOwnPropertyDescriptor;var p=(i,t,e
                     class="key"
                     style="background:${s}"
                     title=${e.theme}
-                  ></span>`:c}${[e.set_number,h].filter(Boolean).join(" \xB7 ")}</span
+                  ></span>`:c}${[e.set_number,g].filter(Boolean).join(" \xB7 ")}</span
           >
           <span class="when ${jt(e,o,r)}"
-            >${It(e,o,u=>this.date(u),r)}</span
+            >${It(e,o,v=>this.date(v),r)}</span
           >
           <div class="foot">
             <span class=${e.owned?"state own":"state"}
