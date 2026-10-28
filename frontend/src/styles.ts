@@ -313,6 +313,18 @@ export const CONTROLS = css`
     min-height: 48px;
     padding: 0 var(--ha-space-2, 8px);
   }
+  /* Asks a window still running an older bundle to reload. */
+  .updated {
+    align-items: center;
+    background: var(--lego-pick);
+    border-radius: var(--ha-border-radius-md, 8px);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: var(--ha-font-size-m, 14px);
+    gap: 0 var(--ha-space-2, 8px);
+    justify-content: space-between;
+    padding: 0 var(--ha-space-2, 8px) 0 var(--ha-space-4, 16px);
+  }
 `;
 
 /** Set cards, the carousel and the grid. */

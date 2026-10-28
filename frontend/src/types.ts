@@ -122,6 +122,8 @@ export type PictureSize = "small" | "medium" | "large";
 export interface Dashboard extends PanelSettings {
   entry_id: string;
   device_id: string | null;
+  /** The integration version installed, to spot a window running an older bundle. */
+  version?: string | null;
   /** Whether this user may change the account, not merely look at it. */
   can_change: boolean;
   region: string;

@@ -201,6 +201,7 @@ class PanelStore:
 
 
 PANEL_STORE: HassKey[PanelStore] = HassKey(f"{DOMAIN}_panel_store")
+PANEL_VERSION: HassKey[str] = HassKey(f"{DOMAIN}_panel_version")
 
 
 def _module_url(version: Any) -> str:
@@ -220,6 +221,9 @@ async def async_setup_panel_static(hass: HomeAssistant) -> None:
         ]
     )
     integration = await async_get_integration(hass, DOMAIN)
+    # A window opened before an update keeps the old bundle, so the dashboard tells
+    # it which version is installed and it can ask to be reloaded.
+    hass.data[PANEL_VERSION] = str(integration.version)
     # The panel loads this exact URL too, and a browser evaluates a module once per
     # URL, so the panel page does not define the cards twice.
     frontend.add_extra_js_url(hass, _module_url(integration.version))

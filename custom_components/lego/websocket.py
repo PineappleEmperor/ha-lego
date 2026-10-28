@@ -22,6 +22,7 @@ from .exceptions import BricksetError
 from .images import with_pictures
 from .panel import (
     PANEL_STORE,
+    PANEL_VERSION,
     dashboard_payload,
     releases_payload,
     summarise,
@@ -112,6 +113,7 @@ def websocket_dashboard(
     user_id = connection.user.id if connection.user else None
     payload = dashboard_payload(entry, store.settings(user_id))
     with_pictures(hass, entry, payload["wishlist"])
+    payload["version"] = hass.data.get(PANEL_VERSION)
     # So the panel offers only the changes this user may make.
     payload["can_change"] = can_change(entry, connection.user)
     connection.send_result(msg["id"], payload)

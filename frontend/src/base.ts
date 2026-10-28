@@ -9,7 +9,7 @@ import {
 import { property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 
-import { picturesExpired } from "./api";
+import { bundleOutdated, picturesExpired } from "./api";
 import "./bricks";
 import {
   LOCAL_PICTURE,
@@ -32,6 +32,20 @@ import type { Dashboard, Hass, LegoSet, PictureSize } from "./types";
 // The integration's own icon, served from custom_components/lego/brand/: the
 // picture on a card Brickset has no art for.
 export const BRAND_ICON = "/lego_panel/icon.png";
+
+/**
+ * A line asking for a reload, once Home Assistant runs a newer version than this
+ * window loaded. Drawing on with the old code is how pictures turned into bricks.
+ */
+export function updatedNotice(
+  dash?: Dashboard,
+): TemplateResult | typeof nothing {
+  if (!bundleOutdated(dash?.version)) return nothing;
+  return html`<div class="updated" role="status">
+    <span>LEGO was updated. Reload to finish.</span>
+    <button class="link" @click=${() => location.reload()}>Reload</button>
+  </div>`;
+}
 
 /** Register an element once: the bundle may arrive as the panel and as cards. */
 export function define(name: string, element: CustomElementConstructor): void {

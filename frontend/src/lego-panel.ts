@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { property, state } from "lit/decorators.js";
 
 import { INVALIDATED, invalidate, reloadOnReconnect } from "./api";
-import { ROW_META, define, type LegoRow } from "./base";
+import { ROW_META, define, updatedNotice, type LegoRow } from "./base";
 import "./cards";
 import {
   PICTURE_LABELS,
@@ -415,35 +415,36 @@ export class LegoPanel extends LitElement {
     if (!dash) return html`<p class="muted pad">Loading your collection…</p>`;
     const visible = this.visible();
     const { anyOpen, next } = foldAll(visible, this.folded);
-    return html`<div
-      class="rows"
-      @lego-toggle=${this.onToggle}
-      @lego-move=${this.onMove}
-      @lego-filter=${this.onFilter}
-      @lego-changed=${this.onChanged}
-    >
-      <div class="homebar">
-        ${this.renderMeter(dash.quota)}
-        <button class="link" @click=${() => (this.folded = next)}>
-          ${anyOpen ? "Collapse all" : "Expand all"}
-        </button>
-        <button
-          class="link"
-          aria-expanded=${this.customising}
-          @click=${() => (this.customising = !this.customising)}
-        >
-          ${this.customising ? "Done" : "Customise"}
-        </button>
-      </div>
-      ${this.customising ? this.renderCustomise(dash) : nothing}
-      ${
-        visible.length
-          ? visible.map((row) => this.renderRow(row, visible))
-          : html`<p class="muted">
-              Every row is hidden. Choose Customise to bring some back.
-            </p>`
-      }
-    </div>`;
+    return html`${updatedNotice(dash)}
+      <div
+        class="rows"
+        @lego-toggle=${this.onToggle}
+        @lego-move=${this.onMove}
+        @lego-filter=${this.onFilter}
+        @lego-changed=${this.onChanged}
+      >
+        <div class="homebar">
+          ${this.renderMeter(dash.quota)}
+          <button class="link" @click=${() => (this.folded = next)}>
+            ${anyOpen ? "Collapse all" : "Expand all"}
+          </button>
+          <button
+            class="link"
+            aria-expanded=${this.customising}
+            @click=${() => (this.customising = !this.customising)}
+          >
+            ${this.customising ? "Done" : "Customise"}
+          </button>
+        </div>
+        ${this.customising ? this.renderCustomise(dash) : nothing}
+        ${
+          visible.length
+            ? visible.map((row) => this.renderRow(row, visible))
+            : html`<p class="muted">
+                Every row is hidden. Choose Customise to bring some back.
+              </p>`
+        }
+      </div>`;
   }
 
   private renderRow(row: string, shown: string[]): TemplateResult {

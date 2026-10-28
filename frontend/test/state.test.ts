@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   INVALIDATED,
   PICTURE_RETRY_MS,
+  bundleOutdated,
+  bundleVersion,
   picturesExpired,
   reloadOnReconnect,
 } from "../src/api";
@@ -207,5 +209,22 @@ describe("renewing picture addresses", () => {
     reloadOnReconnect(hass);
     reloadOnReconnect(hass);
     expect(listeners).toHaveLength(1);
+  });
+});
+
+describe("a window left open across an update", () => {
+  const loaded = "http://ha.local:8123/lego_panel/lego-panel.js?v=1.0.0rc6";
+
+  it("reads the version it was loaded as from its own address", () => {
+    expect(bundleVersion(loaded)).toBe("1.0.0rc6");
+    expect(bundleVersion("file:///src/api.ts")).toBeNull();
+  });
+
+  it("asks for a reload only when Home Assistant runs another version", () => {
+    expect(bundleOutdated("1.0.0rc7", loaded)).toBe(true);
+    expect(bundleOutdated("1.0.0rc6", loaded)).toBe(false);
+    // An older Home Assistant that sends no version, or a bundle with none, never asks.
+    expect(bundleOutdated(undefined, loaded)).toBe(false);
+    expect(bundleOutdated("1.0.0rc7", "file:///src/api.ts")).toBe(false);
   });
 });
