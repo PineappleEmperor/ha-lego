@@ -5,6 +5,8 @@ import { INVALIDATED, invalidate, reloadOnReconnect } from "./api";
 import { ROW_META, define, type LegoRow } from "./base";
 import "./cards";
 import {
+  PICTURE_LABELS,
+  PICTURE_SIZES,
   ROW_SPANS,
   accountCall,
   budgetTitle,
@@ -533,6 +535,21 @@ export class LegoPanel extends LitElement {
                 @click=${() => void this.save({ release_mode: mode })}
               >
                 ${mode === "combined" ? "Combined" : "Separate"}
+              </button>`,
+          )}
+        </div>
+      </div>
+      <div class="setting">
+        <span>Pictures</span>
+        <div class="pills" role="group" aria-label="Picture size">
+          ${PICTURE_SIZES.map(
+            (size) =>
+              html`<button
+                class=${dash.picture_size === size ? "pill on" : "pill"}
+                aria-pressed=${dash.picture_size === size}
+                @click=${() => void this.save({ picture_size: size })}
+              >
+                ${PICTURE_LABELS[size]}
               </button>`,
           )}
         </div>

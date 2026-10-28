@@ -12,6 +12,7 @@ from .access import can_change, can_view, is_linked
 from .const import (
     CONF_THEMES,
     DOMAIN,
+    PICTURE_SIZES,
     RELEASE_MODES,
     RELEASE_ROWS,
     RELEASE_SCOPES,
@@ -194,6 +195,7 @@ RELEASE_FILTER = probatio.Schema(
             probatio.In(RELEASE_ROWS): RELEASE_FILTER
         },
         probatio.Optional("collection_prices"): bool,
+        probatio.Optional("picture_size"): probatio.In(PICTURE_SIZES),
     }
 )
 @websocket_api.async_response
@@ -219,6 +221,7 @@ async def websocket_set_rows(
         release_mode=msg.get("release_mode"),
         release_filters=msg.get("release_filters"),
         collection_prices=msg.get("collection_prices"),
+        picture_size=msg.get("picture_size"),
     )
     connection.send_result(msg["id"], settings)
 

@@ -112,7 +112,12 @@ export interface PanelSettings {
   release_filters: Partial<Record<ReleaseRow, ReleaseFilter>>;
   /** Whether My collection's set grid shows each set's price. */
   collection_prices: boolean;
+  /** How large the panel draws each set's picture. */
+  picture_size: PictureSize;
 }
+
+/** Once, twice or three times the card's own picture box. */
+export type PictureSize = "small" | "medium" | "large";
 
 export interface Dashboard extends PanelSettings {
   entry_id: string;

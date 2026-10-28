@@ -432,6 +432,7 @@ async def test_dashboard_returns_the_home_view(
     assert result["collapsed"] == ["value", "pieces"]
     assert result["release_mode"] == "combined"
     assert result["collection_prices"] is True
+    assert result["picture_size"] == "medium"
     assert result["release_status"] == {"all": None, "mine": "ready"}
     # Cards show LEGO.com RRP, so the panel needs the region's currency.
     assert result["currency"] == "GBP"
@@ -825,6 +826,33 @@ async def test_hiding_collection_prices_is_saved(
     await restarted.async_load()
     assert restarted.settings(hass_admin_user.id)["collection_prices"] is False
     assert restarted.settings("someone-else")["collection_prices"] is True
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_picture_size_is_saved_for_each_user(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    hass_admin_user: MockUser,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A user's picture size survives a restart; a size the panel lacks is refused."""
+    await setup_integration(hass, mock_config_entry)
+    client = await hass_ws_client(hass)
+
+    await client.send_json_auto_id(
+        {"type": "lego/panel_config/set", "picture_size": "large"}
+    )
+    assert (await client.receive_json())["result"]["picture_size"] == "large"
+
+    await client.send_json_auto_id(
+        {"type": "lego/panel_config/set", "picture_size": "huge"}
+    )
+    assert not (await client.receive_json())["success"]
+
+    restarted = PanelStore(hass)
+    await restarted.async_load()
+    assert restarted.settings(hass_admin_user.id)["picture_size"] == "large"
+    assert restarted.settings("someone-else")["picture_size"] == "medium"
 
 
 @pytest.mark.usefixtures("brickset")

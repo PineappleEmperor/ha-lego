@@ -123,6 +123,9 @@ PANEL_DEFAULT_COLLAPSED: Final = ("value", "pieces")
 RELEASE_MODES: Final = ("combined", "separate")
 RELEASE_ROWS: Final = ("releases", "recent", "upcoming", "themes")
 RELEASE_SCOPES: Final = ("all", "mine")
+# How large the panel draws each set's picture: once, twice or three times the card.
+PICTURE_SIZES: Final = ("small", "medium", "large")
+DEFAULT_PICTURE_SIZE: Final = "medium"
 RELEASE_SPANS: Final = (
     "around",
     "year",

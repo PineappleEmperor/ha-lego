@@ -9,6 +9,8 @@ import {
 } from "./api";
 import { ROW_META, define } from "./base";
 import {
+  PICTURE_LABELS,
+  PICTURE_SIZES,
   ROW_SPANS,
   errorText,
   releaseFilter,
@@ -20,7 +22,13 @@ import "./rows/releases";
 import "./rows/value";
 import "./rows/wishlist";
 import { TOKENS } from "./styles";
-import type { Dashboard, Hass, ReleaseFilter, ReleaseRow } from "./types";
+import type {
+  Dashboard,
+  Hass,
+  PictureSize,
+  ReleaseFilter,
+  ReleaseRow,
+} from "./types";
 
 interface CardConfig {
   type: string;
@@ -28,6 +36,8 @@ interface CardConfig {
   account?: string;
   /** Whether the card opens folded to its header. */
   collapsed?: boolean;
+  /** How large the card draws each set's picture. */
+  picture_size?: PictureSize;
   /** For the value card: "value" or "pieces". */
   measure?: "value" | "pieces";
   /** For the releases card: which of the release rows it is. */
@@ -55,6 +65,7 @@ interface ConfigForm {
 const LABELS: Partial<Record<keyof CardConfig, string>> = {
   account: "Brickset account",
   collapsed: "Start folded",
+  picture_size: "Picture size",
   measure: "Show",
   row: "Row",
   scope: "Themes",
@@ -65,6 +76,8 @@ const LABELS: Partial<Record<keyof CardConfig, string>> = {
 const HELPERS: Partial<Record<keyof CardConfig, string>> = {
   account: "Leave empty to show the account you opened last in the LEGO panel.",
   collapsed: "Show only the card's header until it is opened.",
+  picture_size:
+    "Medium and Large draw pictures two and three times the size. They look sharp only with Sharper pictures on in the integration's options.",
   scope: "Everything needs Follow releases across all themes in the options.",
   themes: "Narrows My themes to some of the themes you follow.",
   span: "Leave empty for the row's own default.",
@@ -75,6 +88,18 @@ const ACCOUNT: FormField = {
   selector: { config_entry: { integration: "lego" } },
 };
 const COLLAPSED: FormField = { name: "collapsed", selector: { boolean: {} } };
+const PICTURES: FormField = {
+  name: "picture_size",
+  selector: {
+    select: {
+      mode: "dropdown",
+      options: PICTURE_SIZES.map((size) => ({
+        value: size,
+        label: PICTURE_LABELS[size],
+      })),
+    },
+  },
+};
 
 function form(
   schema: FormField[],
@@ -186,12 +211,13 @@ class LegoCollectionCard extends LegoCard {
   }
 
   public static getConfigForm(): ConfigForm {
-    return form([ACCOUNT, COLLAPSED]);
+    return form([ACCOUNT, PICTURES, COLLAPSED]);
   }
 
   protected row(dash: Dashboard): TemplateResult {
     return html`<lego-collection-row
       bare
+      .pictureSize=${this.config?.picture_size}
       .collapsed=${this.config?.collapsed ?? false}
       .hass=${this.hass}
       .dash=${dash}
@@ -206,12 +232,13 @@ class LegoWishlistCard extends LegoCard {
   }
 
   public static getConfigForm(): ConfigForm {
-    return form([ACCOUNT, COLLAPSED]);
+    return form([ACCOUNT, PICTURES, COLLAPSED]);
   }
 
   protected row(dash: Dashboard): TemplateResult {
     return html`<lego-wishlist-row
       bare
+      .pictureSize=${this.config?.picture_size}
       .collapsed=${this.config?.collapsed ?? false}
       .hass=${this.hass}
       .dash=${dash}
@@ -308,6 +335,7 @@ class LegoReleasesCard extends LegoCard {
             },
           },
         },
+        PICTURES,
         COLLAPSED,
       ],
       (config) => {
@@ -334,6 +362,7 @@ class LegoReleasesCard extends LegoCard {
     return html`<lego-releases-row
       bare
       .kind=${kind}
+      .pictureSize=${this.config?.picture_size}
       .collapsed=${this.config?.collapsed ?? false}
       .hass=${this.hass}
       .dash=${card}

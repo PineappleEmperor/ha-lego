@@ -317,6 +317,20 @@ export const CONTROLS = css`
 
 /** Set cards, the carousel and the grid. */
 export const CARDS = css`
+  /* Medium and large draw the picture two and three times the size; the card
+     widens with it, and never past the row on a narrow screen. */
+  :host {
+    --lego-card-w: 156px;
+    --lego-pic-h: 104px;
+  }
+  :host([picture-size="medium"]) {
+    --lego-card-w: 296px;
+    --lego-pic-h: 208px;
+  }
+  :host([picture-size="large"]) {
+    --lego-card-w: 436px;
+    --lego-pic-h: 312px;
+  }
   .carousel {
     align-items: center;
     display: flex;
@@ -332,13 +346,16 @@ export const CARDS = css`
     }
   }
   .carousel .card {
-    flex: 0 0 156px;
+    flex: 0 0 min(var(--lego-card-w), 85%);
     scroll-snap-align: start;
   }
   .grid {
     display: grid;
     gap: var(--ha-space-3, 12px);
-    grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+    grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(var(--lego-card-w), 100%), 1fr)
+    );
   }
   .card {
     background: var(--lego-surface);
@@ -352,17 +369,38 @@ export const CARDS = css`
   }
   /* Set photos come on white; inset and rounded they read as photos rather
      than as gaps in a dark card. */
-  .card img {
+  .pic {
     background: var(--lego-ground);
     border-radius: var(--ha-border-radius-md, 8px);
-    box-sizing: border-box;
-    height: 104px;
+    display: block;
+    height: var(--lego-pic-h);
     margin: var(--ha-space-2, 8px) var(--ha-space-2, 8px) 0;
+    overflow: hidden;
+    position: relative;
+  }
+  .pic img {
+    box-sizing: border-box;
+    height: 100%;
+    inset: 0;
     object-fit: contain;
-    width: calc(100% - 2 * var(--ha-space-2, 8px));
+    position: absolute;
+    width: 100%;
+  }
+  /* The sharper copy fades in over the standard one once it has loaded. */
+  .pic img.sharp {
+    opacity: 0;
+    transition: opacity 240ms ease-out;
+  }
+  .pic img.sharp.ready {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pic img.sharp {
+      transition: none;
+    }
   }
   /* Stand-in art, so it must read as absent rather than as the set. */
-  .card img.noart {
+  .pic img.noart {
     opacity: 0.35;
     padding: var(--ha-space-6, 24px);
   }

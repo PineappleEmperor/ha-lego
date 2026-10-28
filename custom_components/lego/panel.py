@@ -18,6 +18,7 @@ from .const import (
     BRICKSET_THUMBNAIL_URL,
     CONF_PANEL,
     DEFAULT_PANEL,
+    DEFAULT_PICTURE_SIZE,
     DOMAIN,
     PANEL_COMPONENT,
     PANEL_DEFAULT_COLLAPSED,
@@ -27,6 +28,7 @@ from .const import (
     PANEL_ROWS,
     PANEL_STORAGE_KEY,
     PANEL_URL_PATH,
+    PICTURE_SIZES,
     REGION_CURRENCY,
     RELEASE_MODES,
     RELEASE_ROWS,
@@ -59,6 +61,7 @@ class PanelStore:
         self._release_mode: dict[str, str] = {}
         self._release_filters: dict[str, dict[str, dict[str, Any]]] = {}
         self._collection_prices: dict[str, bool] = {}
+        self._picture_size: dict[str, str] = {}
         self._accounts: dict[str, str] = {}
 
     async def async_load(self) -> None:
@@ -73,6 +76,11 @@ class PanelStore:
         }
         self._collection_prices = {
             k: bool(v) for k, v in stored.get("collection_prices", {}).items()
+        }
+        self._picture_size = {
+            k: str(v)
+            for k, v in stored.get("picture_size", {}).items()
+            if v in PICTURE_SIZES
         }
         self._accounts = {k: str(v) for k, v in stored.get("accounts", {}).items()}
 
@@ -91,6 +99,7 @@ class PanelStore:
                 "release_mode": self._release_mode,
                 "release_filters": self._release_filters,
                 "collection_prices": self._collection_prices,
+                "picture_size": self._picture_size,
                 "accounts": self._accounts,
             }
         )
@@ -141,6 +150,7 @@ class PanelStore:
                 if row in RELEASE_ROWS
             },
             "collection_prices": self._collection_prices.get(key, True),
+            "picture_size": self._picture_size.get(key, DEFAULT_PICTURE_SIZE),
         }
 
     async def async_update(
@@ -153,6 +163,7 @@ class PanelStore:
         release_mode: str | None = None,
         release_filters: dict[str, dict[str, Any]] | None = None,
         collection_prices: bool | None = None,
+        picture_size: str | None = None,
     ) -> dict[str, Any]:
         """Save whichever settings were sent, ignoring rows this version lacks."""
         if rows is not None:
@@ -174,6 +185,8 @@ class PanelStore:
             )
         if collection_prices is not None:
             self._collection_prices[user_id] = collection_prices
+        if picture_size is not None:
+            self._picture_size[user_id] = picture_size
         await self._async_save()
         return self.settings(user_id)
 
@@ -496,6 +509,7 @@ def dashboard_payload(
         "release_mode": RELEASE_MODES[0],
         "release_filters": {},
         "collection_prices": True,
+        "picture_size": DEFAULT_PICTURE_SIZE,
     }
     return {
         "entry_id": entry.entry_id,

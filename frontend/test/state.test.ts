@@ -153,23 +153,26 @@ describe("set pictures", () => {
     expect(pictureUrl(remote)).toBe(remote);
   });
 
-  it("falls back to Brickset's own copy", () => {
+  it("falls back to Brickset's own copy, with no sharper layer when it is off", () => {
     expect(
       pictureSources({ image: local, image_large: null, image_remote: remote }),
-    ).toEqual({ src: local, srcset: null, fallback: remote });
+    ).toEqual({ src: local, sharp: null, fallback: remote });
   });
 
-  it("offers the large copy only to a screen with the pixels for it", () => {
-    expect(
-      pictureSources({ image: local, image_large: large, image_remote: remote })
-        .srcset,
-    ).toBe(`${local} 1x, ${large} 2x`);
+  it("lets the browser pick the file for the size the card draws", () => {
+    const item = { image: local, image_large: large, image_remote: remote };
+    expect(pictureSources(item).sharp).toEqual({
+      srcset: `${local} 240w, ${large} 690w`,
+      sizes: "140px",
+    });
+    expect(pictureSources(item, "medium").sharp?.sizes).toBe("280px");
+    expect(pictureSources(item, "large").sharp?.sizes).toBe("420px");
   });
 
   it("draws a card from an older reply with only Brickset's address", () => {
     expect(pictureSources({ image: remote })).toEqual({
       src: remote,
-      srcset: null,
+      sharp: null,
       fallback: null,
     });
   });

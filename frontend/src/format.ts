@@ -2,6 +2,7 @@ import type {
   Dashboard,
   PanelSettings,
   LegoSet,
+  PictureSize,
   Point,
   ReleaseFilter,
   ReleaseRow,
@@ -315,17 +316,54 @@ export function pictureUrl(url: string | null | undefined): string | null {
   return webUrl(url);
 }
 
-/** The pictures a card tries in turn: Home Assistant's, then Brickset's. */
+export const PICTURE_SIZES: PictureSize[] = ["small", "medium", "large"];
+
+export const PICTURE_LABELS: Record<PictureSize, string> = {
+  small: "Small",
+  medium: "Medium",
+  large: "Large",
+};
+
+/** The width, in points, each picture size draws at inside a card. */
+export const PICTURE_WIDTH: Record<PictureSize, number> = {
+  small: 140,
+  medium: 280,
+  large: 420,
+};
+
+/** Brickset's two picture files, by their pixel width. */
+const STANDARD_PX = 240;
+const SHARP_PX = 690;
+
+export interface PictureSources {
+  /** The standard picture, drawn at once. */
+  src: string | null;
+  /** The sharper layer that fades in over it, when the account offers one. */
+  sharp: { srcset: string; sizes: string } | null;
+  /** Brickset's own address, tried when Home Assistant's copy fails. */
+  fallback: string | null;
+}
+
+/**
+ * The pictures a card draws: the standard one straight away, then whichever file
+ * the browser judges sharp enough for this size on this screen, laid over it.
+ */
 export function pictureSources(
   item: Pick<LegoSet, "image" | "image_large" | "image_remote">,
-): { src: string | null; srcset: string | null; fallback: string | null } {
+  size: PictureSize = "small",
+): PictureSources {
   const src = pictureUrl(item.image);
   const large = pictureUrl(item.image_large);
   const remote = webUrl(item.image_remote);
   return {
     src,
-    // The large copy only where a screen has the pixels to show it.
-    srcset: src && large ? `${src} 1x, ${large} 2x` : null,
+    sharp:
+      src && large
+        ? {
+            srcset: `${src} ${STANDARD_PX}w, ${large} ${SHARP_PX}w`,
+            sizes: `${PICTURE_WIDTH[size]}px`,
+          }
+        : null,
     fallback: remote && remote !== src ? remote : null,
   };
 }

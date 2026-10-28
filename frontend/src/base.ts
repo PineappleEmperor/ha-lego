@@ -7,6 +7,7 @@ import {
   type TemplateResult,
 } from "lit";
 import { property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 
 import { picturesExpired } from "./api";
 import "./bricks";
@@ -26,7 +27,7 @@ import {
 import { SERIES_COLOURS, slotColour, themeSlots } from "./palette";
 import { markedOwned } from "./state";
 import { CARDS, CONTROLS, ROW, TOKENS } from "./styles";
-import type { Dashboard, Hass, LegoSet } from "./types";
+import type { Dashboard, Hass, LegoSet, PictureSize } from "./types";
 
 // The integration's own icon, served from custom_components/lego/brand/: the
 // picture on a card Brickset has no art for.
@@ -78,6 +79,8 @@ export abstract class LegoRow extends LitElement {
   @property({ type: Boolean, reflect: true }) public bare = false;
   /** Picks the palette's dark steps; set from Home Assistant's theme. */
   @property({ type: Boolean, reflect: true }) public dark = false;
+  /** A dashboard card's own picture size; the panel's setting applies otherwise. */
+  @property({ attribute: false }) public pictureSize?: PictureSize;
 
   @state() protected pending = new Set<string>();
   @state() protected writeError = "";
@@ -103,6 +106,8 @@ export abstract class LegoRow extends LitElement {
 
   protected override willUpdate(changed: PropertyValues): void {
     if (changed.has("hass")) this.dark = !!this.hass?.themes?.darkMode;
+    // The cards' CSS scales from this attribute.
+    this.setAttribute("picture-size", this.size());
   }
 
   protected override render(): TemplateResult {
@@ -272,6 +277,21 @@ export abstract class LegoRow extends LitElement {
     return slotColour(match ? themeSlots(followed).get(match) : "other");
   }
 
+  /** The picture size this row draws: a card's own option, else the panel's. */
+  protected size(): PictureSize {
+    return this.pictureSize ?? this.dash?.picture_size ?? "medium";
+  }
+
+  /** The sharper layer fades in once loaded, over the standard picture. */
+  private reveal = (ev: Event): void => {
+    (ev.target as HTMLImageElement).classList.add("ready");
+  };
+
+  /** Without its sharper layer the card keeps the standard picture. */
+  private dropSharp = (ev: Event): void => {
+    (ev.target as HTMLImageElement).remove();
+  };
+
   /** A picture URL built from a set number can miss; the brand icon stands in. */
   private noArt = (ev: Event): void => {
     const img = ev.target as HTMLImageElement;
@@ -297,7 +317,7 @@ export abstract class LegoRow extends LitElement {
     showPrice = true,
   ): TemplateResult {
     const now = new Date();
-    const picture = pictureSources(item);
+    const picture = pictureSources(item, this.size());
     const image = picture.src ?? picture.fallback;
     const price = showPrice
       ? formatPrice(
@@ -310,21 +330,40 @@ export abstract class LegoRow extends LitElement {
       <article class="card">
         ${this.linked(
           item,
-          image
-            ? html`<img
-                src=${image}
-                srcset=${picture.srcset ?? nothing}
-                data-fallback=${picture.fallback ?? nothing}
-                alt=""
-                loading="lazy"
-                @error=${this.noArt}
-              />`
-            : html`<img
-                class="noart"
-                src=${BRAND_ICON}
-                alt=""
-                loading="lazy"
-              />`,
+          // Keyed by set, so a reused card never shows the last set's picture.
+          html`${keyed(
+            item.set_number,
+            html`<span class="pic"
+              >${
+                image
+                  ? html`<img
+                      src=${image}
+                      data-fallback=${picture.fallback ?? nothing}
+                      alt=""
+                      loading="lazy"
+                      @error=${this.noArt}
+                    />`
+                  : html`<img
+                      class="noart"
+                      src=${BRAND_ICON}
+                      alt=""
+                      loading="lazy"
+                    />`
+              }${
+                picture.sharp
+                  ? html`<img
+                      class="sharp"
+                      srcset=${picture.sharp.srcset}
+                      sizes=${picture.sharp.sizes}
+                      alt=""
+                      loading="lazy"
+                      @load=${this.reveal}
+                      @error=${this.dropSharp}
+                    />`
+                  : nothing
+              }</span
+            >`,
+          )}`,
           true,
         )}
         <div class="meta">
