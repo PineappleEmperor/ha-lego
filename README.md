@@ -137,6 +137,8 @@ can be read by anyone signed in.
 A **LEGO** entry appears in the sidebar unless you turn it off in options. It is one page
 of rows, each with an icon, a title and a fold arrow:
 
+![The LEGO panel: the calls bar, New releases with its timeline, and the wishlist](docs/screenshots/panel.png)
+
 - **My collection** shows your totals, with an **Update** button that polls Brickset
   at once and says what that costs ("Update · 2 calls"). It greys out once the refresh
   would go over the daily budget. **Sets** below it unfolds the full grid, and its
@@ -162,10 +164,14 @@ of rows, each with an icon, a title and a fold arrow:
   dots on the timeline, or tabbing to it, spreads them out and names their sets; on a
   phone, tap the stack, and the timeline shows only the span, scrolling when it is
   long.
-- **My wishlist** runs soonest to retire first.
+- **My wishlist** runs soonest to retire first, each set stamped **Wanted**.
 - **Collection value** and **Pieces** show a donut and a bar per theme. Hovering a theme
   lists the sets behind it, and **Trend over a year** unfolds a line from Home
   Assistant's recorded statistics, which fills in week by week after you install.
+
+![My collection: the totals, the Update button, and the owned sets with their search](docs/screenshots/collection.png)
+
+![Collection value and Pieces, each a donut and a bar per theme](docs/screenshots/value.png)
 
 **Customise** chooses which rows show, whether each one starts open or folded, how large
 the set pictures are (**Small**, **Medium**, the default, or **Large**), and the
