@@ -337,6 +337,13 @@ export function spanLabel(span: Span, today = new Date()): string {
   return span === "year" ? String(today.getFullYear()) : SPAN_LABELS[span];
 }
 
+/** Why a card cannot open a row on a span, or "" when it can. */
+export function spanProblem(row: ReleaseRow, span: Span | undefined): string {
+  if (!span || ROW_SPANS[row].includes(span)) return "";
+  const offered = ROW_SPANS[row].map((s) => spanLabel(s)).join(", ");
+  return `This row offers ${offered}, not ${spanLabel(span)}.`;
+}
+
 /**
  * The spans each release row offers, in time order, the past first. Brickset
  * dates little more than a few months ahead, so the future is one span, and the

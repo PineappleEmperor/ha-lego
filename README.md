@@ -165,19 +165,27 @@ ownership toggle and **Update** spend any.
 ### Dashboard cards
 
 Each row is also a card for your own dashboards, listed in the card picker as **LEGO
-collection**, **LEGO releases**, **LEGO wishlist** and **LEGO collection value**. They
-come with the integration, with nothing else to install, and cost no Brickset calls of
-their own.
+collection**, **LEGO releases**, **LEGO wishlist** and **LEGO collection value**, each
+with a live preview. They come with the integration, with nothing else to install, and
+cost no Brickset calls of their own. Every option is in the card's visual editor:
+
+| Option | Cards | Notes |
+|--------|-------|-------|
+| `account` | all | The Brickset account to show. Leave it out for the one you opened last in the panel. |
+| `collapsed` | all | `true` to show only the card's header until it is opened. |
+| `row` | releases | `releases` (New releases), `recent` (Out recently), `upcoming` (Coming soon) or `themes` (New in my themes). |
+| `scope` | releases | `mine` for your themes or `all` for every theme, which needs **Follow releases across all themes**. |
+| `themes` | releases | Narrows `mine` to some of the themes you follow. |
+| `span` | releases | `past3`, `around` (Now), `year` or `coming` (Unreleased) on New releases and New in my themes; Out recently and Coming soon have one span each. The row's own default if left out. |
+| `measure` | collection value | `value` or `pieces`. |
 
 ```yaml
 type: custom:lego-releases-card
-row: upcoming        # releases, recent, upcoming or themes
-span: next3          # optional; the row's own default otherwise
+row: releases
+scope: mine
+span: around
+collapsed: false
 ```
-
-`lego-value-card` takes `measure: pieces` for the pieces chart. Every card takes
-`account:` with a config entry id when you have more than one Brickset account; without
-it a card shows the account you last picked in the panel.
 
 ## Entities
 
