@@ -58,6 +58,7 @@ class PanelStore:
         self._collapsed: dict[str, list[str]] = {}
         self._release_mode: dict[str, str] = {}
         self._release_filters: dict[str, dict[str, dict[str, Any]]] = {}
+        self._collection_prices: dict[str, bool] = {}
         self._accounts: dict[str, str] = {}
 
     async def async_load(self) -> None:
@@ -69,6 +70,9 @@ class PanelStore:
         self._release_mode = dict(stored.get("release_mode", {}))
         self._release_filters = {
             k: dict(v) for k, v in stored.get("release_filters", {}).items()
+        }
+        self._collection_prices = {
+            k: bool(v) for k, v in stored.get("collection_prices", {}).items()
         }
         self._accounts = {k: str(v) for k, v in stored.get("accounts", {}).items()}
 
@@ -86,6 +90,7 @@ class PanelStore:
                 "collapsed": self._collapsed,
                 "release_mode": self._release_mode,
                 "release_filters": self._release_filters,
+                "collection_prices": self._collection_prices,
                 "accounts": self._accounts,
             }
         )
@@ -135,6 +140,7 @@ class PanelStore:
                 for row, value in self._release_filters.get(key, {}).items()
                 if row in RELEASE_ROWS
             },
+            "collection_prices": self._collection_prices.get(key, True),
         }
 
     async def async_update(
@@ -146,6 +152,7 @@ class PanelStore:
         collapsed: list[str] | None = None,
         release_mode: str | None = None,
         release_filters: dict[str, dict[str, Any]] | None = None,
+        collection_prices: bool | None = None,
     ) -> dict[str, Any]:
         """Save whichever settings were sent, ignoring rows this version lacks."""
         if rows is not None:
@@ -165,6 +172,8 @@ class PanelStore:
                     if row in RELEASE_ROWS
                 }
             )
+        if collection_prices is not None:
+            self._collection_prices[user_id] = collection_prices
         await self._async_save()
         return self.settings(user_id)
 
@@ -486,6 +495,7 @@ def dashboard_payload(
         "collapsed": list(PANEL_DEFAULT_COLLAPSED),
         "release_mode": RELEASE_MODES[0],
         "release_filters": {},
+        "collection_prices": True,
     }
     return {
         "entry_id": entry.entry_id,

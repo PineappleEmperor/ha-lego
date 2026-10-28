@@ -198,6 +198,7 @@ RELEASE_FILTER = probatio.Schema(
         probatio.Optional("release_filters"): {
             probatio.In(RELEASE_ROWS): RELEASE_FILTER
         },
+        probatio.Optional("collection_prices"): bool,
     }
 )
 @websocket_api.async_response
@@ -222,6 +223,7 @@ async def websocket_set_rows(
         collapsed=msg.get("collapsed"),
         release_mode=msg.get("release_mode"),
         release_filters=msg.get("release_filters"),
+        collection_prices=msg.get("collection_prices"),
     )
     connection.send_result(msg["id"], settings)
 

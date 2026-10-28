@@ -281,14 +281,17 @@ export abstract class LegoRow extends LitElement {
     item: LegoSet,
     focus: DateFocus = "retirement",
     themeColour?: string,
+    showPrice = true,
   ): TemplateResult {
     const now = new Date();
     const image = webUrl(item.image);
-    const price = formatPrice(
-      item.retail_price,
-      this.dash?.currency ?? null,
-      this.hass?.locale?.language,
-    );
+    const price = showPrice
+      ? formatPrice(
+          item.retail_price,
+          this.dash?.currency ?? null,
+          this.hass?.locale?.language,
+        )
+      : "";
     return html`
       <article class="card">
         ${this.linked(

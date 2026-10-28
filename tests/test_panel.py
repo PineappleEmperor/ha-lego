@@ -425,6 +425,7 @@ async def test_dashboard_returns_the_home_view(
     # Collection value starts folded; the release rows start combined.
     assert result["collapsed"] == ["value", "pieces"]
     assert result["release_mode"] == "combined"
+    assert result["collection_prices"] is True
     assert result["release_status"] == {"all": None, "mine": "ready"}
     # Cards show LEGO.com RRP, so the panel needs the region's currency.
     assert result["currency"] == "GBP"
@@ -760,6 +761,33 @@ async def test_release_and_collapse_settings_are_saved(
     await restarted.async_load()
     assert restarted.settings(hass_admin_user.id)["release_mode"] == "separate"
     assert restarted.collapsed(hass_admin_user.id) == ["wishlist"]
+
+
+@pytest.mark.usefixtures("brickset")
+async def test_hiding_collection_prices_is_saved(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    hass_admin_user: MockUser,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Hiding prices on the owned sets survives a restart and reaches the dashboard."""
+    await setup_integration(hass, mock_config_entry)
+    client = await hass_ws_client(hass)
+
+    await client.send_json_auto_id(
+        {"type": "lego/panel_config/set", "collection_prices": False}
+    )
+    saved = await client.receive_json()
+    assert saved["success"], saved
+    assert saved["result"]["collection_prices"] is False
+
+    await client.send_json_auto_id({"type": "lego/dashboard"})
+    assert (await client.receive_json())["result"]["collection_prices"] is False
+
+    restarted = PanelStore(hass)
+    await restarted.async_load()
+    assert restarted.settings(hass_admin_user.id)["collection_prices"] is False
+    assert restarted.settings("someone-else")["collection_prices"] is True
 
 
 @pytest.mark.usefixtures("brickset")

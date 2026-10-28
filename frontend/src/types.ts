@@ -102,6 +102,8 @@ export interface PanelSettings {
   collapsed: string[];
   release_mode: "combined" | "separate";
   release_filters: Partial<Record<ReleaseRow, ReleaseFilter>>;
+  /** Whether My collection's set grid shows each set's price. */
+  collection_prices: boolean;
 }
 
 export interface Dashboard extends PanelSettings {
