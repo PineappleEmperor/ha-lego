@@ -370,6 +370,12 @@ var Ve=Object.defineProperty;var Ye=Object.getOwnPropertyDescriptor;var g=(i,s,t
     padding-bottom: var(--ha-space-1, 4px);
     scroll-snap-type: x proximity;
   }
+  /* Snapping helps a finger land on a card, but fights a wheel or a trackpad. */
+  @media (pointer: fine) {
+    .carousel {
+      scroll-snap-type: none;
+    }
+  }
   .carousel .card {
     flex: 0 0 156px;
     scroll-snap-align: start;
