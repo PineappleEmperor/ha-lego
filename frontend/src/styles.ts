@@ -138,6 +138,11 @@ export const ROW = css`
     .drag {
       order: 2;
     }
+    /* The title and its line beneath fill the header's height, so give them
+       room above rather than letting them sit against the row's edge. */
+    .rowhead {
+      padding-top: var(--ha-space-2, 8px);
+    }
     .actions {
       flex-basis: 100%;
       justify-content: flex-start;
@@ -156,6 +161,8 @@ export const ROW = css`
     color: var(--lego-text-2);
     cursor: grab;
     display: grid;
+    /* A finger on the handle drags the row rather than scrolling the page. */
+    touch-action: none;
     flex: none;
     min-height: 48px;
     min-width: 48px;
@@ -245,6 +252,11 @@ export const CONTROLS = css`
     border-color: var(--lego-primary);
     color: var(--lego-on-primary);
   }
+  /* Present to be found, but not yet switched on in the options. */
+  .chip.off {
+    color: var(--lego-text-2);
+    opacity: 0.6;
+  }
   .divider {
     align-self: stretch;
     background: var(--lego-outline);
@@ -312,6 +324,12 @@ export const CARDS = css`
     overflow-x: auto;
     padding-bottom: var(--ha-space-1, 4px);
     scroll-snap-type: x proximity;
+  }
+  /* Snapping helps a finger land on a card, but fights a wheel or a trackpad. */
+  @media (pointer: fine) {
+    .carousel {
+      scroll-snap-type: none;
+    }
   }
   .carousel .card {
     flex: 0 0 156px;
@@ -470,44 +488,28 @@ export const CARDS = css`
   a.open:hover .name {
     text-decoration: underline;
   }
-  /* The rainbow of real bricks standing in for cards that are not there. */
+  /* The rainbow of real bricks standing in for cards that are not there: the
+     bricks take the whole width, which lego-bricks fills, and the hint sits below. */
   .filler {
-    align-items: center;
     display: flex;
-    flex: none;
-    gap: var(--ha-space-6, 24px);
-    min-height: 236px;
-    padding: 0 var(--ha-space-4, 16px) 0 var(--ha-space-6, 24px);
-  }
-  .filler.stacked {
-    align-items: flex-start;
     flex-direction: column;
     gap: var(--ha-space-4, 16px);
     justify-content: center;
+    min-height: 236px;
+    padding: 0 var(--ha-space-2, 8px);
   }
-  .bricks {
-    align-items: flex-end;
-    display: flex;
-    flex: none;
+  /* After a short row of cards, the room the cards leave; none once they fill it. */
+  .carousel .tail {
+    container-type: inline-size;
+    flex: 1 1 0;
+    min-height: auto;
+    min-width: 0;
+    padding: 0 var(--ha-space-3, 12px);
   }
-  /* Beside the hint the bricks take the spare width, so the gaps open up to fill
-     the row; a gap's weight, set from the bricks either side, gives the bigger
-     pieces more room. */
-  .filler:not(.stacked) .bricks {
-    flex: 1 1 auto;
-  }
-  .bricks .gap {
-    flex: var(--w, 1) 1 calc(var(--ha-space-3, 12px) * var(--w, 1));
-    max-width: calc(var(--ha-space-12, 48px) * var(--w, 1));
-    min-width: var(--ha-space-1, 4px);
-  }
-  .bricks div {
-    flex: none;
-  }
-  .bricks svg {
-    display: block;
-    height: auto;
-    width: 100%;
+  @container (max-width: 240px) {
+    .tail .hint {
+      display: none;
+    }
   }
   .filler .hint {
     color: var(--lego-text-2);

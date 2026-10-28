@@ -6,13 +6,13 @@ import { ROW_META, define, type LegoRow } from "./base";
 import "./cards";
 import {
   ROW_SPANS,
-  SPAN_LABELS,
   accountCall,
   budgetTitle,
   errorText,
   moveRow,
   releaseFilter,
   rowsForMode,
+  spanLabel,
   toggleTheme,
 } from "./format";
 import { LOGO } from "./generated/brand";
@@ -189,6 +189,37 @@ export class LegoPanel extends LitElement {
     void this.load();
   };
 
+  /**
+   * A finger on a row's handle. Browsers fire no drag events for touch, so the
+   * row follows the pointer instead and drops where the finger lifts.
+   */
+  private onTouchStart(ev: PointerEvent, row: string): void {
+    if (ev.pointerType === "mouse") return;
+    const onHandle = ev
+      .composedPath()
+      .some(
+        (node) => node instanceof Element && node.classList.contains("drag"),
+      );
+    if (!onHandle) return;
+    (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
+    this.dragging = row;
+    this.over = row;
+  }
+
+  private onTouchMove = (ev: PointerEvent): void => {
+    if (!this.dragging || ev.pointerType === "mouse") return;
+    const under = (this.renderRoot as ShadowRoot)
+      .elementsFromPoint(ev.clientX, ev.clientY)
+      .map((element) => element.closest<HTMLElement>(".slot"))
+      .find((slot) => slot && slot.dataset.row);
+    if (under?.dataset.row) this.over = under.dataset.row;
+  };
+
+  private onTouchEnd(shown: string[]): void {
+    if (!this.dragging) return;
+    this.onDrop(this.over, shown);
+  }
+
   private onDrop(target: string, shown: string[]): void {
     const from = this.dragging;
     this.dragging = "";
@@ -248,10 +279,21 @@ export class LegoPanel extends LitElement {
             : nothing
         }
         <span class="logo">${drawSvg(LOGO)}</span>
-        <h1>LEGO</h1>
+        <span class="heading">
+          <h1>LEGO</h1>
+          ${
+            // A phone has no room for the meter beside the account, so the
+            // count sits under the title instead.
+            this.narrow && quota
+              ? html`<span class=${tight ? "calls tight" : "calls"}
+                  >${quota.calls_today} of ${quota.budget} calls</span
+                >`
+              : nothing
+          }
+        </span>
       </div>
       ${
-        quota
+        quota && !this.narrow
           ? html`<div
               class=${tight ? "meter tight" : "meter"}
               title=${budgetTitle(
@@ -469,6 +511,13 @@ export class LegoPanel extends LitElement {
       @dragover=${(ev: DragEvent) => ev.preventDefault()}
       @dragenter=${() => (this.over = row)}
       @drop=${() => this.onDrop(row, shown)}
+      @pointerdown=${(ev: PointerEvent) => this.onTouchStart(ev, row)}
+      @pointermove=${this.onTouchMove}
+      @pointerup=${() => this.onTouchEnd(shown)}
+      @pointercancel=${() => {
+        this.dragging = "";
+        this.over = "";
+      }}
     >
       ${element}
     </div>`;
@@ -658,7 +707,7 @@ export class LegoPanel extends LitElement {
           ${ROW_SPANS[row].map(
             (span) =>
               html`<option value=${span} ?selected=${span === filter.span}>
-                ${SPAN_LABELS[span]}
+                ${spanLabel(span)}
               </option>`,
           )}
         </select></label
@@ -753,15 +802,32 @@ export class LegoPanel extends LitElement {
       .meter.tight .meter-bar span {
         background: var(--lego-want);
       }
-      header.narrow .meter-label {
-        display: none;
+      .heading {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
       }
-      header.narrow .meter-bar {
-        width: 64px;
+      .calls {
+        color: var(--lego-text-2);
+        font-size: var(--ha-font-size-s, 12px);
+        white-space: nowrap;
+      }
+      .calls.tight {
+        color: var(--lego-want);
+      }
+      /* A phone keeps the header to one line, the account on the right. */
+      header.narrow {
+        column-gap: var(--ha-space-2, 8px);
+        flex-wrap: nowrap;
+        padding-right: var(--ha-space-2, 8px);
       }
       .accountpick {
         max-width: 50%;
         position: relative;
+      }
+      header.narrow .accountpick {
+        margin-left: auto;
+        max-width: min(45%, 200px);
       }
       /* The menu button and the brick read as one control, split by a hairline. */
       .accountbar {
@@ -818,12 +884,18 @@ export class LegoPanel extends LitElement {
         border-radius: var(--ha-border-radius-md, 8px);
         list-style: none;
         margin: var(--ha-space-1, 4px) 0 0;
+        max-width: calc(100vw - var(--ha-space-8, 32px));
         min-width: 240px;
         padding: var(--ha-space-1, 4px) 0;
         position: absolute;
         right: 0;
         top: 100%;
         z-index: 4;
+      }
+      .menu .pick {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .menu li {
         align-items: center;

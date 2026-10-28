@@ -8,8 +8,8 @@ import {
 } from "lit";
 import { property, state } from "lit/decorators.js";
 
+import "./bricks";
 import {
-  brickGap,
   displayName,
   errorText,
   formatPrice,
@@ -20,9 +20,7 @@ import {
   whenTone,
   type DateFocus,
 } from "./format";
-import { RAINBOW } from "./generated/brand";
 import { SERIES_COLOURS } from "./palette";
-import { drawSvg } from "./svg";
 import { CARDS, CONTROLS, ROW, TOKENS } from "./styles";
 import type { Dashboard, Hass, LegoSet } from "./types";
 
@@ -352,29 +350,19 @@ export abstract class LegoRow extends LitElement {
     `;
   }
 
-  /**
-   * The rainbow of real bricks, lengths rising in pairs, standing in for cards
-   * that are not there. Decorative, so hidden from screen readers.
-   */
-  protected filler(hint: string, stacked = false, scale = 0.9): TemplateResult {
-    return html`<div class=${stacked ? "filler stacked" : "filler"}>
-      <div class="bricks" aria-hidden="true">
-        ${RAINBOW.map(
-          (brick, i) =>
-            html`${
-                i
-                  ? html`<span
-                      class="gap"
-                      style="--w:${brickGap(RAINBOW[i - 1].width, brick.width)}"
-                    ></span>`
-                  : nothing
-              }
-              <div style="width:${Math.round(brick.width * 0.6 * scale)}px">
-                ${drawSvg(brick.svg)}
-              </div>`,
-        )}
-      </div>
+  /** The bricks standing in for cards that are not there, and a line on why. */
+  protected filler(hint: string): TemplateResult {
+    return html`<div class="filler">
+      <lego-bricks></lego-bricks>
       <span class="hint">${hint}</span>
+    </div>`;
+  }
+
+  /** The bricks after a short row of cards, in whatever room the cards leave. */
+  protected tail(hint = ""): TemplateResult {
+    return html`<div class="filler tail">
+      <lego-bricks></lego-bricks>
+      ${hint ? html`<span class="hint">${hint}</span>` : nothing}
     </div>`;
   }
 }

@@ -10,17 +10,55 @@ import type {
   ThemeTotal,
   TimelinePoint,
 } from "./types";
-import { RAINBOW } from "./generated/brand";
+/** The narrowest gap between two average bricks, and how far one may widen. */
+const BRICK_GAP = 12;
+// Wide enough that the rainbow fills a desktop row, around 1,300 pixels.
+const BRICK_GAP_STRETCH = 10;
 
-const MEAN_BRICK =
-  RAINBOW.reduce((sum, brick) => sum + brick.width, 0) / RAINBOW.length;
+export interface BrickFit {
+  /** How many of the bricks fit, smallest first. */
+  count: number;
+  /** The gap after each shown brick but the last, in pixels. */
+  gaps: number[];
+}
 
 /**
- * How much of the spare width the gap between two bricks takes, against an
- * average gap of 1: the bigger the pieces either side, the wider the gap.
+ * Fit the rainbow into a width: as many bricks as fit at the narrowest gaps,
+ * then the spare width shared between the gaps, the bigger pieces' gaps taking
+ * more, up to a stretch past which the bricks would read as scattered.
  */
-export function brickGap(before: number, after: number): number {
-  return Math.round(((before + after) / 2 / MEAN_BRICK) * 100) / 100;
+export function fitBricks(widths: number[], available: number): BrickFit {
+  // Weighed against these widths, which may be drawn at any scale.
+  const mean = widths.reduce((sum, w) => sum + w, 0) / (widths.length || 1);
+  const base = (i: number) =>
+    (BRICK_GAP * (widths[i] + widths[i + 1])) / 2 / mean;
+  let count = 0;
+  let used = 0;
+  for (const [i, width] of widths.entries()) {
+    const next = used + (i ? base(i - 1) : 0) + width;
+    if (next > available) break;
+    used = next;
+    count = i + 1;
+  }
+  const gaps = Array.from({ length: Math.max(count - 1, 0) }, (_, i) =>
+    base(i),
+  );
+  let spare = available - used;
+  // Shared by weight; a gap that reaches its cap passes the rest to the others.
+  let open = gaps.map((_, i) => i);
+  while (spare > 0.5 && open.length) {
+    const weight = open.reduce((sum, i) => sum + base(i), 0);
+    const share = spare;
+    spare = 0;
+    open = open.filter((i) => {
+      const cap = base(i) * BRICK_GAP_STRETCH;
+      const want = gaps[i] + (share * base(i)) / weight;
+      gaps[i] = Math.min(want, cap);
+      spare += want - gaps[i];
+      return gaps[i] < cap;
+    });
+  }
+  return { count, gaps: gaps.map((gap) => Math.round(gap * 10) / 10) };
 }
 
 // Brickset publishes a set before its name is announced and fills the name with
@@ -278,21 +316,37 @@ export function displayName(item: Pick<LegoSet, "name">): string {
 }
 
 export const SPAN_LABELS: Record<Span, string> = {
-  around: "3 months either side",
+  around: "Now",
   year: "This year",
   past3: "Past 3 months",
   past1: "Past month",
   next1: "Next month",
   next3: "Next 3 months",
-  coming: "Upcoming",
+  coming: "Unreleased",
 };
 
-/** The spans each release row offers, in the order its pills show them. */
+/** What a span covers, for the spans whose short name does not say. */
+export const SPAN_HINTS: Partial<Record<Span, string>> = {
+  around: "Three months either side of today",
+  year: "January to December",
+  coming: "Every set announced and not yet out, with a date or without",
+};
+
+/** A span's name on its pill: the year span is named by the year itself. */
+export function spanLabel(span: Span, today = new Date()): string {
+  return span === "year" ? String(today.getFullYear()) : SPAN_LABELS[span];
+}
+
+/**
+ * The spans each release row offers, in time order, the past first. Brickset
+ * dates little more than a few months ahead, so the future is one span, and the
+ * fixed rows have one span each.
+ */
 export const ROW_SPANS: Record<ReleaseRow, Span[]> = {
-  releases: ["around", "year", "past3", "past1", "next3", "coming"],
-  themes: ["around", "year", "past3", "past1", "next3", "coming"],
-  recent: ["past1", "past3", "year"],
-  upcoming: ["next1", "next3", "coming"],
+  releases: ["past3", "around", "year", "coming"],
+  themes: ["past3", "around", "year", "coming"],
+  recent: ["past3"],
+  upcoming: ["coming"],
 };
 
 /** A release row's own scope: the fixed rows cover every theme or yours. */
@@ -321,7 +375,10 @@ export function releaseFilter(
   const saved: ReleaseFilter = dash.release_filters?.[row] ?? {};
   const allOn = dash.release_status.all !== null;
   const fixed = ROW_SCOPE[row];
-  let scope: Scope = fixed ?? saved.scope ?? (allOn ? "all" : "mine");
+  // Your own themes first: every theme costs a read of the whole year, so it is
+  // the one to pick, not the one to be given.
+  const fallback: Scope = dash.followed.length || !allOn ? "mine" : "all";
+  let scope: Scope = fixed ?? saved.scope ?? fallback;
   if (scope === "all" && !allOn) scope = "mine";
   const followed = new Set(dash.followed.map((t) => t.toLowerCase()));
   const themes =
@@ -333,9 +390,9 @@ export function releaseFilter(
     saved.span && spans.includes(saved.span)
       ? saved.span
       : row === "upcoming"
-        ? "next1"
+        ? "coming"
         : row === "recent"
-          ? "past1"
+          ? "past3"
           : "around";
   return { scope, themes, span };
 }
@@ -357,6 +414,46 @@ export function toggleTheme(
 
 /** Months the timeline spans: January this year to the end of next March. */
 export const TIMELINE_MONTHS = 15;
+
+/** On a phone, the months one screen's width of timeline shows. */
+const COMPACT_MONTHS = 3;
+/** The least a phone shows, so a short span still has some year around it. */
+const COMPACT_LEAST = 2;
+const COMPACT_MARGIN = 0.25;
+
+export interface TimelineView {
+  /** The first and last month shown, in months from 1 January. */
+  from: number;
+  to: number;
+  /** How many screen widths the timeline is drawn across; above 1 it scrolls. */
+  width: number;
+}
+
+/**
+ * The part of the timeline to draw. A wide screen shows all of it; a phone shows
+ * only the chosen span, at a readable scale, scrolling once the span is longer
+ * than a screen's width holds.
+ */
+export function timelineView(
+  from: number,
+  to: number,
+  compact: boolean,
+): TimelineView {
+  if (!compact) return { from: 0, to: TIMELINE_MONTHS, width: 1 };
+  let first = Math.max(from - COMPACT_MARGIN, 0);
+  let last = Math.min(to + COMPACT_MARGIN, TIMELINE_MONTHS);
+  const short = COMPACT_LEAST - (last - first);
+  if (short > 0) {
+    first = Math.max(first - short / 2, 0);
+    last = Math.min(first + COMPACT_LEAST, TIMELINE_MONTHS);
+    first = Math.max(last - COMPACT_LEAST, 0);
+  }
+  return {
+    from: first,
+    to: last,
+    width: Math.max((last - first) / COMPACT_MONTHS, 1),
+  };
+}
 
 /** A date's position on the timeline, in months from 1 January this year. */
 export function monthsFrom(start: Date, iso: string | Date): number {

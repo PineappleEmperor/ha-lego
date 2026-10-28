@@ -296,9 +296,10 @@ async def test_release_timeline_and_theme_filter(
             "name": "Later",
         },
     ]
+    # The year's span is the whole calendar year, what is still to come included.
     assert result["span"] == {
         "from": date(today.year, 1, 1).isoformat(),
-        "to": today.isoformat(),
+        "to": date(today.year, 12, 31).isoformat(),
     }
 
     # A theme nobody follows matches nothing, rather than falling back to them all.

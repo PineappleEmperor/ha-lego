@@ -127,14 +127,18 @@ of rows, each with an icon, a title and a fold arrow:
   would go over the daily budget. **Sets** below it unfolds the full grid, and its
   search box covers both your own sets and the whole catalogue.
 - **New releases** shows new sets as cards with their prices, above a timeline from
-  January to next March with a dot per set. Pick **Everything**, **My themes** or any of
-  the themes you follow, and a span: **3 months either side** of today to start with,
-  or anything from **This year** to **Upcoming**. Whatever you pick is where the row
-  opens next time. Everything needs **Follow releases across all themes** in options.
-  **Follow a theme** adds one
+  January to next March with a dot per set. It opens on **My themes**; pressing it
+  again shows or hides a chip for each theme you follow, so you can narrow it to
+  some of them. **Everything** shows every theme, and needs **Follow releases across
+  all themes** in options, which reads the whole year at about 3 calls a day. The
+  span is **Past 3 months**, **Now** (three months either side of today, where it
+  opens), the current year, or **Unreleased**: every set announced and not yet out,
+  dated or not. Whatever you pick is where the row opens next time. **Follow a theme** adds one
   from a list of Brickset's themes and shows what it costs first: one call, or nothing
   when every theme is read anyway. A theme's × stops following it. Hovering a stack of
-  dots on the timeline, or tabbing to it, spreads them out and names their sets.
+  dots on the timeline, or tabbing to it, spreads them out and names their sets; on a
+  phone, tap the stack, and the timeline shows only the span, scrolling when it is
+  long.
 - **My wishlist** runs soonest to retire first.
 - **Collection value** and **Pieces** show a donut and a bar per theme. Hovering a theme
   lists the sets behind it, and **Trend over a year** unfolds a line from Home
@@ -142,12 +146,13 @@ of rows, each with an icon, a title and a fold arrow:
 
 **Customise** chooses which rows show, whether each one starts open or folded, and the
 filters each release row opens on. It can also split New releases into the older
-**Out recently**, **Coming soon** and **New in my themes** rows. Drag a row's handle, or
-use its arrow keys, to reorder. All of it is remembered per Home Assistant user, so it
-follows you to every device.
+**Out recently**, **Coming soon** and **New in my themes** rows. Drag a row's handle,
+with a mouse or a finger, or use its arrow keys, to reorder. All of it is remembered per
+Home Assistant user, so it follows you to every device.
 
-The header shows how many Brickset calls today has used against your budget, and the
-logo takes your theme's primary colour. One sidebar entry serves every Brickset account
+The header shows how many Brickset calls today has used against your budget, as a bar
+on a wide screen and as a line under the title on a phone, and the logo takes your
+theme's primary colour. One sidebar entry serves every Brickset account
 you may use: a menu appears in the header when there is more than one. Picking an
 account shows it; pressing its brick makes it the one your panel opens on. Until you
 choose, your own account opens ahead of a shared one.

@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  brickGap,
+  ROW_SPANS,
   budgetTitle,
+  fitBricks,
   monthsFrom,
   moveRow,
   releaseFilter,
   rowsForMode,
+  spanLabel,
   stackOffsets,
   stackTimeline,
+  timelineView,
   toggleTheme,
   webUrl,
 } from "../src/format";
@@ -53,20 +56,35 @@ describe("theme colours", () => {
 });
 
 describe("release filters", () => {
-  it("opens the combined row on Everything, three months either side", () => {
+  it("opens the combined row on your themes, three months either side", () => {
     expect(releaseFilter("releases", dash({}))).toEqual({
-      scope: "all",
+      scope: "mine",
       themes: [],
       span: "around",
     });
   });
 
+  it("opens on Everything only when no theme is followed", () => {
+    expect(releaseFilter("releases", dash({ followed: [] })).scope).toBe("all");
+  });
+
+  it("names the year span by the year, and orders the spans past to future", () => {
+    expect(spanLabel("year", new Date(2026, 9, 28))).toBe("2026");
+    expect(spanLabel("year", new Date(2027, 0, 2))).toBe("2027");
+    expect(ROW_SPANS.releases.map((span) => spanLabel(span))).toEqual([
+      "Past 3 months",
+      "Now",
+      String(new Date().getFullYear()),
+      "Unreleased",
+    ]);
+  });
+
   it("opens on the span picked last time", () => {
     const filter = releaseFilter(
       "releases",
-      dash({ release_filters: { releases: { span: "next3" } } }),
+      dash({ release_filters: { releases: { span: "coming" } } }),
     );
-    expect(filter.span).toBe("next3");
+    expect(filter.span).toBe("coming");
   });
 
   it("falls back to the followed themes when releases are not followed", () => {
@@ -100,9 +118,9 @@ describe("release filters", () => {
     expect(releaseFilter("upcoming", dash({}))).toEqual({
       scope: "all",
       themes: [],
-      span: "next1",
+      span: "coming",
     });
-    expect(releaseFilter("recent", dash({})).span).toBe("past1");
+    expect(releaseFilter("recent", dash({})).span).toBe("past3");
   });
 
   it("returns to every theme once all or none are picked", () => {
@@ -161,6 +179,18 @@ describe("timeline", () => {
       start,
     );
     expect(stacks).toEqual([]);
+  });
+
+  it("shows a wide screen the whole year and a phone only the span", () => {
+    expect(timelineView(9, 10, false)).toEqual({ from: 0, to: 15, width: 1 });
+    // A month fits on a phone with room either side, so it does not scroll.
+    const month = timelineView(9, 10, true);
+    expect(month.width).toBe(1);
+    expect(month.to - month.from).toBeGreaterThanOrEqual(2);
+    // The whole year does not, so it scrolls, at a phone's three months a screen.
+    const year = timelineView(0, 12, true);
+    expect(year.width).toBeCloseTo((12.25 - 0) / 3);
+    expect(year.from).toBe(0);
   });
 
   it("centres a stack on the line, rather than growing it upwards", () => {
@@ -273,13 +303,35 @@ describe("generated drawings", () => {
     expect([...lengths].sort((a, b) => a - b)).toEqual(lengths);
   });
 
-  it("leave the bigger pieces wider gaps, an average gap weighing 1", () => {
-    const gaps = RAINBOW.slice(1).map((brick, i) =>
-      brickGap(RAINBOW[i].width, brick.width),
+  const widths = RAINBOW.map((brick) => Math.round(brick.width * 0.54));
+  const total = (fit: { count: number; gaps: number[] }) =>
+    widths.slice(0, fit.count).reduce((sum, w) => sum + w, 0) +
+    fit.gaps.reduce((sum, g) => sum + g, 0);
+
+  it("show only the bricks that fit, never spilling past the width", () => {
+    const phone = fitBricks(widths, 320);
+    expect(phone.count).toBeGreaterThan(1);
+    expect(phone.count).toBeLessThan(widths.length);
+    expect(total(phone)).toBeLessThanOrEqual(320);
+    expect(fitBricks(widths, 0)).toEqual({ count: 0, gaps: [] });
+  });
+
+  it("share the spare room, the bigger pieces' gaps widest", () => {
+    const fit = fitBricks(widths, 700);
+    expect(fit.count).toBe(widths.length);
+    expect([...fit.gaps].sort((a, b) => a - b)).toEqual(fit.gaps);
+    expect(total(fit)).toBeCloseTo(700, 0);
+  });
+
+  it("stop widening the gaps once the bricks would look scattered", () => {
+    const fit = fitBricks(widths, 4000);
+    expect(total(fit)).toBeLessThan(4000);
+    const mean = widths.reduce((sum, w) => sum + w, 0) / widths.length;
+    expect(fit.gaps[0]).toBeLessThanOrEqual(
+      ((12 * (widths[0] + widths[1])) / 2 / mean) * 10 + 0.1,
     );
-    expect([...gaps].sort((a, b) => a - b)).toEqual(gaps);
-    expect(gaps[0]).toBeLessThan(1);
-    expect(gaps[gaps.length - 1]).toBeGreaterThan(1);
+    // A desktop row is filled.
+    expect(total(fitBricks(widths, 1300))).toBeCloseTo(1300, 0);
   });
 });
 
