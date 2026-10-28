@@ -307,7 +307,7 @@ def span_window(span: str, today: date) -> tuple[date, date]:
     tomorrow = today + timedelta(days=1)
     windows = {
         "around": (today - quarter, today + quarter),
-        "year": (date(today.year, 1, 1), today),
+        "year": (date(today.year, 1, 1), date(today.year, 12, 31)),
         "past3": (today - quarter, today),
         "past1": (today - month, today),
         "next1": (tomorrow, today + month),

@@ -12,13 +12,14 @@ import { CHANGED, FILTER, LegoRow, define } from "../base";
 import {
   ROW_SPANS,
   accountCall,
-  SPAN_LABELS,
+  SPAN_HINTS,
   TIMELINE_MONTHS,
   count,
   displayName,
   errorText,
   monthsFrom,
   releaseFilter,
+  spanLabel,
   stackOffsets,
   stackTimeline,
   toggleTheme,
@@ -30,7 +31,6 @@ import type {
   FollowResult,
   ReleaseRow,
   Releases,
-  Scope,
   Span,
   ThemeList,
 } from "../types";
@@ -57,6 +57,8 @@ export class LegoReleasesRow extends LegoRow {
   @state() private draft = "";
   @state() private following = false;
   @state() private followNote = "";
+  /** Whether the followed themes' own chips show under My themes. */
+  @state() private themesOpen = false;
 
   private filterFor = "";
   private requested = "";
@@ -322,9 +324,10 @@ export class LegoReleasesRow extends LegoRow {
           html`<button
             class=${span === this.filter?.span ? "pill on" : "pill"}
             aria-pressed=${span === this.filter?.span}
+            title=${SPAN_HINTS[span] ?? nothing}
             @click=${() => this.pick({ span })}
           >
-            ${SPAN_LABELS[span]}
+            ${spanLabel(span)}
           </button>`,
       )}
     </div>`;
@@ -377,37 +380,56 @@ export class LegoReleasesRow extends LegoRow {
   private chips(filter: ResolvedFilter): TemplateResult {
     const dash = this.dash!;
     const slots = themeSlots(dash.followed);
-    const scopeChip = (scope: Scope, label: string) => {
-      const on =
-        filter.scope === scope && (scope === "all" || !filter.themes.length);
-      return html`<button
-        class=${on ? "chip on" : "chip"}
-        aria-pressed=${on}
-        @click=${() => this.pick({ scope, themes: [] })}
-      >
-        ${label}
-      </button>`;
-    };
+    const mine = filter.scope === "mine";
+    const allOn = dash.release_status.all !== null;
+    // Everything shows even while it is off, so the way to every theme is found.
+    const everything = html`<button
+      class=${filter.scope === "all" ? "chip on" : allOn ? "chip" : "chip off"}
+      aria-pressed=${filter.scope === "all"}
+      aria-disabled=${!allOn}
+      @click=${() => {
+        if (!allOn) {
+          this.followNote =
+            "Everything needs Follow releases across all themes, in the integration's options.";
+          return;
+        }
+        this.pick({ scope: "all", themes: [] });
+      }}
+    >
+      Everything
+    </button>`;
+    // My themes picks the followed themes, then folds their chips away or back.
+    const picked = mine ? filter.themes.length : 0;
+    const myThemes = html`<button
+      class=${mine ? "chip on" : "chip"}
+      aria-pressed=${mine}
+      aria-expanded=${mine && this.themesOpen}
+      @click=${() => {
+        if (mine) {
+          this.themesOpen = !this.themesOpen;
+        } else {
+          this.themesOpen = true;
+          this.pick({ scope: "mine", themes: [] });
+        }
+      }}
+    >
+      ${this.kind === "themes" ? "All my themes" : "My themes"}
+      ${picked && !this.themesOpen ? html`<span>· ${picked}</span>` : nothing}
+      <ha-icon
+        class="drop"
+        icon=${mine && this.themesOpen ? "mdi:chevron-up" : "mdi:chevron-down"}
+      ></ha-icon>
+    </button>`;
+    const showThemes = mine && this.themesOpen;
     return html`<div class="chips">
+        ${this.kind === "releases" ? everything : nothing}
+        ${dash.followed.length ? myThemes : nothing}
         ${
-          this.kind === "releases" && dash.release_status.all !== null
-            ? scopeChip("all", "Everything")
-            : nothing
-        }
-        ${
-          dash.followed.length
-            ? scopeChip(
-                "mine",
-                this.kind === "themes" ? "All my themes" : "My themes",
-              )
-            : nothing
-        }
-        ${
-          dash.followed.length && this.kind === "releases"
+          showThemes && this.kind === "releases"
             ? html`<span class="divider" aria-hidden="true"></span>`
             : nothing
         }
-        ${dash.followed.map((theme) => {
+        ${(showThemes ? dash.followed : []).map((theme) => {
           const on = filter.scope === "mine" && filter.themes.includes(theme);
           return html`<button
             class=${on ? "chip on" : "chip"}
@@ -429,9 +451,14 @@ export class LegoReleasesRow extends LegoRow {
             ${theme}
           </button>`;
         })}
-        ${this.followChip()}
+        ${showThemes || !dash.followed.length ? this.followChip() : nothing}
       </div>
-      ${this.adding ? this.editor() : nothing}`;
+      ${this.adding ? this.editor() : nothing}
+      ${
+        this.followNote && !this.adding
+          ? html`<p class="caveat" role="status">${this.followNote}</p>`
+          : nothing
+      }`;
   }
 
   private followControls(): TemplateResult | typeof nothing {

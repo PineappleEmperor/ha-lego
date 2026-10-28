@@ -6,13 +6,13 @@ import { ROW_META, define, type LegoRow } from "./base";
 import "./cards";
 import {
   ROW_SPANS,
-  SPAN_LABELS,
   accountCall,
   budgetTitle,
   errorText,
   moveRow,
   releaseFilter,
   rowsForMode,
+  spanLabel,
   toggleTheme,
 } from "./format";
 import { LOGO } from "./generated/brand";
@@ -658,7 +658,7 @@ export class LegoPanel extends LitElement {
           ${ROW_SPANS[row].map(
             (span) =>
               html`<option value=${span} ?selected=${span === filter.span}>
-                ${SPAN_LABELS[span]}
+                ${spanLabel(span)}
               </option>`,
           )}
         </select></label

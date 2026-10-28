@@ -316,7 +316,7 @@ export function displayName(item: Pick<LegoSet, "name">): string {
 }
 
 export const SPAN_LABELS: Record<Span, string> = {
-  around: "3 months either side",
+  around: "Now",
   year: "This year",
   past3: "Past 3 months",
   past1: "Past month",
@@ -325,11 +325,22 @@ export const SPAN_LABELS: Record<Span, string> = {
   coming: "Upcoming",
 };
 
-/** The spans each release row offers, in the order its pills show them. */
+/** What a span covers, for the spans whose short name does not say. */
+export const SPAN_HINTS: Partial<Record<Span, string>> = {
+  around: "Three months either side of today",
+  year: "January to December",
+};
+
+/** A span's name on its pill: the year span is named by the year itself. */
+export function spanLabel(span: Span, today = new Date()): string {
+  return span === "year" ? String(today.getFullYear()) : SPAN_LABELS[span];
+}
+
+/** The spans each release row offers, in time order, the past first. */
 export const ROW_SPANS: Record<ReleaseRow, Span[]> = {
-  releases: ["around", "year", "past3", "past1", "next3", "coming"],
-  themes: ["around", "year", "past3", "past1", "next3", "coming"],
-  recent: ["past1", "past3", "year"],
+  releases: ["past1", "past3", "around", "year", "next3", "coming"],
+  themes: ["past1", "past3", "around", "year", "next3", "coming"],
+  recent: ["past1", "past3"],
   upcoming: ["next1", "next3", "coming"],
 };
 

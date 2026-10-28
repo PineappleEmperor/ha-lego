@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ROW_SPANS,
   budgetTitle,
   fitBricks,
   monthsFrom,
   moveRow,
   releaseFilter,
   rowsForMode,
+  spanLabel,
   stackOffsets,
   stackTimeline,
   toggleTheme,
@@ -59,6 +61,19 @@ describe("release filters", () => {
       themes: [],
       span: "around",
     });
+  });
+
+  it("names the year span by the year, and orders the spans past to future", () => {
+    expect(spanLabel("year", new Date(2026, 9, 28))).toBe("2026");
+    expect(spanLabel("year", new Date(2027, 0, 2))).toBe("2027");
+    expect(ROW_SPANS.releases.map((span) => spanLabel(span))).toEqual([
+      "Past month",
+      "Past 3 months",
+      "Now",
+      String(new Date().getFullYear()),
+      "Next 3 months",
+      "Upcoming",
+    ]);
   });
 
   it("opens on the span picked last time", () => {

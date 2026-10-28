@@ -245,6 +245,11 @@ export const CONTROLS = css`
     border-color: var(--lego-primary);
     color: var(--lego-on-primary);
   }
+  /* Present to be found, but not yet switched on in the options. */
+  .chip.off {
+    color: var(--lego-text-2);
+    opacity: 0.6;
+  }
   .divider {
     align-self: stretch;
     background: var(--lego-outline);
