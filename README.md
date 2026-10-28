@@ -230,7 +230,8 @@ collapsed: false
 | Last synced | Diagnostic timestamp of the last time Brickset answered a poll. Stays available, so a dashboard can show how old the data is. |
 | Next wishlist retirement | Days until the soonest set on your wishlist leaves sale, with that set's full record in attributes. Sets already gone are excluded. |
 | Latest *theme* set | One per watched theme: the most recently released set, or the soonest due if none is out yet, with details and this year's count in attributes. |
-| Set retirements / releases / anniversaries | Three calendar entities. |
+| Set retirements / Set releases | Calendars, shown on Home Assistant's **Calendar** page: when owned and wanted sets leave sale, and when sets in your watched themes come out. A calendar reads "on" only while one of its events is under way. |
+| Set anniversaries | A calendar of each owned set's yearly birthday, counted from its launch. Disabled at first; enable it from the entity's settings if you want it. |
 
 ## Actions
 

@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -105,6 +106,24 @@ async def test_release_calendar_follows_feed_updates(
 
 
 @pytest.mark.usefixtures("brickset")
+async def test_only_the_anniversaries_start_disabled(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Releases and retirements are worth acting on; anniversaries are opt-in."""
+    await setup_integration(hass, mock_config_entry)
+
+    entry = entity_registry.async_get(ANNIVERSARIES)
+    assert entry is not None
+    assert entry.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert hass.states.get(ANNIVERSARIES) is None
+    for calendar in (RELEASES, RETIREMENTS):
+        assert entity_registry.async_get(calendar).disabled_by is None
+        assert hass.states.get(calendar) is not None
+
+
+@pytest.mark.usefixtures("brickset", "entity_registry_enabled_by_default")
 async def test_anniversary_events(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
@@ -160,6 +179,7 @@ async def test_empty_calendar_has_no_next_event(
     assert hass.states.get(RETIREMENTS).state == "off"
 
 
+@pytest.mark.usefixtures("entity_registry_enabled_by_default")
 async def test_leap_day_anniversary_falls_back_to_the_28th(
     hass: HomeAssistant,
     brickset: BricksetServer,
@@ -219,6 +239,7 @@ async def test_calendar_ranges_include_their_first_day(
     assert [event["summary"] for event in events] == ["10294-1 Titanic retires"]
 
 
+@pytest.mark.usefixtures("entity_registry_enabled_by_default")
 async def test_a_set_has_no_birthday_in_its_launch_year(
     hass: HomeAssistant,
     brickset: BricksetServer,
