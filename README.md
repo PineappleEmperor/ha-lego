@@ -108,6 +108,7 @@ Reachable via **Configure** on the integration entry.
 | People who use this account | none | The Home Assistant users this Brickset account belongs to. See [Sharing accounts](#sharing-accounts). |
 | Shared with all users | off | Lets every Home Assistant user see and change this account. |
 | Show the LEGO panel in the sidebar | on | Whether to add the sidebar page for browsing your collection, your wishlist and new releases. |
+| Sharper pictures on high-resolution screens | off | Also asked during setup. Off, each set keeps one picture of about 16 KB, about 3 MB for 200 sets. On, phones, tablets and other high-resolution screens get a copy of about 90 KB instead, up to about 21 MB kept for 200 sets. Pictures sit in Home Assistant's cache folder, which backups leave out. |
 | Follow releases across all themes | on | Lets the panel's **New releases** row show **Everything**, every set whatever its theme, and fills the **Out recently** and **Coming soon** rows. It reads every set of the year once a day, about 3 calls, and your watched themes then come from the same read rather than costing calls of their own. |
 | Keep a local set index | on | Whether to keep a local copy of Rebrickable's set list, so looking a set up costs no Brickset calls. |
 | Include set names in the index | on | Whether that index stores names as well as numbers, which is what searching by name needs. Takes roughly 1.8 MB on disk instead of 450 KB. |
