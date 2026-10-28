@@ -26,6 +26,7 @@ from .const import (
     PANEL_ROWS,
     PANEL_STORAGE_KEY,
     PANEL_URL_PATH,
+    REBRICKABLE_THUMBNAIL_URL,
     REGION_CURRENCY,
     RELEASE_MODES,
     RELEASE_ROWS,
@@ -264,8 +265,8 @@ def summarise(lego_set: Any, region: str) -> dict[str, Any]:
 
 def summarise_entry(entry: CatalogueEntry, owned: bool) -> dict[str, Any]:
     """Give a set known only to the local index the shape summarise() returns."""
-    # The index holds number, name, year and theme only, so a card shows those and
-    # links to the set's plain Brickset page for the rest.
+    # The index holds number, name, year and theme only, so a card shows those,
+    # Rebrickable's picture of the number, and the plain Brickset page for the rest.
     return {
         "set_number": entry.number,
         "name": entry.name,
@@ -273,7 +274,7 @@ def summarise_entry(entry: CatalogueEntry, owned: bool) -> dict[str, Any]:
         "theme": entry.theme,
         "pieces": None,
         "minifigs": None,
-        "image": None,
+        "image": REBRICKABLE_THUMBNAIL_URL.format(number=entry.number.lower()),
         "url": f"https://brickset.com/sets/{entry.number}",
         "owned": owned,
         "wanted": False,

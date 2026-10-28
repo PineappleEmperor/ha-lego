@@ -259,6 +259,14 @@ export abstract class LegoRow extends LitElement {
     >`;
   }
 
+  /** A picture URL built from a set number can miss; the brand icon stands in. */
+  private noArt = (ev: Event): void => {
+    const img = ev.target as HTMLImageElement;
+    if (img.classList.contains("noart")) return;
+    img.classList.add("noart");
+    img.src = BRAND_ICON;
+  };
+
   protected card(
     item: LegoSet,
     focus: DateFocus = "retirement",
@@ -276,7 +284,12 @@ export abstract class LegoRow extends LitElement {
         ${this.linked(
           item,
           image
-            ? html`<img src=${image} alt="" loading="lazy" />`
+            ? html`<img
+                src=${image}
+                alt=""
+                loading="lazy"
+                @error=${this.noArt}
+              />`
             : html`<img
                 class="noart"
                 src=${BRAND_ICON}
