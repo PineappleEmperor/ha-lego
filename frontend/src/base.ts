@@ -20,7 +20,7 @@ import {
   whenTone,
   type DateFocus,
 } from "./format";
-import { SERIES_COLOURS } from "./palette";
+import { SERIES_COLOURS, slotColour, themeSlots } from "./palette";
 import { CARDS, CONTROLS, ROW, TOKENS } from "./styles";
 import type { Dashboard, Hass, LegoSet } from "./types";
 
@@ -257,6 +257,16 @@ export abstract class LegoRow extends LitElement {
       aria-hidden=${decorative ? "true" : nothing}
       >${content}</a
     >`;
+  }
+
+  /**
+   * The colour a set's theme wears on every card: its slot if followed, else
+   * "Other"'s grey, so one theme keeps one colour from row to row.
+   */
+  protected themeColour(theme: string): string {
+    const followed = this.dash?.followed ?? [];
+    const match = followed.find((t) => t.toLowerCase() === theme.toLowerCase());
+    return slotColour(match ? themeSlots(followed).get(match) : "other");
   }
 
   /** A picture URL built from a set number can miss; the brand icon stands in. */

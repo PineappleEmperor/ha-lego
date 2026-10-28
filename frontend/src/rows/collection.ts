@@ -304,7 +304,9 @@ export class LegoCollectionRow extends LegoRow {
                   }
                 </p>
                 <div class="grid">
-                  ${showing.map((item) => this.card(item))}
+                  ${showing.map((item) =>
+                    this.card(item, "retirement", this.themeColour(item.theme)),
+                  )}
                 </div>`
       }
     `;

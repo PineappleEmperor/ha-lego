@@ -764,16 +764,6 @@ export class LegoReleasesRow extends LegoRow {
     );
   }
 
-  /** The colour a set's theme wears: its slot if followed, else "Other"'s grey. */
-  private colourOf(theme: string): string {
-    const dash = this.dash!;
-    const slots = themeSlots(dash.followed);
-    const followed = dash.followed.find(
-      (t) => t.toLowerCase() === theme.toLowerCase(),
-    );
-    return slotColour(followed ? slots.get(followed) : "other");
-  }
-
   /**
    * One stack of dots: hovered or focused, the dots spread apart and a card
    * names the sets they stand for.
@@ -820,7 +810,7 @@ export class LegoReleasesRow extends LegoRow {
         (theme, i) =>
           html`<span
             class="disc"
-            style="--rest:${rest[i]}px;--fan:${fan[i]}px;background:${this.colourOf(
+            style="--rest:${rest[i]}px;--fan:${fan[i]}px;background:${this.themeColour(
               theme,
             )};z-index:${10 - i}"
           ></span>`,
@@ -832,7 +822,7 @@ export class LegoReleasesRow extends LegoRow {
             html`<span class="tipline">
               <span
                 class="key"
-                style="background:${this.colourOf(point.theme)}"
+                style="background:${this.themeColour(point.theme)}"
               ></span>
               <span class="tipname">${displayName(point)}</span>
               <span class="tipdate">${day(point.date)}</span>
@@ -924,7 +914,7 @@ export class LegoReleasesRow extends LegoRow {
           html`<span class="tipline">
             <span
               class="key"
-              style="background:${this.colourOf(point.theme)}"
+              style="background:${this.themeColour(point.theme)}"
             ></span>
             <span class="tipname">${displayName(point)}</span>
             <span class="tipdate"
@@ -951,7 +941,7 @@ export class LegoReleasesRow extends LegoRow {
     }
     return html`<div class="carousel">
       ${sets.map((item) =>
-        this.card(item, "release", this.colourOf(item.theme)),
+        this.card(item, "release", this.themeColour(item.theme)),
       )}
       ${this.tail()}
     </div>`;
