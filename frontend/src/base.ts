@@ -234,11 +234,11 @@ export abstract class LegoRow extends LitElement {
   }
 
   protected toggleOwned(item: LegoSet): Promise<void> {
-    return this.write(
-      item,
-      ownershipCall(this.dash?.device_id ?? "", item),
-      markedOwned(item),
-    );
+    const call = ownershipCall(this.dash?.device_id ?? "", item);
+    return this.write(item, call, {
+      ...markedOwned(item),
+      ...("wanted" in call ? { wanted: false } : {}),
+    });
   }
 
   /** Stamp a set onto the wishlist, or lift it off. */

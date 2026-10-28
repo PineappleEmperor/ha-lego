@@ -59,6 +59,18 @@ describe("wishlist call", () => {
 });
 
 describe("ownership call", () => {
+  it("takes a wanted set off the wishlist when it is got, and only then", () => {
+    const got = { set_number: "1-1", owned: false, wanted: true };
+    expect(ownershipCall("e", got)).toHaveProperty("wanted", false);
+    expect(ownershipCall("e", { ...got, wanted: false })).not.toHaveProperty(
+      "wanted",
+    );
+    // Removing a set from the collection leaves the wishlist alone.
+    expect(
+      ownershipCall("e", { set_number: "1-1", owned: true, wanted: true }),
+    ).not.toHaveProperty("wanted");
+  });
+
   it("always sends device_id, which the action requires", () => {
     const data = ownershipCall("abc123", {
       set_number: "10497-1",

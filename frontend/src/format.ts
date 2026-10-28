@@ -75,12 +75,15 @@ const UNNAMED = "{?}";
  */
 export function ownershipCall(
   deviceId: string,
-  item: Pick<LegoSet, "set_number" | "owned">,
+  item: Pick<LegoSet, "set_number" | "owned"> &
+    Partial<Pick<LegoSet, "wanted">>,
 ): Record<string, unknown> {
   return {
     device_id: deviceId,
     set_number: item.set_number,
     owned: !item.owned,
+    // A wanted set, once got, comes off the wishlist in the same write.
+    ...(!item.owned && item.wanted ? { wanted: false } : {}),
   };
 }
 
