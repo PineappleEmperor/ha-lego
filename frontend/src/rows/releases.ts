@@ -223,22 +223,58 @@ export class LegoReleasesRow extends LegoRow {
       .timeline .stack.out {
         opacity: 0.35;
       }
-      .timeline .disc {
-        border-radius: 50%;
-        box-shadow: 0 0 0 2px var(--lego-surface);
-        height: 10px;
-        left: 50%;
+      /* Each set is a 1×1 brick seen side on, so sets on one date stack up like
+         bricks: the body, its stud behind it, and a lit top edge. */
+      .timeline .brick {
+        /* Outlined in a darker shade of its own colour, as the logo and the filler
+           bricks are (the edge in scripts/generate_brand.py), and as fine: their
+           edge is a fortieth of a brick across, so half a point is the nearest. */
+        --brick-edge: color-mix(in srgb, var(--brick) 42%, black);
+        background: var(--brick);
+        border-radius: 1px;
+        box-shadow: 0 0 0 0.5px var(--brick-edge);
+        height: 7px;
+        /* Whole pixels from the stack's own snapped centre: an edge between two
+           pixels smears, and one side reads heavier than the other. */
+        left: calc(50% - 5px);
         position: absolute;
-        top: 50%;
-        transform: translate(-50%, calc(-50% + var(--rest, 0px)));
+        top: calc(50% - 4px);
+        transform: translateY(var(--rest, 0px));
         transition: transform var(--ha-animation-duration-normal, 250ms)
           ease-out;
         width: 10px;
       }
-      /* The overlapping discs spread apart, so each can be told from the next. */
-      .timeline .stack:hover .disc,
-      .timeline .stack:focus-visible .disc {
-        transform: translate(-50%, calc(-50% + var(--fan, 0px)));
+      .timeline .brick::before {
+        background: var(--brick);
+        border-radius: 0.5px;
+        box-shadow: 0 0 0 0.5px var(--brick-edge);
+        content: "";
+        height: 2px;
+        left: 2px;
+        position: absolute;
+        top: -2px;
+        width: 6px;
+        z-index: -1;
+      }
+      .timeline .brick::after {
+        background: rgb(255 255 255 / 25%);
+        border-radius: 1px 1px 0 0;
+        content: "";
+        height: 2px;
+        left: 0;
+        position: absolute;
+        right: 0;
+        top: 0;
+      }
+      /* The stacked bricks lift apart, so each can be told from the next. */
+      .timeline .stack:hover .brick,
+      .timeline .stack:focus-visible .brick {
+        transform: translateY(var(--fan, 0px));
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .timeline .brick {
+          transition: none;
+        }
       }
       .timeline .extra {
         background: var(--lego-surface);
@@ -776,7 +812,9 @@ export class LegoReleasesRow extends LegoRow {
   ): TemplateResult {
     const pct = (months: number) => `${pos(months) * 100}%`;
     const live = stack.at >= from - 0.01 && stack.at <= to + 0.01;
-    const rest = stackOffsets(stack.themes.length);
+    // A brick's body is 7 points tall, so stacked ones sit 7 apart, studs hidden
+    // under the brick above; hovered, they lift apart.
+    const rest = stackOffsets(stack.themes.length, 7).map(Math.round);
     const fan = stackOffsets(stack.themes.length, 14);
     const language = this.hass?.locale?.language;
     const day = (iso: string) =>
@@ -794,7 +832,7 @@ export class LegoReleasesRow extends LegoRow {
           : "tip";
     return html`<button
       class=${live ? "stack" : "stack out"}
-      style="left:${pct(stack.at)}"
+      style="left:${pct(stack.at)};left:round(nearest, ${pct(stack.at)}, 1px)"
       aria-label=${stack.points
         .map((point) => `${displayName(point)}, ${day(point.date)}`)
         .join("; ")}
@@ -809,8 +847,8 @@ export class LegoReleasesRow extends LegoRow {
       ${stack.themes.map(
         (theme, i) =>
           html`<span
-            class="disc"
-            style="--rest:${rest[i]}px;--fan:${fan[i]}px;background:${this.themeColour(
+            class="brick"
+            style="--rest:${rest[i]}px;--fan:${fan[i]}px;--brick:${this.themeColour(
               theme,
             )};z-index:${10 - i}"
           ></span>`,

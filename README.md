@@ -149,7 +149,8 @@ of rows, each with an icon, a title and a fold arrow:
   call, after which marking any of them costs nothing. Untick **Show prices** there to
   hide each set's price; the choice is saved to your user.
 - **New releases** shows new sets as cards with their prices, above a timeline from
-  January to next March with a dot per set. It opens on **My themes**; pressing it
+  January to next March with a little brick per set, in its theme's colour, stacked
+  where sets share a date. It opens on **My themes**; pressing it
   again shows or hides a chip for each theme you follow, so you can narrow it to
   some of them. **Everything** shows every theme, and needs **Follow releases across
   all themes** in options, which reads the whole year at about 3 calls a day. The
@@ -161,7 +162,7 @@ of rows, each with an icon, a title and a fold arrow:
   theme is read anyway. To stop following one, press and hold any theme chip until
   they wiggle, then tap the × on it; **Done** or Escape stops the wiggle. Edit themes
   lists them with an × too, for a keyboard. Hovering a stack of
-  dots on the timeline, or tabbing to it, spreads them out and names their sets; on a
+  bricks on the timeline, or tabbing to it, lifts them apart and names their sets; on a
   phone, tap the stack, and the timeline shows only the span, scrolling when it is
   long.
 - **My wishlist** runs soonest to retire first, each set stamped **Wanted**.
