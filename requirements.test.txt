@@ -21,4 +21,4 @@ pytest-homeassistant-custom-component==0.13.375
 # and how to pin it from core's own manifest for the HA release pinned above, is
 # the ha-integration skill's reference/panels.md. Re-derive it whenever the
 # pytest-homeassistant-custom-component pin moves.
-home-assistant-frontend==20260930.5
+home-assistant-frontend==20261028.2
