@@ -134,7 +134,8 @@ def test_summary_of_an_empty_collection() -> None:
 def test_dates_fall_back_to_the_set_wide_window() -> None:
     """A set still on sale carries no regional exit date, only a projected one."""
     # Shaped like a real getSets record: LEGOCom prices the set per region and
-    # gives a launch date, while only the top level says when it leaves sale.
+    # records when the product page first appeared, while the top level holds the
+    # curated launchDate and exitDate.
     record = make_set(
         50740,
         "10343-1",
@@ -147,8 +148,19 @@ def test_dates_fall_back_to_the_set_wide_window() -> None:
     lego_set = LegoSet.from_api(record)
 
     assert lego_set.retirement_date("UK") == date(2027, 12, 31)
-    # The region knows when it arrived, so that wins over the set-wide launch.
-    assert lego_set.release_date("UK") == date(2024, 11, 14)
+    # The set-wide launchDate is the release date; dateFirstAvailable is ignored.
+    assert lego_set.release_date("UK") == date(2025, 1, 1)
+
+    unannounced = LegoSet.from_api(
+        make_set(
+            50741,
+            "11534-1",
+            "Bluebell Flowers",
+            first_available="2026-11-07T00:00:00Z",
+            launch_date=None,
+        )
+    )
+    assert unannounced.release_date("UK") is None
 
 
 def test_a_regional_exit_date_wins_over_the_set_wide_one() -> None:
@@ -169,7 +181,14 @@ def test_a_regional_exit_date_wins_over_the_set_wide_one() -> None:
 def test_no_dates_anywhere_stays_none() -> None:
     """An old set with nothing published must not invent a date."""
     lego_set = LegoSet.from_api(
-        make_set(3, "6876-1", "Alienator", first_available=None, last_available=None)
+        make_set(
+            3,
+            "6876-1",
+            "Alienator",
+            first_available=None,
+            last_available=None,
+            launch_date=None,
+        )
     )
 
     assert lego_set.retirement_date("UK") is None

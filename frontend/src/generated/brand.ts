@@ -174,50 +174,6 @@ export const LOGO: SvgNode = {
         },
       ],
     },
-    {
-      tag: "g",
-      attrs: { transform: "translate(11.596,34.314) scale(0.12837)" },
-      children: [
-        {
-          tag: "g",
-          attrs: {
-            stroke: "#FFFFFF",
-            "stroke-width": "17.0",
-            "stroke-linecap": "round",
-            fill: "none",
-          },
-          children: [
-            {
-              tag: "line",
-              attrs: { x1: "120.00", y1: "153.05", x2: "120.00", y2: "309.04" },
-            },
-            {
-              tag: "line",
-              attrs: { x1: "60.00", y1: "214.40", x2: "120.00", y2: "309.04" },
-            },
-            {
-              tag: "line",
-              attrs: { x1: "180.00", y1: "249.69", x2: "120.00", y2: "275.05" },
-            },
-          ],
-        },
-        {
-          tag: "g",
-          attrs: { fill: "#FFFFFF" },
-          children: [
-            {
-              tag: "circle",
-              attrs: { cx: "120.00", cy: "153.05", r: "19.38" },
-            },
-            { tag: "circle", attrs: { cx: "60.00", cy: "214.40", r: "19.38" } },
-            {
-              tag: "circle",
-              attrs: { cx: "180.00", cy: "249.69", r: "19.38" },
-            },
-          ],
-        },
-      ],
-    },
   ],
 };
 

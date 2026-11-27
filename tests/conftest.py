@@ -93,7 +93,7 @@ def make_set(
     price: float | None = 99.99,
     first_available: str | None = "2024-01-01T00:00:00Z",
     last_available: str | None = "2099-12-31T00:00:00Z",
-    launch_date: str | None = None,
+    launch_date: str | None = "2024-01-01T00:00:00Z",
     exit_date: str | None = None,
     priority: int = 1,
     released: bool = True,
@@ -191,6 +191,7 @@ OWNED_SETS = [
         price=None,
         first_available=None,
         last_available=None,
+        launch_date=None,
     ),
 ]
 

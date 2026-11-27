@@ -1,12 +1,7 @@
 # Brand assets
 
-The icon and logo are an isometric 2x2 LEGO brick in Home Assistant blue, carrying
-the Home Assistant mark on its front-left face. Everything is drawn from constants
-by `scripts/generate_brand.py`; no artwork is hand-edited.
-
-The mark is trademarked and the property of the Open Home Foundation, whose terms allow
-non-commercial use only. The README carries the attribution. Selling anything built on
-these assets would need written permission from `partner@openhomefoundation.org`.
+The icon and logo are an isometric 2x2 LEGO brick in Home Assistant blue. Everything
+is drawn from constants by `scripts/generate_brand.py`; no artwork is hand-edited.
 
 ```bash
 python3 scripts/generate_brand.py
@@ -56,15 +51,11 @@ own accuracy is disputed, so they were not treated as a target.
 
 ## Drawing notes
 
-Two things that are easy to get wrong if this is ever rewritten:
+One thing that is easy to get wrong if this is ever rewritten:
 
 - **Studs are drawn after the top face**, each as its own side-plus-ellipse shape.
   Drawing them into the same layer as the brick lets the body's edges cut through
   their outlines.
-- **The Home Assistant mark is sheared by position, not by transform.** Applying a
-  shear to the drawing squashes the round line caps into ellipses and leaves a
-  visible seam where each node meets its branch; moving the node positions instead
-  keeps the circles true.
 
 ## The panel's logo and bricks
 

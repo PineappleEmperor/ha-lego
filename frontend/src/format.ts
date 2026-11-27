@@ -307,7 +307,7 @@ export function whenLabel(
     const coming = new Date(item.available_from) > now;
     return `${coming ? "Due" : "Out"} ${format(item.available_from)}`;
   }
-  return isNamed(item) ? "Date unknown" : "Details tbd";
+  return "Details tbd";
 }
 
 /**

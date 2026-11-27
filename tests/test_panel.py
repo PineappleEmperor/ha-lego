@@ -204,7 +204,7 @@ async def test_release_spans_pick_and_order_the_followed_themes(
             f"{42200 + set_id}-1",
             name,
             theme="Technic",
-            first_available=f"{(today + timedelta(days=days)).isoformat()}T00:00:00Z",
+            launch_date=f"{(today + timedelta(days=days)).isoformat()}T00:00:00Z",
             **kwargs,
         )
 
@@ -219,7 +219,7 @@ async def test_release_spans_pick_and_order_the_followed_themes(
             "42205-1",
             "Announced Set",
             theme="Technic",
-            first_available=None,
+            launch_date=None,
             released=False,
         ),
         dated(6, "Out today", 0),
@@ -266,14 +266,14 @@ async def test_release_timeline_and_theme_filter(
             "42001-1",
             "Later",
             theme="Technic",
-            first_available=f"{today.isoformat()}T00:00:00Z",
+            launch_date=f"{today.isoformat()}T00:00:00Z",
         ),
         make_set(
             2,
             "42002-1",
             "Earlier",
             theme="Technic",
-            first_available=f"{date(today.year, 1, 1).isoformat()}T00:00:00Z",
+            launch_date=f"{date(today.year, 1, 1).isoformat()}T00:00:00Z",
         ),
     ]
     await setup_integration(hass, mock_config_entry)
@@ -755,7 +755,7 @@ async def test_an_undated_set_already_out_is_not_new(
             "42001-1",
             "Old undated",
             theme="Technic",
-            first_available=None,
+            launch_date=None,
             released=True,
         ),
         make_set(
@@ -763,7 +763,7 @@ async def test_an_undated_set_already_out_is_not_new(
             "42002-1",
             "Announced",
             theme="Technic",
-            first_available=None,
+            launch_date=None,
             released=False,
         ),
     ]

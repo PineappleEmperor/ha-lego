@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # skill-audit: local-tool
-"""Draw the brand assets: an isometric 2x2 LEGO brick carrying the HA tree.
+"""Draw the brand assets: an isometric 2x2 LEGO brick.
 
 Also writes the panel's generated module: the logo with its colours left as CSS
 variables, so the panel can draw it in the theme's primary colour, and the rainbow
@@ -53,8 +53,8 @@ def _pts(points: list[tuple[float, float]]) -> str:
     return " ".join(f"{x:.3f},{y:.3f}" for x, y in points)
 
 
-def brick(a: float = HALF_WIDTH) -> tuple[str, tuple]:
-    """Draw the brick, returning its markup and front-left face corners."""
+def brick(a: float = HALF_WIDTH) -> str:
+    """Draw the brick, returning its SVG markup."""
     ax, ay = APEX
     side = a * 1.1547  # plan square side: the rhombus diagonal over cos(30)
     u = (a, ISO * a)
@@ -113,58 +113,12 @@ def brick(a: float = HALF_WIDTH) -> tuple[str, tuple]:
             f'rx="{r:.3f}" ry="{ry:.3f}"/></g>'
         )
 
-    return "".join(parts), (p_left, p_front, b_front, b_left)
+    return "".join(parts)
 
 
-def tree(face: tuple, height: float, fill: str = "#FFFFFF", width: float = 17.0) -> str:
-    """Place the Home Assistant tree on the front-left face.
-
-    The face's slope is applied to the node positions rather than to the drawing:
-    shearing the strokes turns the round caps into ellipses and leaves a seam
-    where each node meets its branch.
-    """
-    p_left, p_front, b_front, b_left = face
-    slope = (p_front[1] - p_left[1]) / (p_front[0] - p_left[0])
-    radius = width * 1.14
-
-    def p(x: float, y: float) -> tuple[float, float]:
-        return x, y + slope * x
-
-    stem = (p(120, 83.77), p(120, 239.76))
-    left = (p(60, 179.76), p(120, 239.76))
-    right = (p(180, 145.77), p(120, 205.77))
-    nodes = (p(120, 83.77), p(60, 179.76), p(180, 145.77))
-
-    pts = (*nodes, stem[1], left[1], right[1])
-    x0 = min(x for x, _ in pts) - radius
-    x1 = max(x for x, _ in pts) + radius
-    y0 = min(y for _, y in pts) - radius
-    y1 = max(y for _, y in pts) + radius
-    scale = height / (y1 - y0)
-
-    cx = (p_left[0] + p_front[0] + b_front[0] + b_left[0]) / 4
-    cy = (p_left[1] + p_front[1] + b_front[1] + b_left[1]) / 4
-    tx = cx - (x0 + (x1 - x0) / 2) * scale
-    ty = cy - (y0 + (y1 - y0) / 2) * scale
-
-    lines = "".join(
-        f'<line x1="{a[0]:.2f}" y1="{a[1]:.2f}" x2="{b[0]:.2f}" y2="{b[1]:.2f}"/>'
-        for a, b in (stem, left, right)
-    )
-    circles = "".join(
-        f'<circle cx="{x:.2f}" cy="{y:.2f}" r="{radius:.2f}"/>' for x, y in nodes
-    )
-    return (
-        f'<g transform="translate({tx:.3f},{ty:.3f}) scale({scale:.5f})">'
-        f'<g stroke="{fill}" stroke-width="{width}" stroke-linecap="round" '
-        f'fill="none">{lines}</g><g fill="{fill}">{circles}</g></g>'
-    )
-
-
-def icon_svg(tree_height: float = 25.0) -> str:
+def icon_svg() -> str:
     """Return the square icon."""
-    body, face = brick()
-    body += tree(face, tree_height)
+    body = brick()
     side = HALF_WIDTH * 1.1547
     span = max(2 * HALF_WIDTH, ISO * 2 * HALF_WIDTH + BODY * side) + OUTER_STROKE + 5
     vx = APEX[0] - span / 2

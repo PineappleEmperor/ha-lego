@@ -48,7 +48,7 @@ def _on(day: date, set_id: int, name: str, **kwargs: Any) -> dict[str, Any]:
         f"{set_id}-1",
         name,
         year=day.year,
-        first_available=f"{day.isoformat()}T00:00:00Z",
+        launch_date=f"{day.isoformat()}T00:00:00Z",
         **kwargs,
     )
 
@@ -112,7 +112,7 @@ async def test_rows_keep_four_weeks_either_side(
         _on(ahead(28), 6, "Due in 28 days"),
         _on(ahead(29), 7, "Due in 29 days"),
         _on(ago(5), 8, "A keyring", category="Gear"),
-        make_set(9, "9-1", "Undated", year=today.year, first_available=None),
+        make_set(9, "9-1", "Undated", year=today.year, launch_date=None),
         # No UK date yet, so Brickset's set-wide launch date stands in.
         make_set(
             10,
@@ -130,7 +130,7 @@ async def test_rows_keep_four_weeks_either_side(
         "upcoming": ["Due tomorrow", "Due worldwide", "Due in 28 days"],
         "status": "ready",
     }
-    # The card shows the date the row was sorted by, not "Date unknown".
+    # The card shows the date the row was sorted by, not "Details tbd".
     upcoming = releases_payload(entry, "all", [], "next1")["sets"]
     assert upcoming[1]["available_from"] == ahead(3).isoformat()
     # A release card draws from the set's record like any other card.
