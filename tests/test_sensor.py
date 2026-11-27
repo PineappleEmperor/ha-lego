@@ -221,6 +221,7 @@ async def test_next_retirement_without_any_dates(
             price=None,
             first_available=None,
             last_available=None,
+            launch_date=None,
         )
     ]
     await setup_integration(hass, mock_config_entry)
@@ -302,23 +303,19 @@ async def test_latest_theme_set_is_the_most_recently_released(
     # Listed out of order, with the highest number neither released nor latest,
     # so only real ordering by release date picks the right one.
     brickset.theme_sets[:] = [
-        make_set(
-            1, "9999-1", "Out last month", theme="Technic", first_available=on(-30)
-        ),
+        make_set(1, "9999-1", "Out last month", theme="Technic", launch_date=on(-30)),
         make_set(
             2,
             "42999-1",
             "Announced",
             theme="Technic",
-            first_available=None,
+            launch_date=None,
             released=False,
         ),
+        make_set(3, "10294-1", "Out yesterday", theme="Technic", launch_date=on(-1)),
+        make_set(4, "42500-1", "Due next week", theme="Technic", launch_date=on(7)),
         make_set(
-            3, "10294-1", "Out yesterday", theme="Technic", first_available=on(-1)
-        ),
-        make_set(4, "42500-1", "Due next week", theme="Technic", first_available=on(7)),
-        make_set(
-            5, "10295-1", "Also out yesterday", theme="Technic", first_available=on(-1)
+            5, "10295-1", "Also out yesterday", theme="Technic", launch_date=on(-1)
         ),
     ]
     await setup_integration(hass, mock_config_entry)

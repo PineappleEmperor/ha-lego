@@ -273,7 +273,7 @@ describe("a set's date line", () => {
     );
     expect(
       whenLabel({ ...item, partial: false }, new Date(), (iso) => iso),
-    ).toBe("Date unknown");
+    ).toBe("Details tbd");
   });
 });
 

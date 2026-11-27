@@ -462,6 +462,9 @@ class LegoCollectionCoordinator(LegoBaseCoordinator[CollectionData]):
             changes: dict[str, Any] = {}
             if before.price(region) != lego_set.price(region):
                 changes["price"] = lego_set.price(region)
+            if before.release_date(region) != lego_set.release_date(region):
+                released = lego_set.release_date(region)
+                changes["release_date"] = released.isoformat() if released else None
             if before.retirement_date(region) != lego_set.retirement_date(region):
                 retires = lego_set.retirement_date(region)
                 changes["retirement_date"] = retires.isoformat() if retires else None

@@ -94,7 +94,7 @@ async def test_release_calendar_follows_feed_updates(
             "Brand New Bricks",
             theme="Technic",
             year=2023,
-            first_available="2023-06-10T00:00:00Z",
+            launch_date="2023-06-10T00:00:00Z",
         )
     )
     await mock_config_entry.runtime_data.feeds.async_refresh()
@@ -196,7 +196,7 @@ async def test_leap_day_anniversary_falls_back_to_the_28th(
             owned=True,
             qty_owned=1,
             year=2024,
-            first_available="2024-02-29T00:00:00Z",
+            launch_date="2024-02-29T00:00:00Z",
         )
     ]
 
@@ -254,7 +254,7 @@ async def test_a_set_has_no_birthday_in_its_launch_year(
             "Galaxy Explorer",
             owned=True,
             qty_owned=1,
-            first_available=f"{launch.isoformat()}T00:00:00Z",
+            launch_date=f"{launch.isoformat()}T00:00:00Z",
         ),
     ]
     await setup_integration(hass, mock_config_entry)

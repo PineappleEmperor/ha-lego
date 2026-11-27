@@ -276,11 +276,8 @@ class LegoSet:
             return pricing.date_last_available
         return self.exit_date
 
-    def release_date(self, region: str) -> date | None:
-        """Return when the set went on sale, preferring the chosen region."""
-        pricing = self.pricing.get(region)
-        if pricing is not None and pricing.date_first_available is not None:
-            return pricing.date_first_available
+    def release_date(self, region: str = "") -> date | None:
+        """Return when the set went, or goes, on sale."""
         return self.launch_date
 
 

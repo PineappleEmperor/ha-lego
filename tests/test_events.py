@@ -94,6 +94,7 @@ async def test_new_set_event_without_a_release_date(
             price=None,
             first_available=None,
             last_available=None,
+            launch_date=None,
         ),
     )
 
@@ -137,6 +138,36 @@ async def test_wanted_set_change_event(
     assert events[0].data["set_number"] == "10294-1"
     assert events[0].data["price"] == 699.99
     assert events[0].data["retirement_date"] == "2027-01-31"
+    assert events[0].data["device_id"] == lego_device_id(hass, mock_config_entry)
+
+
+async def test_wanted_set_release_date_change_event(
+    hass: HomeAssistant,
+    brickset: BricksetServer,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A release date change on a wanted set fires an event."""
+    events: list[Event] = []
+
+    @callback
+    def record(event: Event) -> None:
+        events.append(event)
+
+    hass.bus.async_listen(EVENT_WANTED_CHANGED, record)
+
+    await setup_integration(hass, mock_config_entry)
+    assert events == []
+
+    brickset.wanted[0]["launchDate"] = "2027-01-01T00:00:00Z"
+
+    freezer.tick(timedelta(hours=7))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert len(events) == 1
+    assert events[0].data["set_number"] == "10294-1"
+    assert events[0].data["release_date"] == "2027-01-01"
     assert events[0].data["device_id"] == lego_device_id(hass, mock_config_entry)
 
 
@@ -434,7 +465,13 @@ async def test_new_set_event_prices_in_the_chosen_region(
         events.append(event)
 
     hass.bus.async_listen(EVENT_NEW_SET, record)
-    new = make_set(77, "42222-1", "Brand New Technic", theme="Technic")
+    new = make_set(
+        77,
+        "42222-1",
+        "Brand New Technic",
+        theme="Technic",
+        launch_date="2025-03-01T00:00:00Z",
+    )
     new["LEGOCom"]["US"] = {
         "retailPrice": 119.99,
         "dateFirstAvailable": "2025-03-01T00:00:00Z",
