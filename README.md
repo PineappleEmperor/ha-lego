@@ -17,7 +17,7 @@
 
 Keep up with LEGO from Home Assistant. It counts down to the next set leaving your
 [Brickset](https://brickset.com) wishlist and tells your automations when a wanted set's
-price or retirement date changes, new sets show up the day Brickset lists them in the
+price, release date or retirement date changes, new sets show up the day Brickset lists them in the
 themes you follow, and releases and retirements land on Home Assistant's calendar. Your
 collection's totals and its value at LEGO.com prices come with it, and a sidebar panel
 and dashboard cards show the lot.
@@ -294,7 +294,7 @@ a response when an automation asks for one:
 | Event | Fired when | Data |
 |-------|-----------|------|
 | `lego_new_set` | A watched theme gains a set since the previous poll. The first poll after an account is added only records what is there. After a restart the account compares against what it saw before, so a set announced while Home Assistant was off still fires, once. | `entry_id`, `device_id`, `theme`, `set_number`, `name`, `year`, `pieces`, `minifigs`, `image_url`, `brickset_url`, `released`, `release_date`, `retirement_date`, `retail_price`, `region` |
-| `lego_wanted_set_changed` | A set on your wishlist changes price, retirement date or availability. | `entry_id`, `device_id`, `set_number`, `name`, `brickset_url`, and whichever of `price`, `retirement_date` and `availability` changed |
+| `lego_wanted_set_changed` | A set on your wishlist changes price, release date, retirement date or availability. | `entry_id`, `device_id`, `set_number`, `name`, `brickset_url`, and whichever of `price`, `release_date`, `retirement_date` and `availability` changed |
 
 ## Examples
 
@@ -515,11 +515,6 @@ project depends on.
 
 The local set index comes from [Rebrickable](https://rebrickable.com/downloads/), whose
 terms permit use of the download files for any purpose.
-
-The icon and logo carry the Home Assistant mark, which is trademarked and the property of
-the [Open Home Foundation](https://www.openhomefoundation.org/). It is used here under
-their terms for non-commercial use. This project is not affiliated with, authorised by or
-endorsed by the Open Home Foundation.
 
 ## Development
 
